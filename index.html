@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Location History Browser</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@latest/dist/leaflet.min.css"/>
+    <link rel="stylesheet" href="styles.css"/>
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-J8N1Q1GVVB');
+    </script>
+    
+    <script type="text/javascript">
+        (function(m,e,t,r,i,k,a){
+            m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+            m[i].l=1*new Date();
+            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+        })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=105986243', 'ym');
+
+        ym(105986243, 'init', {ssr:true, webvisor:true, clickmap:true, accurateTrackBounce:true, trackLinks:true});
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@latest/dist/leaflet.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@latest/dist/leaflet-heat.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div id="progressContainer" class="hidden fixed top-0 left-0 right-0 h-1 z-[3000]">
+        <div class="progress-bar h-full">
+            <div id="progressFill" class="progress-fill h-full" style="width: 0%"></div>
+        </div>
+    </div>
+    
+    <div class="controls-container bg-white opacity-95 backdrop-blur-sm shadow-sm px-4 py-2 w-full">
+        <div class="w-full space-y-2">
+            <!-- Top Row: File Input, Status, Map Style (centered), Theme Switcher -->
+            <div class="control-section justify-between items-center" style="position: relative; flex-wrap: nowrap;">
+                <div class="control-section" style="flex-shrink: 1; min-width: 0;">
+                    <label class="file-input-wrapper">
+                        <input type="file" id="historyFile" accept=".json,application/json,.gz,.gzip,application/gzip,application/x-gzip" multiple />
+                        <span class="file-input-button">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <span>Load History</span>
+                        </span>
+                    </label>
+                </div>
+                
+                <div class="control-section justify-center" style="flex: 1 1 auto; min-width: 0; flex-shrink: 1;">
+                    <div class="map-style-group">
+                        <button class="map-style-btn active" data-tile="satellite" title="Satellite Imagery">
+                            Satellite
+                        </button>
+                        <button class="map-style-btn" data-tile="osm" title="OpenStreetMap Standard">
+                            OSM
+                        </button>
+                        <button class="map-style-btn" data-tile="osm-bike" title="OpenStreetMap Cycle Map">
+                            OSM-bike
+                        </button>
+                        <button class="map-style-btn" data-tile="esri-topo" title="ESRI Topographic">
+                            Topo
+                        </button>
+                        <button class="map-style-btn" data-tile="esri-streets" title="ESRI Street Map">
+                            Streets
+                        </button>
+                        <button class="map-style-btn" data-tile="opentopo" title="OpenTopoMap">
+                            OpenTopo
+                        </button>
+                        <button class="map-style-btn" data-tile="carto-light" title="CartoDB Positron">
+                            Light
+                        </button>
+                        <button class="map-style-btn" data-tile="carto-dark" title="CartoDB Dark Matter">
+                            Dark
+                        </button>
+                    </div>
+                    
+                    <div class="map-style-group" style="margin-left: 0.5rem;">
+                        <button class="gradient-btn active" data-gradient="spectrum" title="Spectrum Gradient">
+                            Spectrum
+                        </button>
+                        <button class="gradient-btn" data-gradient="fire" title="Fire Gradient">
+                            Fire
+                        </button>
+                        <button class="gradient-btn" data-gradient="cool" title="Cool Gradient">
+                            Cool
+                        </button>
+                        <button class="gradient-btn" data-gradient="grass" title="Grass Gradient">
+                            Grass
+                        </button>
+                        <button class="gradient-btn" data-gradient="dark" title="Dark Gradient (for light maps)">
+                            Dark
+                        </button>
+                    </div>
+                    
+                    <div class="flex items-center gap-2" style="margin-left: 0.5rem;">
+                        <div class="flex items-center gap-1">
+                            <label for="radiusSlider" style="font-size: 0.7rem; color: #6b7280; white-space: nowrap;">R:</label>
+                            <input type="range" id="radiusSlider" min="1" max="10" value="2" step="0.5" style="width: 80px;" tabindex="0" role="slider" aria-label="Heatmap radius" aria-valuemin="1" aria-valuemax="10" aria-valuenow="2" />
+                            <span id="radiusValue" style="font-size: 0.7rem; color: #0969da; min-width: 25px; text-align: right;">2</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <label for="blurSlider" style="font-size: 0.7rem; color: #6b7280; white-space: nowrap;">B:</label>
+                            <input type="range" id="blurSlider" min="1" max="10" value="2" step="0.5" style="width: 80px;" tabindex="0" role="slider" aria-label="Heatmap blur" aria-valuemin="1" aria-valuemax="10" aria-valuenow="2" />
+                            <span id="blurValue" style="font-size: 0.7rem; color: #0969da; min-width: 25px; text-align: right;">2</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <div class="map-style-group">
+                        <button id="aboutToggle" class="map-style-btn" title="About">
+                            About
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-section" style="flex-shrink: 0; margin-left: auto; order: 999;">
+                    <div id="themeToggle" class="theme-switcher flex items-center gap-1 bg-white rounded-lg p-1 shadow-md border border-gray-200">
+                        <button id="themeLight" class="theme-btn rounded text-sm font-medium transition-colors" title="Light mode" aria-label="Light theme">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                            </svg>
+                        </button>
+                        <button id="themeDark" class="theme-btn rounded text-sm font-medium transition-colors" title="Dark mode" aria-label="Dark theme">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                            </svg>
+                        </button>
+                        <button id="themeSystem" class="theme-btn rounded text-sm font-medium transition-colors" title="System (follow OS setting)" aria-label="System theme">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bottom Row: Date Range Slider -->
+            <div class="control-section">
+                <div class="flex-1 min-w-0">
+                    <div class="dual-range-container">
+                        <div class="dual-range-track" id="dualRangeTrack">
+                            <div class="dual-range-fill" id="dualRangeFill"></div>
+                            <div class="dual-range-handle start-handle" id="startHandle" tabindex="0" role="slider" aria-label="Start date" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+                            <div class="dual-range-handle end-handle" id="endHandle" tabindex="0" role="slider" aria-label="End date" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+                        </div>
+                    </div>
+                    <div class="dual-range-labels">
+                        <span id="startDateLabel" class="dual-range-value">--</span>
+                        <span id="message" class="status-badge"></span>
+                        <span id="endDateLabel" class="dual-range-value">--</span>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <div id="map" class="relative"></div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10000; background-color: rgba(0, 0, 0, 0.75);">
+        <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-8">
+                <div class="flex justify-between items-start mb-6">
+                    <h2 class="text-3xl font-bold text-gray-900">Location History Visualizer</h2>
+                    <button id="aboutClose" class="text-gray-500 hover:text-gray-700 hover:text-indigo-600 text-2xl leading-none cursor-pointer transition-colors px-2 py-1 rounded hover:bg-gray-100" title="Close">&times;</button>
+                </div>
+                <div class="prose prose-sm max-w-none text-gray-700">
+                    <p class="mb-4">
+                        Visualize your Google Location History data with interactive heatmaps. 
+                        Supports both original JSON files and compressed <code class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">.json.gz</code> files for faster loading.
+                    </p>
+                    
+                    <h4 class="text-lg font-semibold text-gray-900 mt-6 mb-3">Quick Start</h4>
+                    <ol class="list-decimal list-inside mb-4 space-y-2">
+                        <li>Export location data from <a href="https://takeout.google.com" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline">Google Takeout</a> (JSON format)</li>
+                        <li>Extract ZIP and find <code class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">Records.json</code> in "Location History" folder</li>
+                        <li>Click "Load History" and select your file(s)</li>
+                        <li>Use the date slider to filter by time, customize map styles and gradients</li>
+                    </ol>
+                    
+                    <h4 class="text-lg font-semibold text-gray-900 mt-6 mb-3">Tips</h4>
+                    <ul class="list-disc list-inside mb-4 space-y-2">
+                        <li>Tab + arrow keys to navigate sliders (hold arrows for acceleration)</li>
+                        <li>Try different map styles and gradients to find your preferred visualization</li>
+                        <li>Adjust radius and blur sliders to fine-tune heatmap intensity</li>
+                    </ul>
+                    
+                    <p class="mt-6 text-sm text-gray-500">
+                        <strong>Privacy:</strong> All processing happens locally. No data is sent to any server.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

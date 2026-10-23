@@ -1,4 +1,4 @@
-import {MAP_CONFIG} from './map-config.mjs?v=3';
+import {MAP_CONFIG} from './map-config.mjs?v=4';
 
 // Keep every provider's attribution with its documented endpoint.
 const osm = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';

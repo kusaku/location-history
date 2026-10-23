@@ -29,8 +29,22 @@ The index uses typed arrays (roughly 12 bytes per observation plus cell offsets)
 - Spatial candidate lookup plus exact viewport clipping; chronological ordering, wrapped longitudes, polar coordinates, quality filters, and inclusive date boundaries are preserved.
 - Cached histogram, selection statistics, shortest-arc bounds, and simplified journey geometry. Points and Journeys skip unused heatmap bins.
 - Acknowledged geometry versions avoid repeated worker transfers and MapLibre `setData` calls, including when an intermediate response is discarded. Paint-only controls no longer trigger filtering.
-- Bounded GeoJSON batches and Blob parts avoid a whole-history feature array/string. Export filenames use the requested date snapshot; repeated clicks are disabled until completion.
+- Bounded GeoJSON batches and Blob parts avoid a whole-history feature array/string. Export filenames use the requested date snapshot; repeated clicks are disabled until completion. A local full-data export produced 505,141,685 bytes in 3.79 s and was streamed back through the importer with all 3,306,412 observations preserved.
 - Transactional import replacement, failed-import recovery, exact duplicate merging, gzip, malformed semantic entries, and clear/reset remain covered by native tests.
 - Consolidated CSS component rules, removal of unused variables/selectors, corrected disabled/hover/focus selectors, and larger compact timeline targets.
 
 Run `node --test` for regression coverage. Browser verification is performed against the deployed project URL because this browser does not permit the local preview origin. Network/provider availability is separate from these local CPU measurements.
+
+## Deployed browser checks
+
+Verified at `https://kusaku.su/location-history/` after deployment:
+
+- **46 native tests passed**, plus the 108-query baseline comparison and the two seven-case sample/large-history hash comparisons.
+- No horizontal document overflow at **320, 390, 768, 1280, or 1600 px**. Statistics and timeline stay within the viewport. Compact period buttons are 36 px; range sliders have a 24 px hit area.
+- All nine provider choices switch with visible attribution and no map error. Google and Yandex tiles were also visually checked after loading, on desktop/mobile. Browser error/warning logs were empty.
+- Heatmap, Hexagons, Points, and Journeys render; journeys remain visible after panning. All three metrics and palettes work. Radius, intensity, and opacity labels update through keyboard controls.
+- Day/back/forward, 30-day/year/all presets, advancing/pausing playback, custom dates, keyboard ranges, invalid-date restoration, and empty results work. An empty selection disables Fit without discarding the dataset.
+- A browser download contained the expected **79 exact observations** from the selected day. Reimporting it alongside ten overlapping observations produced **79 observations and ten removed duplicates**. A subsequent malformed JSON import retained that history; Clear reset statistics and controls; the gzip sample then reloaded successfully.
+- Guide export instructions expand on mobile without horizontal overflow; Escape closes the modal and restores a visible 2 px keyboard focus ring.
+
+These checks exercise the main workflows, not every possible browser/device/provider failure. The real historical files were tested offline; production browser tests used the public sample and derived test fixtures.

@@ -26,7 +26,9 @@ Changes:
 - The variable-font request reduced the uncompressed Google Fonts stylesheet from 11,387 to 2,206 bytes for the tested Chromium user agent (26 to five font-face declarations, the same five unique font files). This is a CSS reduction, not a reduction in font downloads.
 - Corrected OpenFreeMap Dark's missing `circle-11` sprite reference to the published `circle_11` icon, retaining town/city markers, and removed an unused CSS rule.
 
-All **66 native tests** pass. Live browser checks for this pass are recorded after deployment.
+All **66 native tests** pass. After deployment, live checks at `https://kusaku.su/location-history/` verified all four visualization modes, all metrics, incremental radius/intensity/opacity/palette changes, Google hybrid, Yandex satellite/hybrid with the reduced module list, Azure satellite, OSM, and OpenFreeMap Dark at world scale. Switching providers retained all 266,682 sample locations. Default Google roads loaded with zero native SDK scripts.
+
+Day/back/forward restored 79 observations for the final sample day; the downloaded GeoJSON contained exactly 79 features. Importing two overlapping copies produced 79 records and 79 removed duplicates. A malformed JSON import retained that dataset. Reload restored settings while clearing history and native SDK scripts; reopening the sample restored its date filter. Clear reset statistics/export controls, and sample reimport succeeded. The guide opened without overflow. Document widths and map labels fit at 320, 390, 768, 1280, and 1600 px. The verification run produced no browser errors or warnings. These checks do not measure browser FPS or simulate every provider failure.
 
 ## Earlier optimization pass
 

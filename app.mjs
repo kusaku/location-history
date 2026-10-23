@@ -1,8 +1,8 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=9';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY} from './data.mjs?v=4';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=1';
-import {loadSettings, saveSettings, dateSelection} from './settings.mjs?v=3';
+import {DAY, HISTOGRAM_BINS} from './data.mjs?v=5';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=2';
+import {loadSettings, saveSettings, dateSelection} from './settings.mjs?v=4';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -161,11 +161,14 @@ function showResult(result) {
   [...$('histogram').children].forEach((bar, i) => {
     const range = histogramWindow(state.report.min, state.report.max, i, result.histogram.length);
     bar.style.setProperty('--bar-height', `${Math.max(3, Math.sqrt(result.histogram[i] / max) * 100)}%`);
-    bar.className = range.end >= state.start && range.start <= state.end ? 'selected' : 'outside';
-    bar.title = `${formatDate(range.start)} — ${formatDate(range.end)} · ${number.format(result.histogram[i])} locations`;
+    bar.disabled = !range;
+    bar.className = range && range.end >= state.start && range.start <= state.end ? 'selected' : 'outside';
+    bar.title = range ? `${formatDate(range.start)} — ${formatDate(range.end)} · ${number.format(result.histogram[i])} locations` : 'No dates in this interval';
     bar.setAttribute('aria-label', bar.title);
-    bar.setAttribute('aria-pressed', String(state.start === range.start && state.end === range.end));
+    bar.setAttribute('aria-pressed', String(!!range && state.start === range.start && state.end === range.end));
+    if (!range) bar.tabIndex = -1;
   });
+  if (!$('histogram').querySelector('button:not(:disabled)[tabindex="0"]')) $('histogram').querySelector('button:not(:disabled)')?.setAttribute('tabindex', '0');
   paintSources(result);
 }
 function syncDates() {
@@ -234,7 +237,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=4', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=5', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -285,18 +288,19 @@ function bindControls() {
       button.append(swatch, label); button.onclick = () => selectBasemap(key, true); grid.append(button);
     }
   }
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < HISTOGRAM_BINS; i++) {
     const bar = document.createElement('button'); bar.type = 'button'; bar.disabled = true;
     bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false');
     bar.tabIndex = i === 0 ? 0 : -1;
     bar.onclick = () => {
       stopPlayback();
       const range = histogramWindow(state.report.min, state.report.max, i, $('histogram').children.length);
+      if (!range) return;
       setDates(range.start, range.end); rememberSettings();
     };
     bar.onkeydown = event => {
-      const bars = [...$('histogram').children];
-      const index = {ArrowLeft: Math.max(0, i - 1), ArrowRight: Math.min(bars.length - 1, i + 1), Home: 0, End: bars.length - 1}[event.key];
+      const bars = [...$('histogram').children].filter(b => !b.disabled), current = bars.indexOf(bar);
+      const index = {ArrowLeft: Math.max(0, current - 1), ArrowRight: Math.min(bars.length - 1, current + 1), Home: 0, End: bars.length - 1}[event.key];
       if (index === undefined) return;
       event.preventDefault(); bars[index].focus();
     };

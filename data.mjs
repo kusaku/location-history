@@ -1,5 +1,6 @@
 // Pure import and geospatial functions shared by the worker and Node tests.
 export const DAY = 86_400_000;
+export const HISTOGRAM_BINS = 64;
 // Date windows have inclusive endpoints. Keep their width when reaching a data boundary.
 export function shiftPeriod(start, end, min, max, direction) {
   const shift = Math.max(min - start, Math.min(max - end, direction * (end - start + 1)));
@@ -162,16 +163,17 @@ export function createHistoryQuery(points) {
   const cursors = offsets.slice();
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
   const min = points[0]?.t ?? 0, max = points.at(-1)?.t ?? 0;
+  const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
   let filterKey, filter, selectionKey, selection;
 
   return (options = {}) => {
     const {start = -Infinity, end = Infinity, accuracy = 0, hourStart = 0, hourEnd = 24, metric = 'records', mode = 'heat', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
     const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}`;
     if (filterKey !== nextFilterKey) {
-      const mask = new Uint8Array(points.length), histogram = Array(64).fill(0);
+      const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0);
       for (let i = 0; i < points.length; i++) if (accepts(points[i], accuracy, hourStart, hourEnd)) {
         mask[i] = 1;
-        histogram[Math.min(63, Math.floor((points[i].t - min) / Math.max(1, max - min) * 64))]++;
+        histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) / historyDays * HISTOGRAM_BINS)]++;
       }
       filter = {mask, histogram}; filterKey = nextFilterKey;
     }

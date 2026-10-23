@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs';
-import {DAY, preparePoints, queryHistory} from './data.mjs';
+import {DAY, preparePoints, createHistoryQuery} from './data.mjs';
 
 const time = date => Date.parse(`${date}T00:00:00Z`);
 const range = (start, end) => ({start: time(start), end: time(end) + DAY - 1});
@@ -60,21 +60,25 @@ test('resizing and stepping stay inside short histories and stop at the endpoint
   assert.deepEqual(shiftWindow(window.start, window.end, min, max, 1, '30', 1), window);
 });
 
-test('all histogram bins select covering UTC dates, including the first and final observations', () => {
+test('histogram windows partition UTC dates and exactly reproduce counts, including short histories', () => {
   for (const [min, max] of [[1234, 1234], [DAY - 1, DAY - 1], [-5000, 5000], [time('2013-06-02') + 3600000, time('2022-09-18') + 7200000]]) {
     const points = preparePoints(Array.from({length: 257}, (_, i) => ({t: min + (max - min) * i / 256, lat: 52, lon: 13, accuracy: null, duration: 0}))).points;
-    const histogram = queryHistory(points).histogram;
-    assert.equal(histogram.length, 64);
-    for (let i = 0; i < histogram.length; i++) {
-      const window = histogramWindow(min, max, i, histogram.length);
-      assert.ok(window.start % DAY === 0);
-      assert.ok((window.end + 1) % DAY === 0);
-      for (const point of points) {
-        const bin = Math.min(63, Math.floor((point.t - min) / Math.max(1, max - min) * 64));
-        if (bin === i) assert.ok(point.t >= window.start && point.t <= window.end);
+    const query = createHistoryQuery(points);
+    for (const filters of [{}, {hourStart: 1, hourEnd: 3}]) {
+      const {histogram, count} = query(filters);
+      assert.equal(histogram.length, 64);
+      let previousEnd = Math.floor(min / DAY) * DAY - 1, total = 0;
+      for (let i = 0; i < histogram.length; i++) {
+        const window = histogramWindow(min, max, i, histogram.length);
+        if (!window) { assert.equal(histogram[i], 0); continue; }
+        assert.ok(window.start % DAY === 0);
+        assert.ok((window.end + 1) % DAY === 0);
+        assert.equal(window.start, previousEnd + 1);
+        assert.equal(query({...filters, ...window}).count, histogram[i]);
+        total += histogram[i]; previousEnd = window.end;
       }
+      assert.equal(total, count);
+      assert.equal(previousEnd, Math.floor(max / DAY) * DAY + DAY - 1);
     }
-    assert.ok(histogramWindow(min, max, 0, 64).start <= min);
-    assert.ok(histogramWindow(min, max, 63, 64).end >= max);
   }
 });

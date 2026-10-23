@@ -1,4 +1,4 @@
-import {DAY, shiftPeriod} from './data.mjs?v=4';
+import {DAY, shiftPeriod} from './data.mjs?v=5';
 
 // Preset IDs stay compatible with saved preferences. Months and years use UTC
 // calendar arithmetic; a preferred day avoids drifting after February or April.
@@ -30,11 +30,10 @@ export function shiftWindow(start, end, min, max, direction, period, day) {
   return {start: nextStart, end: nextEnd};
 }
 
-// Histogram bins partition the original timestamps. Date controls operate on
-// whole UTC days, so select the dates covering the clicked interval.
+// Match the worker's UTC-day bins exactly: selecting a bar must reproduce its
+// count. Histories shorter than the bar count have empty, disabled intervals.
 export function histogramWindow(min, max, index, count) {
-  const duration = Math.max(1, max - min);
-  const start = Math.min(max, Math.ceil(min + index / count * duration));
-  const end = index === count - 1 ? max : Math.ceil(min + (index + 1) / count * duration) - 1;
-  return {start: Math.floor(start / DAY) * DAY, end: Math.floor(Math.max(start, end) / DAY) * DAY + DAY - 1};
+  const firstDay = Math.floor(min / DAY), days = Math.floor(max / DAY) - firstDay + 1;
+  const start = Math.ceil(index * days / count), end = Math.ceil((index + 1) * days / count);
+  return start === end ? null : {start: (firstDay + start) * DAY, end: (firstDay + end) * DAY - 1};
 }

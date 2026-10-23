@@ -1,4 +1,4 @@
-import {parseHistory} from './data.mjs?v=4';
+import {parseHistory} from './data.mjs?v=5';
 
 // Keep only one array entry in text form. Nested braces and escaped quotes can
 // cross byte chunks; JSON.parse still validates each complete value.

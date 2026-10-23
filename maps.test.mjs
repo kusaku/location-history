@@ -1,11 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleProvider, createAzureProvider, googleViewport, MAPS, MAP_ORDER} from './maps.mjs';
+import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, MAPS, MAP_ORDER} from './maps.mjs';
 
 const bounds = (west = 13, east = 14, south = 52, north = 53) => ({getWest: () => west, getEast: () => east, getSouth: () => south, getNorth: () => north});
 const map = {getBounds: () => bounds(), getZoom: () => 10.5};
 const session = () => ({session: 'test-session', expiry: Math.floor(Date.now() / 1000) + 3600, tileWidth: 256, tileHeight: 256});
 const ok = data => ({ok: true, json: async () => data});
+
+test('all history modes stay above vector roads and bridges while interleaved labels stay on top', () => {
+  // OpenFreeMap Dark starts its symbols with water_name before the road layers;
+  // Liberty similarly places direction arrows before bridges and buildings.
+  const layers = [
+    {id: 'background', type: 'background'}, {id: 'water_name', type: 'symbol'},
+    {id: 'building', type: 'fill'}, {id: 'highway_major_inner', type: 'line'},
+    {id: 'road_oneway', type: 'symbol'}, {id: 'bridge', type: 'line'},
+    {id: 'boundary', type: 'line'}, {id: 'city-label', type: 'symbol'},
+  ];
+  const anchor = raiseBasemapLabels({
+    getStyle: () => ({layers}),
+    moveLayer(id) { layers.push(...layers.splice(layers.findIndex(layer => layer.id === id), 1)); },
+  });
+  const history = ['history-heat', 'history-hex', 'history-dots', 'history-route'];
+  for (const id of history) layers.splice(layers.findIndex(layer => layer.id === anchor), 0, {id});
+  assert.deepEqual(layers.map(layer => layer.id), ['background', 'building', 'highway_major_inner', 'bridge', 'boundary', ...history, 'water_name', 'road_oneway', 'city-label']);
+});
+
+test('raster label overlays remain above history and maps without labels need no anchor', () => {
+  for (const layers of [[], [{id: 'basemap', type: 'raster'}], [{id: 'basemap', type: 'raster'}, {id: 'basemap-labels', type: 'raster'}]]) {
+    const anchor = raiseBasemapLabels({
+      getStyle: () => ({layers}),
+      moveLayer(id) { layers.push(...layers.splice(layers.findIndex(layer => layer.id === id), 1)); },
+    });
+    layers.splice(anchor ? layers.findIndex(layer => layer.id === anchor) : layers.length, 0, {id: 'history-heat'});
+    assert.equal(layers.at(anchor ? -2 : -1).id, 'history-heat');
+    if (anchor) assert.equal(layers.at(-1).id, 'basemap-labels');
+  }
+});
 
 test('Google viewport wraps the dateline and bounds global views', () => {
   assert.deepEqual(googleViewport(bounds(170, 190), 23), {west: 170, east: -170, south: 52, north: 53, zoom: 22});

@@ -17,6 +17,14 @@ export const MAPS = {
 };
 
 const escapeHTML = text => String(text).replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
+export function raiseBasemapLabels(map) {
+  // Some vector styles put water labels before roads and buildings. Move all
+  // labels above the geometry before using the first label as the overlay anchor.
+  const labels = map.getStyle().layers.filter(layer => layer.type === 'symbol' || layer.id === 'basemap-labels');
+  for (const {id} of labels) map.moveLayer(id);
+  return labels[0]?.id;
+}
+
 export function googleViewport(bounds, zoom) {
   const wrap = longitude => Math.max(-179.999999, Math.min(179.999999, ((longitude + 180) % 360 + 360) % 360 - 180));
   const west = bounds.getWest(), east = bounds.getEast();

@@ -1,4 +1,4 @@
-import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader} from './maps.mjs?v=6';
+import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels} from './maps.mjs?v=7';
 import {createNativeMaps} from './native-maps.mjs';
 import {DAY, shiftPeriod} from './data.mjs?v=3';
 const $ = id => document.getElementById(id);
@@ -108,7 +108,7 @@ function paint() {
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
-  const before = map.getStyle().layers.find(l => l.type === 'symbol' || l.id === 'basemap-labels')?.id;
+  const before = raiseBasemapLabels(map);
   for (const name of ['density', 'dots', 'route']) map.addSource(`history-${name}`, {type: 'geojson', data: empty(), maxzoom: 18, tolerance: .5, buffer: 64});
   map.addLayer({id: 'history-heat', type: 'heatmap', source: 'history-density', paint: {'heatmap-weight': ['get', 'weight']}}, before);
   map.addLayer({id: 'history-hex', type: 'fill', source: 'history-density', paint: {'fill-outline-color': '#ffffff35'}}, before);

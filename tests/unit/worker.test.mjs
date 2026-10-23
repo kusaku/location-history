@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {gzipSync} from 'node:zlib';
 
 // Adapt browser worker messaging to Node without replacing the production worker code.
-const url = new URL('./worker.mjs', import.meta.url).href;
+const url = new URL('../../assets/js/worker.mjs', import.meta.url).href;
 async function startWorker() {
   const worker = new Worker(`
     const {parentPort} = require('node:worker_threads');

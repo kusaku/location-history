@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nativeCamera, loadNativeSDK, createNativeRenderer, createNativeMaps} from './native-maps.mjs';
+import {nativeCamera, loadNativeSDK, createNativeRenderer, createNativeMaps} from '../../assets/js/native-maps.mjs';
 
 function mapStub() {
   const events = new Map(), operations = [];

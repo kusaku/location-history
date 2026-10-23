@@ -4,13 +4,18 @@ import {createReadStream, openSync, readSync, closeSync, statSync, readFileSync}
 import {Readable} from 'node:stream';
 import {resolve, basename} from 'node:path';
 import {createHash} from 'node:crypto';
-import {readHistory} from '../import.mjs';
+import {fileURLToPath} from 'node:url';
+import {readHistory} from '../../assets/js/import.mjs';
 
 const args = process.argv.slice(2);
 const revision = args[0] === '--revision' ? args.splice(0, 2)[1] : null;
-const source = revision ? execFileSync('git', ['show', `${execFileSync('git', ['rev-parse', '--verify', `${revision}^{commit}`], {encoding: 'utf8'}).trim()}:data.mjs`], {encoding: 'utf8'}) : readFileSync(new URL('../data.mjs', import.meta.url), 'utf8');
+const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
+const git = args => execFileSync('git', args, {cwd: projectRoot, encoding: 'utf8'}).trim();
+const commit = revision ? git(['rev-parse', '--verify', `${revision}^{commit}`]) : null;
+const dataPath = commit ? git(['ls-tree', '-r', '--name-only', commit, '--', 'assets/js/data.mjs', 'data.mjs']).split('\n')[0] : null;
+const source = commit ? git(['show', `${commit}:${dataPath}`]) : readFileSync(new URL('../../assets/js/data.mjs', import.meta.url), 'utf8');
 const data = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-const files = args.length ? args.map(path => resolve(path)) : [resolve('sample-location-history.json.gz')];
+const files = args.length ? args.map(path => resolve(path)) : [fileURLToPath(new URL('../../data/sample-location-history.json.gz', import.meta.url))];
 const points = []; let skipped = 0;
 const started = performance.now();
 for (const path of files) {

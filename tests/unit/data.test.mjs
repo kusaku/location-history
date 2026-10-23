@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
-import {parseHistory, preparePoints, queryHistory, createHistoryQuery, exportHistory, wrappedBounds, project, timestamp, shiftPeriod, DAY} from './data.mjs';
+import {parseHistory, preparePoints, queryHistory, createHistoryQuery, exportHistory, wrappedBounds, project, timestamp, shiftPeriod, DAY} from '../../assets/js/data.mjs';
 const point = (t, lon = 13.4, lat = 52.5, accuracy = null) => ({t, lon, lat, accuracy, duration: 0});
 const records = locations => parseHistory({locations}).points;
 const legacy = (time, lat = 525000000, lon = 134000000) => ({timestampMs: String(time), latitudeE7: lat, longitudeE7: lon});
@@ -127,7 +127,7 @@ test('point mode caps rendered observations, while counts stay exact', () => {
   assert.equal(result.count, 21000); assert.ok(result.dots.features.length <= 20000);
 });
 test('bundled 266,682-point history imports and filters without dropping records', () => {
-  const data = JSON.parse(gunzipSync(readFileSync(new URL('./sample-location-history.json.gz', import.meta.url))));
+  const data = JSON.parse(gunzipSync(readFileSync(new URL('../../data/sample-location-history.json.gz', import.meta.url))));
   const prepared = preparePoints(parseHistory(data).points);
   assert.equal(prepared.points.length, 266682);
   assert.equal(queryHistory(prepared.points).count, 266682);

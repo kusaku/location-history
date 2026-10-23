@@ -115,6 +115,7 @@ function installLayers() {
 }
 async function selectBasemap(key, remember = false) {
   const request = ++styleRequest, provider = MAPS[key];
+  showMapView(MAP_GROUPS.find(group => group.maps.includes(key)).id);
   document.querySelectorAll('[data-map]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.map === key)));
   $('map-error').hidden = true;
   try {
@@ -147,6 +148,7 @@ async function selectBasemap(key, remember = false) {
     $('map-error').textContent = `${provider.name} could not load. Try another base map. (${error.message})`;
     $('map-error').hidden = false;
     document.querySelectorAll('[data-map]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.map === state.basemap)));
+    showMapView(MAP_GROUPS.find(group => group.maps.includes(state.basemap)).id);
   }
 }
 function showResult(result) {
@@ -217,7 +219,7 @@ async function loadSample() {
   const request = ++sampleRequest;
   setBusy(true); status('Loading the bundled sample…', false, true);
   try {
-    const response = await fetch(new URL('./sample-location-history.json.gz', import.meta.url), {signal: AbortSignal.timeout(30000)});
+    const response = await fetch(new URL('../../data/sample-location-history.json.gz', import.meta.url), {signal: AbortSignal.timeout(30000)});
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     if (request !== sampleRequest) return;
@@ -271,23 +273,42 @@ function createWorker() {
   };
   worker.onerror = () => { setBusy(false); exporting = false; $('export').disabled = true; querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
 }
+function showMapView(id) {
+  for (const tab of $('map-views').children) {
+    const selected = tab.dataset.view === id;
+    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+  }
+  for (const panel of $('basemaps').children) panel.hidden = panel.id !== `maps-${id}`;
+}
 function bindControls() {
   for (const group of MAP_GROUPS) {
-    const section = document.createElement('div'); section.className = 'basemap-group'; section.setAttribute('role', 'group'); section.setAttribute('aria-labelledby', `maps-${group.id}`);
-    const heading = document.createElement('h3'); heading.id = `maps-${group.id}`; heading.textContent = group.name;
-    const grid = document.createElement('div'); grid.className = 'basemap-grid'; section.append(heading, grid); $('basemaps').append(section);
+    const tab = document.createElement('button'); tab.type = 'button'; tab.id = `view-${group.id}`; tab.dataset.view = group.id; tab.textContent = group.name.split(' ·')[0];
+    tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', `maps-${group.id}`);
+    tab.onclick = () => showMapView(group.id);
+    tab.onkeydown = event => {
+      const tabs = [...$('map-views').children], i = tabs.indexOf(tab);
+      const index = {ArrowLeft: (i + tabs.length - 1) % tabs.length, ArrowRight: (i + 1) % tabs.length, Home: 0, End: tabs.length - 1}[event.key];
+      if (index === undefined) return;
+      event.preventDefault(); tabs[index].click(); tabs[index].focus();
+    };
+    $('map-views').append(tab);
+    const section = document.createElement('div'); section.id = `maps-${group.id}`; section.className = 'basemap-group'; section.setAttribute('role', 'tabpanel'); section.setAttribute('aria-labelledby', tab.id);
+    const grid = document.createElement('div'); grid.className = 'basemap-grid'; section.append(grid); $('basemaps').append(section);
     for (const key of group.maps) {
       const provider = MAPS[key], button = document.createElement('button'); button.type = 'button'; button.className = 'basemap-button'; button.dataset.map = key;
       const name = provider.name.includes(provider.provider) ? provider.name : `${provider.provider} ${provider.name}`;
       button.setAttribute('aria-pressed', String(key === state.basemap)); button.setAttribute('aria-label', `${name} · ${group.name} base map`);
       const swatch = document.createElement('span'); swatch.className = `map-swatch provider-${provider.provider.toLowerCase()} style-${key}`; swatch.setAttribute('aria-hidden', 'true');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 160 80'); svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', `./map-previews.svg?v=1#${group.id}`); svg.append(use);
-      const stamp = document.createElement('small'); stamp.textContent = provider.provider; swatch.append(svg, stamp);
-      const label = document.createElement('span'); label.className = 'basemap-label'; label.textContent = provider.name;
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', new URL(`../images/map-previews.svg?v=1#${group.id}`, import.meta.url).href); svg.append(use); swatch.append(svg);
+      const label = document.createElement('span'); label.className = 'basemap-label';
+      const brand = document.createElement('strong'); brand.textContent = provider.provider;
+      const detail = document.createElement('small'); detail.textContent = provider.provider === 'OpenFreeMap' ? provider.name : key === 'azure-relief' ? 'Shaded relief' : group.name.split(' ·')[0];
+      label.append(brand, detail);
       button.append(swatch, label); button.onclick = () => selectBasemap(key, true); grid.append(button);
     }
   }
+  showMapView(MAP_GROUPS.find(group => group.maps.includes(state.basemap)).id);
   for (let i = 0; i < HISTOGRAM_BINS; i++) {
     const bar = document.createElement('button'); bar.type = 'button'; bar.disabled = true;
     bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false');

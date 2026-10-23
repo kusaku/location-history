@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="styles.css?v=11">
-    <script type="module" src="app.mjs?v=16">
+    <link rel="stylesheet" href="assets/css/styles.css?v=12">
+    <script type="module" src="assets/js/app.mjs?v=17">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -276,7 +276,9 @@
               MAPS
             </span>
           </div>
-          <div id="basemaps" class="basemap-groups" role="group" aria-label="Base map">
+          <div id="map-views" class="map-view-tabs" role="tablist" aria-label="Map view">
+          </div>
+          <div id="basemaps" class="basemap-groups">
           </div>
           <p id="map-provider" class="hint">
             Google Maps · roads
@@ -623,7 +625,7 @@
         Base maps
       </h3>
       <p>
-        Choose a base map in Map settings. Google offers roads, terrain, satellite and hybrid; Yandex offers streets, satellite and hybrid. Microsoft Azure offers roads, dark roads, satellite, hybrid and world-scale shaded relief. OpenFreeMap, OpenStreetMap and Esri imagery are also available. Satellite shows imagery; hybrid adds street labels. Google and Yandex satellite maps use a flat, north-up view. Availability, usage limits and provider terms apply. Switching maps keeps your imported history and filters.
+        Choose a view tab and provider in Map settings. Google offers roads, terrain, satellite and hybrid; Yandex offers streets, satellite and hybrid. Microsoft Azure offers roads, dark roads, satellite, hybrid and world-scale shaded relief. OpenFreeMap, OpenStreetMap and Esri imagery are also available. Satellite shows imagery; hybrid adds street labels. Google and Yandex satellite maps use a flat, north-up view. Availability, usage limits and provider terms apply. Switching maps keeps your imported history and filters.
       </p>
       <dl class="guide-links" aria-label="Map provider links">
         <div>

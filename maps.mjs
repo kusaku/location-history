@@ -13,7 +13,7 @@ export const MAPS = {
   streets: {name: 'Streets', detail: 'OpenFreeMap · Liberty', style: 'https://tiles.openfreemap.org/styles/liberty', tone: 'light'},
   bright: {name: 'Bright', detail: 'OpenFreeMap · Bright', style: 'https://tiles.openfreemap.org/styles/bright', tone: 'light'},
   satellite: {name: 'Satellite', detail: 'Esri · World Imagery', tone: 'dark', style: raster('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9">Esri World Imagery</a> · Esri, Vantor, Earthstar Geographics, GIS User Community', 19)},
-  osm: {name: 'Classic', detail: 'OpenStreetMap · standard', tone: 'light', style: raster('https://tile.openstreetmap.org/{z}/{x}/{y}.png', osm)},
+  osm: {name: 'OpenStreetMap', detail: 'OpenStreetMap · standard', tone: 'light', style: raster('https://tile.openstreetmap.org/{z}/{x}/{y}.png', osm)},
 };
 
 const escapeHTML = text => String(text).replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));

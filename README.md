@@ -55,7 +55,7 @@ The built-in choices require no credentials:
 | Streets | OpenFreeMap Liberty | https://tiles.openfreemap.org/styles/liberty |
 | Bright | OpenFreeMap Bright | https://tiles.openfreemap.org/styles/bright |
 | Satellite | Esri public World Imagery | https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer |
-| Classic | OpenStreetMap Standard | https://operations.osmfoundation.org/policies/tiles/ |
+| OpenStreetMap | OpenStreetMap Standard | https://operations.osmfoundation.org/policies/tiles/ |
 
 OpenFreeMap explicitly supports its public instance without registration or API keys: https://openfreemap.org/quick_start/. Attribution remains visible for all providers. OSM browser requests retain the Referer header and normal browser caching; there is no tile prefetch or offline downloader. Esri imagery uses the service's published contributor attribution. These hosted services can change availability or terms. Base-map failure does not discard imported history; another provider can be selected.
 
@@ -69,7 +69,7 @@ Keys in `map-config.mjs` are deliberately public, as required by a static browse
 
 ### Yandex Maps
 
-The supported [Tiles API](https://yandex.ru/maps-api/docs/tiles-api/) has a free plan limited to 30 requests/second, with no daily limit in the account console. `createYandexProvider` requests `projection=web_mercator` explicitly; Yandex's default elliptical projection would misalign the imported geometry. It uses the `future_map` street style, the vendor's unchanged logo, a terms link, and an Open in Maps link for the current viewport. The custom MapLibre protocol spaces tile requests by at least 40 ms and supports cancellation and normal HTTP caching. The service-wide limit still applies across visitors.
+The supported [Tiles API](https://yandex.ru/maps-api/docs/tiles-api/) has a free plan limited to 30 requests/second, with no daily limit in the account console. `createYandexProvider` requests `projection=web_mercator` explicitly; Yandex's default elliptical projection would misalign the imported geometry. It uses the `future_map` street style, the vendor's unchanged logo, a terms link, and an Open in Maps link for the current viewport. The [logo requirements](https://yandex.com/maps-api/docs/tiles-api/index.html#using-the-yandex-logo) require adding the clickable vendor logo in a map corner. The [supported styles](https://yandex.com/maps-api/docs/tiles-api/request.html) do not include terrain; the Tiles API only supplies roadmap tiles. The custom MapLibre protocol spaces tile requests by at least 40 ms and supports cancellation and normal HTTP caching. The service-wide limit still applies across visitors.
 
 Activation can take up to 15 minutes. Set `yandexTilesApiKey` only after a live tile request succeeds. The console provides no HTTP Referer restriction for Tiles API; its restriction fields apply to JavaScript API instead. The separate JavaScript API key is not used by this app.
 

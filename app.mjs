@@ -1,4 +1,4 @@
-import {MAPS, PALETTES, createYandexTileLoader} from './maps.mjs';
+import {MAPS, PALETTES, createYandexTileLoader} from './maps.mjs?v=2';
 import {DAY, shiftPeriod} from './data.mjs';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
@@ -250,7 +250,7 @@ function createWorker() {
   worker.onerror = () => { setBusy(false); querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
 }
 function bindControls() {
-  for (const key of Object.keys(MAPS)) {
+  for (const key of ['google', 'yandex', 'osm', 'satellite', 'google-terrain', 'dark', 'light', 'streets', 'bright'].filter(key => MAPS[key])) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'basemap-button'; button.dataset.map = key;
     button.setAttribute('aria-pressed', String(key === state.basemap)); button.setAttribute('aria-label', `${MAPS[key].name} base map`);
     const swatch = document.createElement('i'); swatch.className = `map-swatch swatch-${key}`; swatch.setAttribute('aria-hidden', 'true');

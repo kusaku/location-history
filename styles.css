@@ -1181,6 +1181,10 @@ dialog p {
     top: 36px;
     left: 36px;
   }
+  .map-heading:before {
+    top: -36px;
+    left: -36px;
+  }
   .map-heading h2 {
     font-size: 36px;
   }

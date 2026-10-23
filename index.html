@@ -18,6 +18,22 @@
     <link rel="stylesheet" href="styles.css?v=7">
     <script type="module" src="app.mjs?v=7">
     </script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-J8N1Q1GVVB');
+    </script>
+    <script type="text/javascript">
+      (function(m,e,t,r,i,k,a){
+        m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+        m[i].l=1*new Date();
+        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+      })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=105986243', 'ym');
+      ym(105986243, 'init', {ssr:true, webvisor:true, clickmap:true, accurateTrackBounce:true, trackLinks:true});
+    </script>
   </head>
   <body>
     <a class="skip-link" href="#workspace">
@@ -90,7 +106,7 @@
         </a>
       </div>
     </header>
-    <div class="app-layout">
+    <div class="app-layout ym-hide-content">
       <aside class="sidebar" aria-label="Map settings" id="settings">
         <a class="back-to-map" href="#workspace">
           ↑ Back to map
@@ -595,7 +611,7 @@
         performance
       </h3>
       <p>
-        Your imported history is kept in memory, never uploaded or saved. Clear or reload to remove it. The selected map provider receives map requests for the area you view; Google and Yandex satellite maps also load their provider’s SDK. jsDelivr serves MapLibre, and Google Fonts serves the typefaces. The app includes no analytics or session recording. Large history files are read in chunks, with a limit of five million combined observations. Available device memory also affects import capacity.
+        The app processes imported files locally and keeps history in memory. Clear or reload to remove it. Google Analytics and Yandex Metrica measure visits and interactions, including Yandex Session Replay. The map and history controls are marked to hide their content from Yandex replay. The selected map provider receives map requests for the area you view; Google and Yandex satellite maps also load their provider’s SDK. jsDelivr serves MapLibre, and Google Fonts serves the typefaces. Large history files are read in chunks, with a limit of five million combined observations. Available device memory also affects import capacity.
       </p>
       <h3>
         Base maps

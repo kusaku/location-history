@@ -85,7 +85,9 @@ test('Azure renders the documented road, imagery and relief tilesets with matchi
   for (const [type, tileset, maxzoom] of [['road', 'microsoft.base.road', 22], ['dark', 'microsoft.base.darkgrey', 22], ['satellite', 'microsoft.imagery', 19], ['relief', 'microsoft.terra.main', 6]]) {
     const provider = createAzureProvider('test-key', type, async url => { requests.push(new URL(url)); return ok({copyrights: ['<a data-azure-maps-attribution-tileset="example">&copy;2026 Example &amp; data</a>']}); });
     const style = await provider.style(map), source = style.sources.basemap;
-    assert.match(source.tiles[0], /api-version=2024-04-01/); assert.match(source.tiles[0], /tileSize=256/);
+    const tileSize = type === 'relief' ? 512 : 256;
+    assert.match(source.tiles[0], /api-version=2024-04-01/); assert.ok(source.tiles[0].includes(`tileSize=${tileSize}`));
+    assert.equal(source.tileSize, tileSize);
     assert.ok(source.tiles[0].includes(`tilesetId=${tileset}`)); assert.equal(source.maxzoom, maxzoom);
     assert.match(style.metadata.providerAttribution, /©2026 Example &amp; data/);
     assert.equal(requests.at(-1).searchParams.get('tilesetId'), tileset);
@@ -105,12 +107,21 @@ test('Azure hybrid combines imagery and road labels, and splits attribution at t
 test('Azure rejects missing credits, escapes returned text and does not expose credentials in errors', async () => {
   const failed = createAzureProvider('secret-test-key', 'road', async () => ({ok: false, status: 403}));
   await assert.rejects(failed.style(map), error => /HTTP 403/.test(error.message) && !error.message.includes('secret-test-key'));
-  const missing = createAzureProvider('test-key', 'road', async () => ok({copyrights: []}));
+  const missing = createAzureProvider('test-key', 'road', async () => ok({}));
   await assert.rejects(missing.style(map), /required data attribution/);
   const escaped = createAzureProvider('test-key', 'road', async () => ok({copyrights: ['<img src=x onerror=alert(1)>© "Example" & data']}));
   const credit = await escaped.attribution(map);
   assert.ok(!credit.includes('<img')); assert.match(credit, /© &quot;Example&quot; &amp; data/);
   assert.throws(() => createAzureProvider('test-key', 'missing'), /Unknown Azure Maps style/);
+});
+
+test('Azure relief accepts empty contributor attribution and uses the 512px tile zoom', async () => {
+  let requestedZoom;
+  const provider = createAzureProvider('test-key', 'relief', async url => { requestedZoom = new URL(url).searchParams.get('zoom'); return ok({copyrights: []}); });
+  const style = await provider.style({...map, getZoom: () => 3.2});
+  assert.equal(requestedZoom, '3');
+  assert.match(style.metadata.providerAttribution, />Microsoft Azure Maps<\/a>$/);
+  assert.equal(style.sources.basemap.tileSize, 512);
 });
 
 test('map choices preserve provider order and contain no unavailable or ambiguous satellite option', () => {

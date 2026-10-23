@@ -60,14 +60,14 @@ The built-in choices require no credentials:
 | Paper | OpenFreeMap Positron | https://tiles.openfreemap.org/styles/positron |
 | Streets | OpenFreeMap Liberty | https://tiles.openfreemap.org/styles/liberty |
 | Bright | OpenFreeMap Bright | https://tiles.openfreemap.org/styles/bright |
-| Satellite | Esri public World Imagery | https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer |
+| Esri satellite | Esri public World Imagery | https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer |
 | OpenStreetMap | OpenStreetMap Standard | https://operations.osmfoundation.org/policies/tiles/ |
 
 OpenFreeMap explicitly supports its public instance without registration or API keys: https://openfreemap.org/quick_start/. Attribution remains visible for all providers. OSM browser requests retain the Referer header and normal browser caching; there is no tile prefetch or offline downloader. Esri imagery uses the service's published contributor attribution. These hosted services can change availability or terms. Base-map failure does not discard imported history; another provider can be selected.
 
 ### Google Maps
 
-Google roads and terrain use the supported [Map Tiles API](https://developers.google.com/maps/documentation/tile). The app creates and renews sessions, requests viewport-specific copyright notices after navigation, escapes that text, and keeps the Google Maps brand and attribution visible. Attribution failure returns to Midnight. No private tile endpoints or deprecated Google heatmap library are used. EEA projects cannot request Google satellite tiles; Esri imagery remains available.
+Google roads and terrain use the supported [Map Tiles API](https://developers.google.com/maps/documentation/tile). The app creates and renews sessions, requests viewport-specific copyright notices after navigation, escapes that text, and keeps the Google Maps brand and attribution visible. Attribution failure returns to Midnight. No private tile endpoints or deprecated Google heatmap library are used. EEA projects cannot request Google satellite tiles; the separate Maps JavaScript integration supplies Google satellite and hybrid.
 
 The dedicated Cloud project is `location-history-512511`. Its browser key permits only `tile.googleapis.com` and the website `https://kusaku.su/*`. Restricting the whole origin is necessary because cross-origin browser requests send the origin as Referer. The 2D-tile quota is **3,000 requests/day**, at most 93,000 in a 31-day month, below the console's current 100,000/month free allowance. Street View and 3D-root daily quotas are zero. Google allowances are shared by billing account, so usage from other projects on the same account also counts. [Quota console](https://console.cloud.google.com/google/maps-apis/quotas?project=location-history-512511&api=tile.googleapis.com).
 
@@ -77,7 +77,7 @@ Keys in `map-config.mjs` are deliberately public, as required by a static browse
 
 The existing `Satellite` source is Esri World Imagery; its selector is now explicitly named **Esri satellite**. Google and Yandex imagery are separate choices.
 
-Google's [EEA Tiles adjustments](https://developers.google.com/maps/comms/eea/map-tiles) block satellite images through the Tile API for this project. Its supported alternative is Maps JavaScript API's satellite/hybrid map types. Configure `googleMapsJavaScriptApiKey` only after enabling that API, applying a website/API restriction, and verifying the requested spending cap. The Dynamic Maps allowance is separate from Tile API usage: 10,000 map loads/month, with paid overage. An allowance or budget alert is not a hard cap.
+Google's [EEA Tiles adjustments](https://developers.google.com/maps/comms/eea/map-tiles) block satellite images through the Tile API for this project. Its supported alternative is Maps JavaScript API's satellite/hybrid map types. The separate `googleMapsJavaScriptApiKey` is configured and restricted to Maps JavaScript API and `https://kusaku.su/*`. The project’s **Map loads per day hard quota is 300**, at most 9,300 loads in a 31-day month. 3D Map loads and Maps Grounding Widget daily quotas are zero. The Dynamic Maps allowance is separate from Tile API usage: 10,000 map loads/month, shared across the billing account. The daily quota was verified in the console on 2026-10-23. [JavaScript quota console](https://console.cloud.google.com/google/maps-apis/quotas?project=location-history-512511&api=maps-backend.googleapis.com).
 
 Yandex's free JavaScript API supports `yandex#satellite` and `yandex#hybrid`, unlike its street-only Tiles API. The existing `yandexJavaScriptApiKey` is restricted to `kusaku.su`; the account currently shows a free allowance of 100 API requests/day. No paid plan was activated.
 
@@ -87,17 +87,17 @@ Yandex's free JavaScript API supports `yandex#satellite` and `yandex#hybrid`, un
 
 The supported [Tiles API](https://yandex.ru/maps-api/docs/tiles-api/) has a free plan limited to 30 requests/second, with no daily limit in the account console. `createYandexProvider` requests `projection=web_mercator` explicitly; Yandex's default elliptical projection would misalign the imported geometry. It uses the `future_map` street style, a terms link, and an Open in Maps link for the current viewport. Yandex's [documentation](https://yandex.com/maps-api/docs/tiles-api/index.html) requires a clickable corner logo; this site omits that overlay at the owner's request. The [supported styles](https://yandex.com/maps-api/docs/tiles-api/request.html) do not include terrain; the Tiles API only supplies roadmap tiles. The custom MapLibre protocol spaces tile requests by at least 40 ms and supports cancellation and normal HTTP caching. The service-wide limit still applies across visitors.
 
-Activation can take up to 15 minutes. Set `yandexTilesApiKey` only after a live tile request succeeds. The console provides no HTTP Referer restriction for Tiles API; its restriction fields apply to JavaScript API instead. The separate JavaScript API key is not used by this app.
+Activation can take up to 15 minutes. Set `yandexTilesApiKey` only after a live tile request succeeds. The console provides no HTTP Referer restriction for Tiles API; its restriction fields apply to JavaScript API instead. The separate JavaScript API key is used only for the satellite/hybrid SDK integration.
 
 The key is configured in `MAP_CONFIG`. On 2026-10-23 live Web Mercator tile requests passed with HTTP 200, PNG output, and browser CORS support. Initial account propagation exceeded the documented activation window; no frontend workaround was needed.
 
 ### Azure Maps
 
-The Gen2 renderer supports roads, dark roads, satellite imagery, satellite with road labels, and shaded relief (the relief tiles stop at zoom 6). Selectors appear only when `azureMapsSubscriptionKey` is configured. It uses the documented Render `2024-04-01` endpoints and fetches current attribution for every tileset, including both sides of a dateline-crossing view. Missing attribution fails closed.
+The Gen2 renderer supports roads, dark roads, satellite imagery, satellite with road labels, and shaded relief (the relief tiles stop at zoom 6). Selectors appear only when `azureMapsSubscriptionKey` is configured. It uses the documented Render `2024-04-01` endpoints and fetches current attribution for every tileset, including both sides of a dateline-crossing view. Missing or malformed attribution fails closed; a valid empty contributor list, as returned for relief, retains the Microsoft provider credit. Relief uses 512px tiles; the other styles use 256px tiles.
 
 The [monthly allowance](https://azure.microsoft.com/pricing/details/azure-maps/) includes 5,000 base-map and 1,000 imagery transactions; 15 tile requests count as one transaction. This corresponds to 75,000 road tiles and 15,000 imagery tiles. These are usage allowances, not hard monthly caps. Free-trial spending protection prevents automatic charges until an explicit upgrade; Azure's free trial is time-limited. Never claim that a paid Azure subscription is capped by these allowances.
 
-Use a dedicated Maps account with CORS limited to `https://kusaku.su`. Azure shared keys authorize all Maps REST services for their account; CORS is a browser restriction, not authentication against non-browser clients. A public static app cannot conceal a shared key. SAS tokens permit narrower access and rate limits but expire within 24 hours and require a renewal service or job. Never put Azure management credentials, service-principal secrets, or other account secrets in this repository.
+The dedicated `location-history` Gen2 Maps account is configured in North Europe with CORS limited to `https://kusaku.su`. West Europe rejected new customers at creation time. The subscription remains on its existing free-trial offer; it was not upgraded to pay-as-you-go. Azure shared keys authorize all Maps REST services for their account; CORS is a browser restriction, not authentication against non-browser clients. A public static app cannot conceal a shared key. SAS tokens permit narrower access and rate limits but expire within 24 hours and require a renewal service or job. Never put Azure management credentials, service-principal secrets, or other account secrets in this repository.
 
 ### Other providers
 
@@ -114,10 +114,11 @@ OpenFreeMap replaces CARTO, whose current public basemap terms require a licence
 - `import.mjs`: incremental UTF-8/JSON decoding, gzip decompression, bounded record batches, schema validation, and read progress.
 - `worker.mjs`: transactional import staging, dataset query lifecycle, acknowledged geometry transfers, and export.
 - `data.mjs`: parsing, validation, duplicate handling, indexed viewport queries, density normalization, cached selection statistics, track splitting, dateline-aware bounds, and bounded GeoJSON export.
+- `native-maps.mjs`: lazy provider SDK loading, synchronized satellite cameras, and reused SDK instances.
 - `maps.mjs`: provider URLs, session lifecycle, attribution, rate limiting, and palettes. `map-config.mjs` contains only public browser keys.
-- `data.test.mjs`, `import.test.mjs`, `worker.test.mjs`, and `maps.test.mjs`: Node built-in tests covering import formats, UTF-8 and JSON chunk boundaries, the full 266,682-point sample, gzip, transactional failures after partial parsing, filtering, period navigation, exact exports, clearing memory, provider requests, attribution, invalid sessions, and cancellation. No test dependency installation.
+- `data.test.mjs`, `import.test.mjs`, `worker.test.mjs`, `maps.test.mjs`, and `native-maps.test.mjs`: Node built-in tests covering import formats, UTF-8 and JSON chunk boundaries, the full 266,682-point sample, gzip, transactional failures after partial parsing, filtering, period navigation, exact exports, clearing memory, provider requests, attribution, invalid sessions, cancellation, lazy SDK loading, renderer camera alignment, and SDK lifecycle. No test dependency installation.
 
-Imported data remains in worker memory and only rendered geometry is sent to the map renderer. Files are not uploaded or saved in browser storage. Selected providers receive map requests revealing the viewed area; jsDelivr and Google Fonts receive normal asset requests. The existing sample is already a public repository asset and only loads when explicitly requested. No analytics, session recording, or service worker is included.
+Imported data remains in worker memory and only rendered geometry is sent to the map renderer. Files are not uploaded or saved in browser storage. Selected providers receive map requests revealing the viewed area; jsDelivr and Google Fonts receive normal asset requests. The existing sample is already a public repository asset and only loads when explicitly requested. The app includes no analytics, session recording, or service worker. Optional Google/Yandex SDKs make their own provider requests and are governed by their providers’ privacy policies.
 
 ## GitHub Pages deployment
 

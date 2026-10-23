@@ -653,6 +653,8 @@ select {
 }
 
 .native-map .maplibregl-canvas-container {
+  position: absolute;
+  inset: 0;
   pointer-events: auto;
   /* Preserve clickable SDK copyright controls beneath the history overlay. */
   clip-path: inset(0 0 var(--native-footer) 0);

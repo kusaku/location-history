@@ -1,10 +1,10 @@
-import {MAP_CONFIG} from './map-config.mjs?v=2';
+import {MAP_CONFIG} from './map-config.mjs?v=3';
 
 // Keep every provider's attribution with its documented endpoint.
 const osm = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
-const raster = (tiles, attribution, maxzoom = 19) => ({
+const raster = (tiles, attribution, maxzoom = 19, tileSize = 256) => ({
   version: 8,
-  sources: {basemap: {type: 'raster', tiles: [tiles], tileSize: 256, maxzoom, attribution}},
+  sources: {basemap: {type: 'raster', tiles: [tiles], tileSize, maxzoom, attribution}},
   layers: [{id: 'background', type: 'background', paint: {'background-color': '#dce3e5'}}, {id: 'basemap', type: 'raster', source: 'basemap'}],
 });
 export const MAPS = {
@@ -115,13 +115,14 @@ const AZURE_STYLES = {
   dark: {name: 'Azure dark', detail: 'dark roads', tileset: 'microsoft.base.darkgrey', tone: 'dark', maxzoom: 22},
   satellite: {name: 'Azure satellite', detail: 'satellite', tileset: 'microsoft.imagery', tone: 'dark', minzoom: 1, maxzoom: 19},
   hybrid: {name: 'Azure hybrid', detail: 'satellite with labels', tileset: 'microsoft.imagery', labels: 'microsoft.base.hybrid.road', tone: 'dark', minzoom: 1, maxzoom: 19},
-  relief: {name: 'Azure relief', detail: 'shaded relief', tileset: 'microsoft.terra.main', tone: 'light', maxzoom: 6},
+  relief: {name: 'Azure relief', detail: 'shaded relief · world scale', tileset: 'microsoft.terra.main', tone: 'light', maxzoom: 6, tileSize: 512},
 };
 export function createAzureProvider(apiKey, type = 'road', fetcher = globalThis.fetch) {
   const spec = AZURE_STYLES[type];
   if (!spec) throw new Error('Unknown Azure Maps style.');
   const query = tileset => `api-version=2024-04-01&tilesetId=${tileset}&subscription-key=${encodeURIComponent(apiKey)}`;
-  const tile = tileset => `https://atlas.microsoft.com/map/tile?${query(tileset)}&tileSize=256&language=en-US&view=Unified&zoom={z}&x={x}&y={y}`;
+  const tileSize = spec.tileSize ?? 256;
+  const tile = tileset => `https://atlas.microsoft.com/map/tile?${query(tileset)}&tileSize=${tileSize}&language=en-US&view=Unified&zoom={z}&x={x}&y={y}`;
   const tiles = () => [tile(spec.tileset)];
   async function attribution(map) {
     const v = googleViewport(map.getBounds(), map.getZoom());
@@ -129,18 +130,24 @@ export function createAzureProvider(apiKey, type = 'road', fetcher = globalThis.
     const boxes = v.west > v.east ? [[v.west, south, 180, north], [-180, south, v.east, north]] : [[v.west, south, v.east, north]];
     const copyrights = new Set();
     for (const tileset of [spec.tileset, spec.labels].filter(Boolean)) for (const box of boxes) {
-      const response = await fetcher(`https://atlas.microsoft.com/map/attribution?${query(tileset)}&zoom=${Math.max(spec.minzoom ?? 0, Math.min(spec.maxzoom, v.zoom))}&bounds=${box.join(',')}`, {signal: AbortSignal.timeout(15000)});
+      const zoom = Math.max(spec.minzoom ?? 0, Math.min(spec.maxzoom, Math.round(map.getZoom() + (tileSize === 256 ? 1 : 0))));
+      const response = await fetcher(`https://atlas.microsoft.com/map/attribution?${query(tileset)}&zoom=${zoom}&bounds=${box.join(',')}`, {signal: AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error(`Azure Maps HTTP ${response.status}. Check account activation and browser access.`);
       const data = await response.json();
-      if (!Array.isArray(data.copyrights) || !data.copyrights.length || !data.copyrights.every(text => typeof text === 'string' && text.trim())) throw new Error('Azure Maps did not return the required data attribution.');
+      if (!Array.isArray(data.copyrights) || !data.copyrights.every(text => typeof text === 'string' && text.trim())) throw new Error('Azure Maps did not return the required data attribution.');
       // Keep readable credit text without inserting remote markup or URLs.
-      for (const text of data.copyrights) copyrights.add(escapeHTML(text.replace(/<[^>]*>/g, '').replace(/&copy;/g, '©').replace(/&amp;/g, '&')));
+      for (const text of data.copyrights) {
+        const credit = text.replace(/<[^>]*>/g, '').replace(/&copy;/g, '©').replace(/&amp;/g, '&').trim();
+        if (!credit) throw new Error('Azure Maps returned unreadable data attribution.');
+        copyrights.add(escapeHTML(credit));
+      }
     }
-    return `<a href="https://www.microsoft.com/maps/product/terms.html">Microsoft Azure Maps</a> · ${[...copyrights].join(' · ')}`;
+    // Relief can return an empty list; still show the Microsoft provider credit.
+    return [`<a href="https://www.microsoft.com/maps/product/terms.html">Microsoft Azure Maps</a>`, ...copyrights].join(' · ');
   }
   return {name: spec.name, detail: `Microsoft Azure · ${spec.detail}`, tone: spec.tone, swatch: ['satellite', 'hybrid'].includes(type) ? 'satellite' : type === 'dark' ? 'dark' : 'light', tiles, attribution,
     async style(map) {
-      const style = raster(tiles()[0], '', spec.maxzoom);
+      const style = raster(tiles()[0], '', spec.maxzoom, tileSize);
       style.sources.basemap.minzoom = spec.minzoom ?? 0;
       if (spec.labels) {
         style.sources.labels = {type: 'raster', tiles: [tile(spec.labels)], tileSize: 256, maxzoom: 22};

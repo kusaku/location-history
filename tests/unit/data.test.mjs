@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
-import {parseHistory, preparePoints, queryHistory, createHistoryQuery, exportHistory, wrappedBounds, project, timestamp, shiftPeriod, DAY} from '../../assets/js/data.mjs';
+import {parseHistory, preparePoints, queryHistory, createHistoryQuery, wrappedBounds, project, timestamp, shiftPeriod, DAY} from '../../assets/js/data.mjs';
 const point = (t, lon = 13.4, lat = 52.5, accuracy = null) => ({t, lon, lat, accuracy, duration: 0});
 const records = locations => parseHistory({locations}).points;
 const legacy = (time, lat = 525000000, lon = 134000000) => ({timestampMs: String(time), latitudeE7: lat, longitudeE7: lon});
@@ -121,6 +121,24 @@ test('hexagons are closed finite GeoJSON polygons', () => {
   assert.equal(f.geometry.type, 'Polygon'); assert.equal(f.geometry.coordinates[0].length, 7);
   assert.deepEqual(f.geometry.coordinates[0][0], f.geometry.coordinates[0][6]);
 });
+test('two-pixel hexagons give finer geometry without changing selection counts', () => {
+  const points = Array.from({length: 100}, (_, i) => point(i, 13.4 + i % 10 * .0001, 52.5 + Math.floor(i / 10) * .0001));
+  const query = createHistoryQuery(points);
+  const small = query({mode: 'hex', radius: 2, zoom: 14});
+  const large = query({mode: 'hex', radius: 8, zoom: 14});
+  assert.equal(small.count, large.count);
+  assert.ok(small.density.features.length > large.density.features.length);
+  const width = feature => {
+    const xs = feature.geometry.coordinates[0].map(c => c[0]);
+    return Math.max(...xs) - Math.min(...xs);
+  };
+  assert.ok(Math.abs(width(small.density.features[0]) * 4 - width(large.density.features[0])) < 1e-9);
+  assert.deepEqual(query({mode: 'hex', radius: 1, zoom: 14}).density, small.density);
+  for (const {geometry} of small.density.features) {
+    assert.ok(geometry.coordinates[0].flat().every(Number.isFinite));
+    assert.deepEqual(geometry.coordinates[0][0], geometry.coordinates[0][6]);
+  }
+});
 test('point mode caps rendered observations, while counts stay exact', () => {
   const p = Array.from({length: 21000}, (_, i) => point(i));
   const result = queryHistory(p, {mode: 'points'});
@@ -181,16 +199,4 @@ test('route simplification preserves both endpoints without allocating every coo
 
 test('date range queries preserve inclusive fractional timestamp boundaries', () => {
   assert.equal(queryHistory([point(.1), point(.5), point(.9)], {start: .1, end: .5}).count, 2);
-});
-
-test('bounded GeoJSON exports preserve all filtered observations across batch boundaries', async () => {
-  const points = Array.from({length: 5000}, (_, i) => point(i * 1000, 13.4, 52.5, i % 2 ? null : 500));
-  const result = exportHistory(points, {start: 1000, end: 4999000, accuracy: 100});
-  const parsed = JSON.parse(await result.blob.text());
-  assert.equal(result.count, 2500); assert.equal(parsed.features.length, 2500);
-  assert.equal(result.start, 1000); assert.equal(result.end, 4999000);
-  assert.equal(parsed.features[0].properties.timestamp, '1970-01-01T00:00:01.000Z');
-  assert.equal(parsed.features.at(-1).properties.timestamp, new Date(4999000).toISOString());
-  assert.equal(parseHistory(parsed).points.length, result.count);
-  assert.deepEqual(JSON.parse(await exportHistory(points, {start: 9e6}).blob.text()).features, []);
 });

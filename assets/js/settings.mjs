@@ -1,16 +1,28 @@
-import {DAY} from './data.mjs?v=5';
-import {resizeWindow} from './timeline.mjs?v=2';
+import {DAY} from './data.mjs?v=6';
+import {resizeWindow} from './timeline.mjs?v=3';
 
 const STORAGE_KEY = 'location-history.settings.v1';
-const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85, hourStart: 0, hourEnd: 24, accuracy: 0, period: 'all', periodDay: null, dateRange: null});
+export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
+const VIEW_DEFAULTS = Object.freeze({metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85});
+const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, period: 'all', periodDay: null, dateRange: null});
 
 function validatedSettings(input, availableMaps) {
-  const settings = {...DEFAULTS, basemap: availableMaps.includes('google') ? 'google' : availableMaps.includes('dark') ? 'dark' : availableMaps[0]};
+  const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes('google') ? 'google' : availableMaps.includes('dark') ? 'dark' : availableMaps[0]};
   if (!input || typeof input !== 'object' || Array.isArray(input)) return settings;
-  for (const [key, values] of Object.entries({basemap: availableMaps, mode: ['heat', 'hex', 'points', 'route'], metric: ['records', 'days', 'time'], palette: ['ember', 'ocean', 'spectral'], accuracy: [0, 100, 500, 1000], period: ['all', '1', '30', '365', null]})) {
+  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 100, 500, 1000], period: ['all', '1', '30', '365', null]})) {
     if (values.includes(input[key])) settings[key] = input[key];
   }
-  for (const [key, min, max, step] of [['radius', 8, 60, 1], ['intensity', .2, 3, .1], ['opacity', .1, 1, .05], ['hourStart', 0, 23, 1], ['hourEnd', 1, 24, 1]]) {
+  for (const [mode, view] of Object.entries(settings.views)) {
+    // Older preferences had one shared set; migrate it into independent copies.
+    const source = input.views && typeof input.views === 'object' && !Array.isArray(input.views) ? input.views[mode] : input;
+    if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+    for (const [key, values] of Object.entries({metric: ['records', 'days', 'time'], palette: ['ember', 'ocean', 'spectral']})) if (values.includes(source[key])) view[key] = source[key];
+    for (const [key, min, max, step] of [['radius', RADIUS_MIN[mode], 60, 1], ['intensity', .2, 3, .1], ['opacity', .1, 1, .05]]) {
+      const value = source[key];
+      if (Number.isFinite(value) && value >= min && value <= max && Math.abs((value - min) / step - Math.round((value - min) / step)) < 1e-8) view[key] = value;
+    }
+  }
+  for (const [key, min, max, step] of [['hourStart', 0, 23, 1], ['hourEnd', 1, 24, 1]]) {
     const value = input[key];
     if (!Number.isFinite(value) || value < min || value > max) continue;
     const steps = (value - min) / step;

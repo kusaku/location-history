@@ -251,7 +251,7 @@ export function createHistoryQuery(points) {
       routes = selection.routes; drawn = routes.features.length;
     } else {
       const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));
-      const size = (mode === 'hex' ? Math.max(8, radius) : Math.max(3, radius / 4)) / scale;
+      const size = (mode === 'hex' ? Math.max(2, radius) : Math.max(3, radius / 4)) / scale;
       const grid = new Map(), bins = [];
       for (let j = 0; j < visibleCount; j++) {
         const i = visible[j], p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
@@ -290,22 +290,3 @@ export function createHistoryQuery(points) {
 
 // Convenience for one-off queries. The worker retains createHistoryQuery's index.
 export function queryHistory(points, options) { return createHistoryQuery(points)(options); }
-
-// Bounded strings and feature batches avoid the JS string-size limit on large exports.
-export function exportHistory(points, {start = -Infinity, end = Infinity, accuracy = 0, hourStart = 0, hourEnd = 24} = {}) {
-  const parts = ['{"type":"FeatureCollection","features":['];
-  let batch = [], count = 0;
-  const flush = () => {
-    if (!batch.length) return;
-    parts.push(count ? ',' : '', JSON.stringify(batch).slice(1, -1));
-    count += batch.length; batch = [];
-  };
-  for (let i = lowerBound(points, start); i < points.length && points[i].t <= end; i++) {
-    const p = points[i];
-    if (!accepts(p, accuracy, hourStart, hourEnd)) continue;
-    batch.push({type: 'Feature', properties: {timestamp: new Date(p.t).toISOString(), accuracy: p.accuracy}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
-    if (batch.length === 2048) flush();
-  }
-  flush(); parts.push(']}');
-  return {blob: new Blob(parts, {type: 'application/geo+json'}), count, start, end};
-}

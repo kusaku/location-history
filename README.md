@@ -25,7 +25,7 @@ Google Maps is selected on the first visit. This browser remembers the chosen ba
 
 - **Heatmap:** GPU-rendered density with a screen-space spread, intensity, opacity, and three colour palettes.
 - **Hexagons:** zoom-adaptive cells with record, recorded-day, and stationary-minute details on click.
-- **Points:** individual observations with timestamps and accuracy; at most 20,000 representative points in view. Counts and exports remain exact.
+- **Points:** individual observations with timestamps and accuracy; at most 20,000 representative points in view. Counts remain exact.
 - **Journeys:** consecutive recorded locations. Breaks occur at filtered observations, gaps over six hours, dateline crossings, or speeds above 1,000 km/h. Sparse paths are not road routing. Distance is an estimate along usable recorded tracks, not total travel distance.
 - **Density metrics:** number of records, distinct UTC days per cell, or estimated stationary time. Explicit visit durations and stationary intervals of at most 30 minutes within 200 metres contribute time; each observation is clipped to its UTC day, the end of the selection, and the chosen end hour. Sampling gaps and movement do not become stays. This estimate can undercount visits spanning days and is affected by overlapping visit/path records.
 - **Relative density:** occupied cells are scaled to their 95th-percentile value, then square-root transformed to keep less frequent places visible. Density is recalculated for the padded visible area and current zoom. Colours compare spatial patterns in the current view, not absolute values across zoom levels or filters.
@@ -119,15 +119,15 @@ OpenFreeMap replaces CARTO, whose current public basemap terms require a licence
 - **Native CSS** handles the responsive desktop workspace and mobile map/settings layout. DM Sans and Space Grotesk are optional variable fonts served by Google Fonts, with system fallbacks. Weight ranges avoid repeated font-face declarations without adding font files.
 Runtime modules live in `assets/js/`:
 
-- `app.mjs`: UI, map rendering, provider switching, debounced queries with backpressure, and local download.
+- `app.mjs`: UI, map rendering, provider switching, and debounced queries with backpressure.
 - `import.mjs`: incremental UTF-8/JSON decoding, gzip decompression, bounded record batches, schema validation, and read progress.
-- `worker.mjs`: transactional import staging, dataset query lifecycle, acknowledged geometry transfers, and export.
-- `data.mjs`: parsing, validation, duplicate handling, indexed viewport queries, density normalization, cached selection statistics, track splitting, dateline-aware bounds, and bounded GeoJSON export.
+- `worker.mjs`: transactional import staging, dataset query lifecycle, and acknowledged geometry transfers.
+- `data.mjs`: parsing, validation, duplicate handling, indexed viewport queries, density normalization, cached selection statistics, track splitting, and dateline-aware bounds.
 - `native-maps.mjs`: lazy provider SDK loading, synchronized satellite cameras, and reused SDK instances.
 - `maps.mjs`: provider catalog, URLs, session lifecycle, attribution, rate limiting, palettes, and incremental history-layer paint updates. `map-config.mjs` contains only public browser keys.
-- `settings.mjs`: validated, allowlisted display/filter preferences in project-specific local storage. History and map camera state are excluded.
+- `settings.mjs`: validated, allowlisted per-mode visualization and shared date/hour/accuracy preferences in project-specific local storage. History and map camera state are excluded.
 - `timeline.mjs`: UTC calendar window resizing/navigation and histogram date intervals, with leap-year, month-end, boundary, and persistence checks.
-- `tests/unit/`: Node built-in tests for import formats and chunk boundaries, transactional failures, exact filtering/export, calendar windows, histogram counts, providers, SDK lifecycle, preferences, and incremental paint equivalence. Run with `node --test`; no test dependencies are required.
+- `tests/unit/`: Node built-in tests for import formats and chunk boundaries, transactional failures, exact filtering, calendar windows, histogram counts, providers, SDK lifecycle, preferences, and incremental paint equivalence. Run with `node --test`; no test dependencies are required.
 
 ```text
 index.html                  Static entry point

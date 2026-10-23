@@ -32,7 +32,7 @@ async function startWorker() {
 const json = data => new Blob([JSON.stringify(data)], {type: 'application/json'});
 const record = (t, lon = 134000000, accuracy) => ({latitudeE7: 525000000, longitudeE7: lon, timestampMs: String(t), accuracy});
 
-test('worker merges files, preserves old data after failure, filters exact exports and clears memory', async () => {
+test('worker merges files, preserves old data after failure, filters exact observations and clears memory', async () => {
   const {worker, request} = await startWorker();
   try {
     const imported = await request('import', {files: [json({locations: [record(0), record(1000)]}), json({locations: [record(1000), record(2000, 134010000, 500)]})]});
@@ -41,9 +41,10 @@ test('worker merges files, preserves old data after failure, filters exact expor
     assert.equal(failed.type, 'error'); assert.equal(failed.operation, 'import');
     const result = await request('query');
     assert.equal(result.result.count, 3);
-    const exported = await request('export', {options: {start: 0, end: 2000, accuracy: 100, hourStart: 0, hourEnd: 24}});
-    const data = JSON.parse(await exported.blob.text());
-    assert.equal(data.features.length, 2); assert.equal(data.features[0].properties.timestamp, '1970-01-01T00:00:00.000Z');
+    const filtered = await request('query', {options: {mode: 'points', start: 0, end: 2000, accuracy: 100, hourStart: 0, hourEnd: 24}});
+    assert.equal(filtered.result.count, 2);
+    assert.equal(filtered.result.dots.features.length, 2);
+    assert.equal(filtered.result.dots.features[0].properties.time, 0);
     await request('clear');
     assert.equal((await request('query')).result.count, 0);
   } finally { await worker.terminate(); }

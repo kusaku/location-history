@@ -603,27 +603,6 @@ select {
   --map-road: #40454d; --map-highway: #777d89; --map-casing: #12151b; --map-label: #a9aeb7;
 }
 
-.filters summary {
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #b9c5b9;
-  list-style: none;
-  min-height: 25px;
-  align-items: center;
-}
-
-.filters summary::-webkit-details-marker {
-  display: none;
-}
-
-.two-columns {
-  display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
-  gap: 12px;
-}
-
 .secondary-button {
   display: flex;
   align-items: center;
@@ -634,11 +613,6 @@ select {
   font-size: 11px;
   background: #1c241d;
   gap: 15px;
-}
-
-.details-content>.secondary-button {
-  margin-top: 15px;
-  width: 100%;
 }
 
 .sidebar-footer {
@@ -1041,6 +1015,34 @@ select {
   background: #1e2a1f;
   border-color: #34452e;
   min-height: 30px;
+}
+
+.window-filters {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 8px;
+  max-width: 360px;
+  margin: 10px 0 0 auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.window-filters label {
+  margin: 0;
+  min-width: 0;
+  font-size: 9px;
+  color: #9aac92;
+}
+
+.window-filters select {
+  margin-top: 4px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 6px;
+  font-size: 11px;
+  border-radius: 5px;
+  background: #1e2a1f;
+  border-color: #34452e;
 }
 
 .utc-tag {

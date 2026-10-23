@@ -303,8 +303,11 @@ function bindControls() {
       const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', new URL(`../images/map-previews.svg?v=1#${group.id}`, import.meta.url).href); svg.append(use); swatch.append(svg);
       const label = document.createElement('span'); label.className = 'basemap-label';
       const brand = document.createElement('strong'); brand.textContent = provider.provider;
-      const detail = document.createElement('small'); detail.textContent = provider.provider === 'OpenFreeMap' ? provider.name : key === 'azure-relief' ? 'Shaded relief' : group.name.split(' ·')[0];
-      label.append(brand, detail);
+      if (provider.provider === 'OpenStreetMap') brand.replaceChildren(document.createTextNode('OpenStreet'), document.createElement('wbr'), document.createTextNode('Map'));
+      label.append(brand);
+      if (provider.provider === 'OpenFreeMap' || key === 'azure-relief') {
+        const detail = document.createElement('small'); detail.textContent = provider.provider === 'OpenFreeMap' ? provider.name : 'Shaded relief'; label.append(detail);
+      }
       button.append(swatch, label); button.onclick = () => selectBasemap(key, true); grid.append(button);
     }
   }

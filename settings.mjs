@@ -1,4 +1,4 @@
-import {DAY} from './data.mjs?v=3';
+import {DAY} from './data.mjs?v=4';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85, hourStart: 0, hourEnd: 24, accuracy: 0, period: 'all', dateRange: null});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, MAPS, MAP_GROUPS, MAP_ORDER} from './maps.mjs';
+import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, paintHistory, MAPS, MAP_GROUPS, MAP_ORDER} from './maps.mjs';
 
 const bounds = (west = 13, east = 14, south = 52, north = 53) => ({getWest: () => west, getEast: () => east, getSouth: () => south, getNorth: () => north});
 const map = {getBounds: () => bounds(), getZoom: () => 10.5};
@@ -162,4 +162,23 @@ test('map choices group views with consistent provider order and no unavailable 
   assert.equal(MAP_ORDER.length, Object.keys(MAPS).length); assert.equal(new Set(MAP_ORDER).size, MAP_ORDER.length);
   assert.equal(MAPS.satellite.name, 'Esri satellite');
   for (const key of MAP_ORDER) assert.ok(MAPS[key].provider);
+});
+
+test('incremental control changes match a full paint with fewer map style updates', () => {
+  const makeMap = () => ({properties: new Map(), calls: 0, getLayer: () => true,
+    setLayoutProperty(id, key, value) { this.calls++; this.properties.set(`${id}:${key}`, value); },
+    setPaintProperty(id, key, value) { this.calls++; this.properties.set(`${id}:${key}`, value); },
+  });
+  const state = {mode: 'heat', palette: 'ember', radius: 24, intensity: 1, opacity: .85}, map = makeMap();
+  paintHistory(map, state);
+  assert.equal(map.calls, 16);
+  for (const [key, value, calls] of [['opacity', .65, 4], ['radius', 38, 2], ['intensity', 1.7, 4], ['palette', 'ocean', 4], ['mode', 'hex', 4], ['metric', 'days', 0]]) {
+    state[key] = value; map.calls = 0;
+    paintHistory(map, state, key);
+    assert.equal(map.calls, calls, key);
+    const complete = makeMap(); paintHistory(complete, state);
+    assert.deepEqual(map.properties, complete.properties, key);
+  }
+  assert.doesNotThrow(() => paintHistory(undefined, state, 'opacity'));
+  assert.doesNotThrow(() => paintHistory({getLayer: () => false}, state));
 });

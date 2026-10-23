@@ -226,12 +226,6 @@ button:hover:not(:disabled) {
   margin: 0 0 12px;
 }
 
-.sidebar-intro em {
-  color: var(--accent);
-  font-style: normal;
-}
-
-
 .control-section {
   border-top: 1px solid var(--border);
   padding: 20px 0;

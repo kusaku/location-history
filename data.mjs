@@ -106,10 +106,11 @@ export function distance(a, b) {
   const h = Math.sin(lat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(lon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
 }
-export function project(lon, lat) {
+function projectY(lat) {
   const s = Math.sin(Math.max(-85.051129, Math.min(85.051129, lat)) * rad);
-  return [(lon + 180) / 360, 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)];
+  return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 }
+export function project(lon, lat) { return [(lon + 180) / 360, projectY(lat)]; }
 function unproject(x, y) { return [x * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) / rad]; }
 export function wrappedBounds(points, indices = null) {
   const length = indices?.length ?? points.length;
@@ -144,7 +145,10 @@ const collection = features => ({type: 'FeatureCollection', features});
 const EMPTY = collection([]);
 const hour = t => Math.floor(((t % DAY) + DAY) % DAY / 3_600_000);
 function accepts(p, accuracy, hourStart, hourEnd) {
-  return (!accuracy || p.accuracy === null || p.accuracy <= accuracy) && hour(p.t) >= hourStart && hour(p.t) < hourEnd;
+  if (accuracy && p.accuracy !== null && !(p.accuracy <= accuracy)) return false;
+  if (hourStart === 0 && hourEnd === 24) return true;
+  const h = hour(p.t);
+  return h >= hourStart && h < hourEnd;
 }
 
 // One compact index and one current filter/selection cache per committed dataset.
@@ -153,7 +157,7 @@ export function createHistoryQuery(points) {
   const columns = 128, rows = 64, cells = columns * rows;
   const cell = p => Math.min(rows - 1, Math.floor((p.lat + 90) / 180 * rows)) * columns + Math.min(columns - 1, Math.floor((p.lon + 180) / 360 * columns));
   const offsets = new Uint32Array(cells + 1), order = new Uint32Array(points.length), projectedY = new Float64Array(points.length);
-  for (let i = 0; i < points.length; i++) { offsets[cell(points[i]) + 1]++; projectedY[i] = project(0, points[i].lat)[1]; }
+  for (let i = 0; i < points.length; i++) { offsets[cell(points[i]) + 1]++; projectedY[i] = projectY(points[i].lat); }
   for (let i = 1; i <= cells; i++) offsets[i] += offsets[i - 1];
   const cursors = offsets.slice();
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
@@ -174,21 +178,28 @@ export function createHistoryQuery(points) {
     const nextSelectionKey = `${filterKey}:${start}:${end}`;
     if (selectionKey !== nextSelectionKey) {
       const from = lowerBound(points, start), to = lowerBound(points, end, true);
-      const indices = new Uint32Array(Math.max(0, to - from)), runs = [], days = new Set();
-      let count = 0, km = 0, previous = -1, run = 0;
+      const indices = new Uint32Array(Math.max(0, to - from)), runs = [];
+      let count = 0, km = 0, previous = -1, run = 0, days = 0, lastDay;
       for (let i = from; i < to; i++) {
         if (!filter.mask[i]) continue;
         const p = points[i];
         if (previous >= 0) {
-          const dt = p.t - points[previous].t, d = distance(points[previous], p);
-          if (i === previous + 1 && dt > 0 && dt <= 6 * 3_600_000 && d / (dt / 3_600_000) <= 1000 && Math.abs(p.lon - points[previous].lon) < 180) km += d;
-          else { if (count - run > 1) runs.push([run, count]); run = count; }
+          const dt = p.t - points[previous].t;
+          let connected = i === previous + 1 && dt > 0 && dt <= 6 * 3_600_000 && Math.abs(p.lon - points[previous].lon) < 180;
+          if (connected) {
+            const d = distance(points[previous], p);
+            connected = d / (dt / 3_600_000) <= 1000;
+            if (connected) km += d;
+          }
+          if (!connected) { if (count - run > 1) runs.push([run, count]); run = count; }
         }
-        indices[count++] = i; previous = i; days.add(Math.floor(p.t / DAY));
+        indices[count++] = i; previous = i;
+        const day = Math.floor(p.t / DAY);
+        if (day !== lastDay) { days++; lastDay = day; }
       }
       if (count - run > 1) runs.push([run, count]);
       const selected = indices.subarray(0, count);
-      selection = {from, to, indices: selected, runs, count, days: days.size, km: Math.round(km), bounds: wrappedBounds(points, selected), routes: null};
+      selection = {from, to, indices: selected, runs, count, days, km: Math.round(km), bounds: wrappedBounds(points, selected), routes: null};
       selectionKey = nextSelectionKey;
     }
     const {from, to, indices} = selection;
@@ -209,16 +220,16 @@ export function createHistoryQuery(points) {
         if (a !== b) { ranges.push([a, b]); candidates += b - a; }
       }
     }
-    const visible = new Uint32Array(Math.min(candidates, indices.length)); let visibleCount = 0;
+    const visible = mode === 'route' ? null : new Uint32Array(Math.min(candidates, indices.length)); let visibleCount = 0;
     if (candidates < indices.length / 2) {
       for (const [a, b] of ranges) for (let j = a; j < b; j++) {
         const i = order[j];
-        if (i >= from && i < to && filter.mask[i] && inView(points[i])) visible[visibleCount++] = i;
+        if (i >= from && i < to && filter.mask[i] && inView(points[i])) { if (visible) visible[visibleCount] = i; visibleCount++; }
       }
       // Chronological ordering preserves representative sampling and density sums.
-      visible.subarray(0, visibleCount).sort();
+      visible?.subarray(0, visibleCount).sort();
     } else {
-      for (const i of indices) if (inView(points[i])) visible[visibleCount++] = i;
+      for (const i of indices) if (inView(points[i])) { if (visible) visible[visibleCount] = i; visibleCount++; }
     }
     let density = EMPTY, dots = EMPTY, routes = EMPTY, peak = 1, drawn = 0;
     if (mode === 'points') {
@@ -239,7 +250,7 @@ export function createHistoryQuery(points) {
     } else {
       const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));
       const size = (mode === 'hex' ? Math.max(8, radius) : Math.max(3, radius / 4)) / scale;
-      const bins = new Map();
+      const grid = new Map(), bins = [];
       for (let j = 0; j < visibleCount; j++) {
         const i = visible[j], p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
         const x = (lon + 180) / 360, y = projectedY[i];
@@ -248,20 +259,24 @@ export function createHistoryQuery(points) {
           [a, b] = hexRound((Math.sqrt(3) / 3 * x - y / 3) / size, 2 / 3 * y / size);
           cx = size * Math.sqrt(3) * (a + b / 2); cy = size * 1.5 * b;
         } else { a = Math.floor(x / size); b = Math.floor(y / size); cx = (a + .5) * size; cy = (b + .5) * size; }
-        const key = `${a}:${b}`;
-        let bin = bins.get(key);
-        if (!bin) { bin = {x: cx, y: cy, count: 0, duration: 0, days: new Set()}; bins.set(key, bin); }
-        bin.count++; bin.days.add(Math.floor(p.t / DAY));
-        bin.duration += Math.max(0, Math.min(p.t + p.duration, end + 1, (Math.floor(p.t / DAY) + 1) * DAY + (hourEnd - 24) * 3_600_000) - p.t) / 60_000;
+        let column = grid.get(a);
+        if (!column) { column = new Map(); grid.set(a, column); }
+        let bin = column.get(b);
+        if (!bin) { bin = {x: cx, y: cy, count: 0, duration: 0, days: 0, lastDay: undefined}; column.set(b, bin); bins.push(bin); }
+        bin.count++;
+        // Visible indices are chronological, so each bin sees UTC days in order.
+        const day = Math.floor(p.t / DAY);
+        if (day !== bin.lastDay) { bin.days++; bin.lastDay = day; }
+        bin.duration += Math.max(0, Math.min(p.t + p.duration, end + 1, (day + 1) * DAY + (hourEnd - 24) * 3_600_000) - p.t) / 60_000;
       }
-      const value = b => metric === 'days' ? b.days.size : metric === 'time' ? b.duration : b.count;
-      const values = [...bins.values()].map(value).filter(v => v > 0).sort((a, b) => a - b);
+      const value = b => metric === 'days' ? b.days : metric === 'time' ? b.duration : b.count;
+      const values = bins.map(value).filter(v => v > 0).sort((a, b) => a - b);
       peak = values[Math.floor((values.length - 1) * .95)] || 1;
       const features = [];
-      for (const b of bins.values()) {
+      for (const b of bins) {
         const v = value(b);
         if (!v) continue;
-        const properties = {value: v, count: b.count, days: b.days.size, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
+        const properties = {value: v, count: b.count, days: b.days, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
         const coordinates = mode === 'hex' ? [Array.from({length: 7}, (_, i) => unproject(b.x + size * Math.cos(rad * (60 * (i % 6) - 30)), b.y + size * Math.sin(rad * (60 * (i % 6) - 30))))] : unproject(b.x, b.y);
         features.push({type: 'Feature', properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
       }

@@ -28,7 +28,7 @@ export function loadNativeSDK(provider, key, document = globalThis.document, win
     script.onerror = () => finish(null, new Error(`${provider === 'google' ? 'Google' : 'Yandex'} Maps SDK could not load. Check the browser key and website restriction.`));
     script.src = provider === 'google'
       ? `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=quarterly&loading=async&callback=${callback}`
-      : `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(key)}&lang=en_US&onload=${callback}`;
+      : `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(key)}&lang=en_US&load=Map,projection.sphericalMercator&onload=${callback}`;
     document.head.append(script);
   }).catch(error => { pendingSDKs.delete(provider); throw error; });
   pendingSDKs.set(provider, promise);

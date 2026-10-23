@@ -1,11 +1,12 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels} from './maps.mjs?v=8';
-import {createNativeMaps} from './native-maps.mjs';
-import {DAY, shiftPeriod} from './data.mjs?v=3';
-import {loadSettings, saveSettings, dateSelection} from './settings.mjs';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=9';
+import {createNativeMaps} from './native-maps.mjs?v=2';
+import {DAY, shiftPeriod} from './data.mjs?v=4';
+import {loadSettings, saveSettings, dateSelection} from './settings.mjs?v=2';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
-const formatDate = t => new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}).format(t);
+const fullDate = new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
+const formatDate = t => fullDate.format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
@@ -81,13 +82,7 @@ function paintSources(changes = state.result) {
     if (!changes || key in changes) map.getSource(`history-${source}`).setData(changes?.[key] ?? empty());
   }
 }
-function colourExpression(input, includeTransparent = false) {
-  const colors = PALETTES[state.palette].colors;
-  const stops = includeTransparent ? [0, 'rgba(0,0,0,0)', .08, colors[0]] : [0, colors[0]];
-  for (let i = 1; i < colors.length; i++) stops.push(i / (colors.length - 1), colors[i]);
-  return ['interpolate', ['linear'], input, ...stops];
-}
-function paint() {
+function paint(changed) {
   const palette = PALETTES[state.palette];
   $('legend-ramp').style.background = `linear-gradient(90deg,${palette.colors.join(',')})`;
   $('palette-name').textContent = palette.name;
@@ -103,20 +98,7 @@ function paint() {
   $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[state.metric];
   const legend = document.querySelector('.legend');
   legend.hidden = state.mode === 'points' || state.mode === 'route';
-  if (!map?.getLayer('history-heat')) return;
-  for (const [id, mode] of [['history-heat', 'heat'], ['history-hex', 'hex'], ['history-dots', 'points'], ['history-route', 'route']]) map.setLayoutProperty(id, 'visibility', state.mode === mode ? 'visible' : 'none');
-  map.setPaintProperty('history-heat', 'heatmap-color', colourExpression(['heatmap-density'], true));
-  map.setPaintProperty('history-heat', 'heatmap-radius', ['interpolate', ['linear'], ['zoom'], 0, state.radius * .7, 14, state.radius, 20, state.radius * 1.3]);
-  map.setPaintProperty('history-heat', 'heatmap-intensity', state.intensity);
-  map.setPaintProperty('history-heat', 'heatmap-opacity', state.opacity);
-  map.setPaintProperty('history-hex', 'fill-color', colourExpression(['min', 1, ['*', ['get', 'weight'], state.intensity]]));
-  map.setPaintProperty('history-hex', 'fill-opacity', state.opacity);
-  map.setPaintProperty('history-dots', 'circle-color', palette.colors[4]);
-  map.setPaintProperty('history-dots', 'circle-radius', state.radius / 8);
-  map.setPaintProperty('history-dots', 'circle-opacity', Math.min(1, state.opacity * state.intensity));
-  map.setPaintProperty('history-route', 'line-color', palette.colors[3]);
-  map.setPaintProperty('history-route', 'line-opacity', state.opacity);
-  map.setPaintProperty('history-route', 'line-width', state.intensity * 1.5);
+  paintHistory(map, state, changed);
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
@@ -141,10 +123,11 @@ async function selectBasemap(key, remember = false) {
       return response.json();
     })() : structuredClone(provider.style);
     if (request !== styleRequest) return;
-    // OpenFreeMap's dark style currently references a missing sprite pattern.
-    // Keep its solid forest fill so the map renders without a missing-image error.
+    // Fix two names absent from OpenFreeMap's published dark sprite.
     if (key === 'dark') for (const layer of style.layers) {
       if (layer.paint?.['fill-pattern'] === 'wood-pattern') delete layer.paint['fill-pattern'];
+      const icon = layer.layout?.['icon-image'];
+      if (Array.isArray(icon) && icon[0] === 'step' && icon[2] === 'circle-11') icon[2] = 'circle_11';
     }
     state.basemap = key;
     nativeMaps.activate(native);
@@ -234,7 +217,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=3', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=4', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -294,11 +277,11 @@ function bindControls() {
   $('hour-start').onchange = () => { stopPlayback(); if (+$('hour-start').value >= +$('hour-end').value) $('hour-end').value = String(+$('hour-start').value + 1); rememberSettings(); refresh(); };
   $('hour-end').onchange = () => { stopPlayback(); if (+$('hour-end').value <= +$('hour-start').value) $('hour-start').value = String(+$('hour-end').value - 1); rememberSettings(); refresh(); };
   $('accuracy').onchange = () => { rememberSettings(); refresh(); };
-  $('metric').onchange = event => { state.metric = event.target.value; rememberSettings(); paint(); refresh(); };
-  document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint(); refresh(); }; });
-  document.querySelectorAll('[data-palette]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.palette === state.palette)); button.onclick = () => { state.palette = button.dataset.palette; document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint(); }; });
+  $('metric').onchange = event => { state.metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };
+  document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
+  document.querySelectorAll('[data-palette]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.palette === state.palette)); button.onclick = () => { state.palette = button.dataset.palette; document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('palette'); }; });
   for (const id of ['radius', 'intensity', 'opacity']) {
-    $(id).oninput = event => { state[id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
+    $(id).oninput = event => { state[id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(id); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
     $(id).onchange = rememberSettings;
   }
   $('import').onclick = $('empty-import').onclick = () => $('history-file').click();

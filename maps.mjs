@@ -205,3 +205,34 @@ export const PALETTES = {
   ocean: {name: 'Ocean', colors: ['#182a74', '#1761ab', '#1aa6b2', '#47d7bb', '#a3f1b5', '#f0ffce']},
   spectral: {name: 'Spectrum', colors: ['#4155b4', '#21a6cc', '#75d2a5', '#f6e683', '#f89b54', '#d94448']},
 };
+
+function colourExpression(palette, input, transparent = false) {
+  const colors = PALETTES[palette].colors;
+  const stops = transparent ? [0, 'rgba(0,0,0,0)', .08, colors[0]] : [0, colors[0]];
+  for (let i = 1; i < colors.length; i++) stops.push(i / (colors.length - 1), colors[i]);
+  return ['interpolate', ['linear'], input, ...stops];
+}
+
+// Apply only properties affected by a control. A newly loaded style needs all.
+export function paintHistory(map, state, changed) {
+  if (!map?.getLayer('history-heat')) return;
+  const all = changed === undefined, colour = all || changed === 'palette', strength = all || changed === 'intensity';
+  const opacity = all || changed === 'opacity', radius = all || changed === 'radius';
+  if (all || changed === 'mode') for (const [id, mode] of [['history-heat', 'heat'], ['history-hex', 'hex'], ['history-dots', 'points'], ['history-route', 'route']]) map.setLayoutProperty(id, 'visibility', state.mode === mode ? 'visible' : 'none');
+  if (colour) {
+    map.setPaintProperty('history-heat', 'heatmap-color', colourExpression(state.palette, ['heatmap-density'], true));
+    map.setPaintProperty('history-dots', 'circle-color', PALETTES[state.palette].colors[4]);
+    map.setPaintProperty('history-route', 'line-color', PALETTES[state.palette].colors[3]);
+  }
+  if (colour || strength) map.setPaintProperty('history-hex', 'fill-color', colourExpression(state.palette, ['min', 1, ['*', ['get', 'weight'], state.intensity]]));
+  if (strength) {
+    map.setPaintProperty('history-heat', 'heatmap-intensity', state.intensity);
+    map.setPaintProperty('history-route', 'line-width', state.intensity * 1.5);
+  }
+  if (strength || opacity) map.setPaintProperty('history-dots', 'circle-opacity', Math.min(1, state.opacity * state.intensity));
+  if (opacity) for (const [id, property] of [['history-heat', 'heatmap-opacity'], ['history-hex', 'fill-opacity'], ['history-route', 'line-opacity']]) map.setPaintProperty(id, property, state.opacity);
+  if (radius) {
+    map.setPaintProperty('history-heat', 'heatmap-radius', ['interpolate', ['linear'], ['zoom'], 0, state.radius * .7, 14, state.radius, 20, state.radius * 1.3]);
+    map.setPaintProperty('history-dots', 'circle-radius', state.radius / 8);
+  }
+}

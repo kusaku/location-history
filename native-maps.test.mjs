@@ -70,6 +70,7 @@ test('SDK loading retries failures, shares one script per provider, and never in
   assert.equal(await first, google.maps);
   const yandex = loadNativeSDK('yandex', 'test-key', document, window);
   assert.equal(new URL(scripts[2].src).hostname, 'api-maps.yandex.ru');
+  assert.equal(new URL(scripts[2].src).searchParams.get('load'), 'Map,projection.sphericalMercator');
   window.__locationHistoryYandexReady(); assert.equal(await yandex, ymaps);
 });
 

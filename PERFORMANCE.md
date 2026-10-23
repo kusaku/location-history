@@ -1,5 +1,35 @@
 # Performance verification
 
+## Final optimization pass, 2026-10-23
+
+Compared against `a0be2e5` using Node 26.11.1 and the same seven-case benchmark described below. The three local historical files contain 3,306,412 valid observations; all files remained local. All seven sample cases and all seven large-file cases retained identical statistics, feature counts, and active-geometry hashes. A separate seeded comparison matched complete results for 180 combinations of visualization, metric, viewport, and filters, including negative timestamps and wrapped longitudes.
+
+| Repeated query, large dataset | Before | After | Speedup |
+| --- | ---: | ---: | ---: |
+| World heat | 524.53 ms | 225.33 ms | 2.3× |
+| Europe heat pan | 378.70 ms | 223.05 ms | 1.7× |
+| City heat pan | 324.41 ms | 181.40 ms | 1.8× |
+| Day filter | 0.22 ms | 0.21 ms | effectively unchanged |
+| Hour/accuracy hexagons | 226.17 ms | 159.49 ms | 1.4× |
+| Points | 74.41 ms | 63.78 ms | 1.2× |
+| Journeys | 102.50 ms | 55.90 ms | 1.8× |
+
+The first world heat query decreased from 1,220 to 916 ms. Import/sort was comparable (15.94 vs 15.51 s), with index creation at 136 vs 124 ms. Peak RSS across the sequential run decreased from 1,604 to 1,179 MiB, about 26%; this includes all live geometry and garbage collection and is not a guaranteed browser memory reduction. These are worker-computation measurements, not browser frame-rate or network timings.
+
+Changes:
+
+- Numeric column/row bin lookup avoids constructing millions of string keys; insertion order preserves exact geometry output.
+- Chronological UTC-day counters replace per-bin and per-selection sets. Projection indexing avoids a temporary coordinate array per observation. Full-day filters skip hour extraction, and broken track intervals skip unused distance calculations.
+- Journey viewport queries count visible records without allocating or sorting a visible-index array.
+- Slider changes issue only their affected map-style setters: opacity/intensity use four instead of sixteen, and radius uses two. Mode switching and fresh styles retain correct state; native tests compare incremental and full paint results.
+- Yandex SDK loading requests only directly used modules. Google stays on quarterly releases; MapLibre stays pinned to 6.15.0. No dependencies or build tooling were added.
+- The variable-font request reduced the uncompressed Google Fonts stylesheet from 11,387 to 2,206 bytes for the tested Chromium user agent (26 to five font-face declarations, the same five unique font files). This is a CSS reduction, not a reduction in font downloads.
+- Corrected OpenFreeMap Dark's missing `circle-11` sprite reference to the published `circle_11` icon, retaining town/city markers, and removed an unused CSS rule.
+
+All **66 native tests** pass. Live browser checks for this pass are recorded after deployment.
+
+## Earlier optimization pass
+
 Measured locally on 2026-10-23 with Node 26.11.1, using baseline `4d0208644ecfaa964a8e519382be89693055942f` and the optimized code. No tools or dependencies were installed.
 
 ## Method

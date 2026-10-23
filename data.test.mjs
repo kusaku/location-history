@@ -76,6 +76,21 @@ test('distinct-day density counts a day once per spatial cell', () => {
   const result = queryHistory(p, {metric: 'days', mode: 'hex'});
   assert.equal(result.density.features.length, 1); assert.equal(result.density.features[0].properties.value, 2); assert.equal(result.days, 2);
 });
+
+test('chronological day counts remain exact in indexed bins across the Unix epoch and missing days', () => {
+  const local = [-1, 0, 2].flatMap(day => [point(day * DAY + 7200000), point(day * DAY + 7260000)]);
+  const remote = Array.from({length: 30}, (_, i) => point(i * 60000, -120, 35));
+  const query = createHistoryQuery(preparePoints([...local, ...remote]).points);
+  for (const mode of ['heat', 'hex']) for (const metric of ['records', 'days', 'time']) {
+    const result = query({mode, metric, zoom: 5, viewport: [13, 52, 14, 53]});
+    assert.equal(result.days, 3); assert.equal(result.visible, 6);
+    assert.equal(result.density.features.length, 1);
+    assert.equal(result.density.features[0].properties.days, 3);
+    assert.equal(result.density.features[0].properties.count, 6);
+  }
+  const routes = query({mode: 'route', viewport: [13, 52, 14, 53]});
+  assert.equal(routes.visible, 6); assert.equal(routes.days, 3);
+});
 test('stationary intervals exclude travel and long gaps', () => {
   const p = preparePoints([point(0), point(600_000), point(3_600_000), point(3_900_000, 14.4)]).points;
   assert.equal(p[0].duration, 600_000); assert.equal(p[1].duration, 0); assert.equal(p[2].duration, 0);

@@ -1,12 +1,14 @@
 import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels} from './maps.mjs?v=7';
 import {createNativeMaps} from './native-maps.mjs';
 import {DAY, shiftPeriod} from './data.mjs?v=3';
+import {loadSettings, saveSettings, dateSelection} from './settings.mjs';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
 const formatDate = t => new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}).format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
-const state = {mode: 'heat', metric: 'records', palette: 'ember', basemap: 'dark', radius: 24, intensity: 1, opacity: .85, report: null, result: null, importing: false, start: 0, end: 0, period: 'all'};
+let preferences = loadSettings(MAP_ORDER);
+const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Individual observations. Click a point to see its timestamp.', route: 'Consecutive observations, with breaks for gaps and excluded data.'};
 let map, mapLibrary, nativeMaps, attributionControl, worker, queryTimer, querying = false, queryDirty = false, exporting = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
@@ -63,6 +65,16 @@ function requestQuery() {
   worker.postMessage({type: 'query', id: ++queryId, options: currentOptions(), known: state.result?.versions});
 }
 function refresh() { clearTimeout(queryTimer); if (querying) queryDirty = true; queryTimer = setTimeout(requestQuery, 90); }
+function rememberSettings() {
+  preferences = saveSettings({
+    ...state,
+    // An automatic provider fallback must not replace the user's choice.
+    basemap: preferences.basemap,
+    accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value),
+    period: state.report ? state.period : preferences.period,
+    dateRange: state.report ? [state.start, state.end] : preferences.dateRange,
+  }, MAP_ORDER);
+}
 function paintSources(changes = state.result) {
   if (!map?.getSource('history-density')) return;
   for (const [source, key] of [['density', 'density'], ['dots', 'dots'], ['route', 'routes']]) {
@@ -116,7 +128,7 @@ function installLayers() {
   map.addLayer({id: 'history-route', type: 'line', source: 'history-route', layout: {'line-join': 'round', 'line-cap': 'round'}}, before);
   paintSources(); paint(); refresh();
 }
-async function selectBasemap(key) {
+async function selectBasemap(key, remember = false) {
   const request = ++styleRequest, provider = MAPS[key];
   document.querySelectorAll('[data-map]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.map === key)));
   $('map-error').hidden = true;
@@ -143,6 +155,7 @@ async function selectBasemap(key) {
     $('map-provider').textContent = provider.detail;
     map.setStyle(style, {diff: false});
     setAttribution(provider.attribution ? style.metadata?.providerAttribution ?? '' : '');
+    if (remember) { preferences.basemap = key; rememberSettings(); }
   } catch (error) {
     if (request !== styleRequest) return;
     $('map-error').textContent = `${provider.name} could not load. Try another base map. (${error.message})`;
@@ -237,8 +250,7 @@ function createWorker() {
       $('dataset-tag').textContent = state.nextSample ? 'Sample data' : 'Imported history';
       $('import-detail').textContent = `${number.format(data.report.total)} locations · ${number.format(data.report.duplicates)} duplicates removed${data.report.skipped ? ` · ${number.format(data.report.skipped)} invalid records skipped` : ''}`;
       for (const id of ['date-start', 'date-end']) { $(id).min = date(data.report.min); $(id).max = date(data.report.max); }
-      state.start = Math.floor(data.report.min / DAY) * DAY; state.end = Math.floor(data.report.max / DAY) * DAY + DAY - 1;
-      state.period = 'all';
+      Object.assign(state, dateSelection(preferences, data.report.min, data.report.max));
       syncDates(); querying = false; queryDirty = false; state.fitNext = true; requestQuery();
       status(`Loaded ${number.format(data.report.total)} locations.`);
     } else if (data.type === 'result') {
@@ -261,21 +273,24 @@ function bindControls() {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'basemap-button'; button.dataset.map = key;
     button.setAttribute('aria-pressed', String(key === state.basemap)); button.setAttribute('aria-label', `${MAPS[key].name} base map`);
     const swatch = document.createElement('i'); swatch.className = `map-swatch swatch-${MAPS[key].swatch ?? key}`; swatch.setAttribute('aria-hidden', 'true');
-    const label = document.createElement('span'); label.textContent = MAPS[key].name; button.append(swatch, label); button.onclick = () => selectBasemap(key); $('basemaps').append(button);
+    const label = document.createElement('span'); label.textContent = MAPS[key].name; button.append(swatch, label); button.onclick = () => selectBasemap(key, true); $('basemaps').append(button);
   }
   for (let i = 0; i < 64; i++) $('histogram').append(document.createElement('span'));
   for (let i = 0; i <= 24; i++) {
     if (i < 24) $('hour-start').add(new Option(`${String(i).padStart(2, '0')}:00`, i));
     if (i > 0) $('hour-end').add(new Option(`${String(i).padStart(2, '0')}:00`, i));
   }
-  $('hour-end').value = '24';
-  $('hour-start').onchange = () => { stopPlayback(); if (+$('hour-start').value >= +$('hour-end').value) $('hour-end').value = String(+$('hour-start').value + 1); refresh(); };
-  $('hour-end').onchange = () => { stopPlayback(); if (+$('hour-end').value <= +$('hour-start').value) $('hour-start').value = String(+$('hour-end').value - 1); refresh(); };
-  $('accuracy').onchange = refresh;
-  $('metric').onchange = event => { state.metric = event.target.value; paint(); refresh(); };
-  document.querySelectorAll('[data-mode]').forEach(button => { button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); paint(); refresh(); }; });
-  document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.palette = button.dataset.palette; document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); paint(); }; });
-  for (const id of ['radius', 'intensity', 'opacity']) $(id).oninput = event => { state[id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
+  for (const [id, value] of Object.entries({metric: state.metric, radius: state.radius, intensity: state.intensity, opacity: state.opacity * 100, 'hour-start': preferences.hourStart, 'hour-end': preferences.hourEnd, accuracy: preferences.accuracy})) $(id).value = value;
+  $('hour-start').onchange = () => { stopPlayback(); if (+$('hour-start').value >= +$('hour-end').value) $('hour-end').value = String(+$('hour-start').value + 1); rememberSettings(); refresh(); };
+  $('hour-end').onchange = () => { stopPlayback(); if (+$('hour-end').value <= +$('hour-start').value) $('hour-start').value = String(+$('hour-end').value - 1); rememberSettings(); refresh(); };
+  $('accuracy').onchange = () => { rememberSettings(); refresh(); };
+  $('metric').onchange = event => { state.metric = event.target.value; rememberSettings(); paint(); refresh(); };
+  document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint(); refresh(); }; });
+  document.querySelectorAll('[data-palette]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.palette === state.palette)); button.onclick = () => { state.palette = button.dataset.palette; document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint(); }; });
+  for (const id of ['radius', 'intensity', 'opacity']) {
+    $(id).oninput = event => { state[id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
+    $(id).onchange = rememberSettings;
+  }
   $('import').onclick = $('empty-import').onclick = () => $('history-file').click();
   $('history-file').onchange = event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); };
   $('sample').onclick = $('empty-sample').onclick = loadSample;
@@ -285,7 +300,7 @@ function bindControls() {
     stopPlayback();
     const start = Date.parse($('date-start').value), end = Date.parse($('date-end').value) + DAY - 1;
     if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || date(start) < date(state.report.min) || date(end) > date(state.report.max)) { status('Choose an ordered date range within your imported history.', true); syncDates(); return; }
-    setDates(start, end);
+    setDates(start, end); rememberSettings();
   };
   for (const id of ['range-start', 'range-end']) $(id).oninput = () => {
     stopPlayback(); const min = Math.floor(state.report.min / DAY) * DAY, span = Math.floor(state.report.max / DAY) * DAY - min;
@@ -294,16 +309,17 @@ function bindControls() {
     if (start > end) { if (id === 'range-start') end = start + DAY - 1; else start = end - DAY + 1; }
     setDates(start, end);
   };
+  for (const id of ['range-start', 'range-end']) $(id).onchange = rememberSettings;
   document.querySelectorAll('[data-period]').forEach(button => { button.onclick = () => {
     stopPlayback(); const end = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
     const start = button.dataset.period === 'all' ? Math.floor(state.report.min / DAY) * DAY : Math.max(Math.floor(state.report.min / DAY) * DAY, end - Number(button.dataset.period) * DAY + 1);
-    setDates(start, end, button.dataset.period);
+    setDates(start, end, button.dataset.period); rememberSettings();
   }; });
   for (const [id, direction] of [['period-back', -1], ['period-forward', 1]]) $(id).onclick = () => {
     stopPlayback();
     const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
     const next = shiftPeriod(state.start, state.end, min, max, direction);
-    setDates(next.start, next.end, state.period);
+    setDates(next.start, next.end, state.period); rememberSettings();
   };
   $('play').onclick = () => {
     if (playback) { stopPlayback(); return; }
@@ -349,7 +365,7 @@ async function init() {
       node.textContent = state.mode === 'hex' ? `${number.format(p.count)} records · ${number.format(p.days)} UTC days · ${number.format(p.minutes)} stationary minutes` : `${new Date(p.time).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}${p.accuracy == null ? '' : ` · ±${p.accuracy} m`}`;
       popup?.remove(); popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat(event.lngLat).setDOMContent(node).addTo(map);
     });
-    createWorker(); setBusy(false); await selectBasemap('dark');
+    createWorker(); setBusy(false); await selectBasemap(state.basemap);
     // The existing public sample is explicit; personal imports are never persisted.
   } catch (error) { status(`The map could not start. Check WebGL support and your connection, then reload. ${error.message}`, true, true); }
 }

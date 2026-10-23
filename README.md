@@ -21,6 +21,8 @@ Open http://localhost:8080/location-history/. Every app URL is relative; the can
 
 ## Interface
 
+Google Maps is selected on the first visit. This browser remembers the chosen base map, visualization, density metric, palette, sliders, and date/hour/accuracy filters across reloads. Date selections apply when history is reopened and stay within its bounds. Imported locations, filenames, and the map camera are never saved. Preferences use the project-specific `location-history.settings.v1` local-storage key; invalid or unavailable storage falls back safely to defaults. Slider preferences are written only when a change is committed.
+
 - **Heatmap:** GPU-rendered density with a screen-space spread, intensity, opacity, and three colour palettes.
 - **Hexagons:** zoom-adaptive cells with record, recorded-day, and stationary-minute details on click.
 - **Points:** individual observations with timestamps and accuracy; at most 20,000 representative points in view. Counts and exports remain exact.

@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="styles.css?v=3">
+    <link rel="stylesheet" href="styles.css?v=4">
     <script type="module" src="app.mjs?v=4">
     </script>
   </head>
@@ -503,7 +503,7 @@
         </div>
       </main>
     </div>
-    <dialog id="guide">
+    <dialog id="guide" aria-labelledby="guide-title">
       <div class="dialog-heading">
         <p class="eyebrow">
           Location history
@@ -512,11 +512,55 @@
           ✕
         </button>
       </div>
-      <h2>
+      <h2 id="guide-title">
         User guide
       </h2>
       <p>
         Open one or more Google Takeout Records JSON files, monthly semantic history files, or an on-device Timeline JSON export. Gzip, our original delta-compressed sample, and timestamped GeoJSON points work too. A new import replaces the current history; files selected together are merged and exact duplicates removed.
+      </p>
+      <h3>
+        Export your history as JSON
+      </h3>
+      <p>
+        Current Timeline data is stored on individual devices. Export from the phone that holds the history you want to view. Menu names can vary by app version.
+      </p>
+      <details class="export-guide" name="export-method">
+        <summary>Android · system settings</summary>
+        <ol>
+          <li>Open your phone’s <b>Settings</b>, then <b>Location → Location services → Timeline</b>.</li>
+          <li>Tap <b>Export Timeline data</b>, then <b>Continue</b>.</li>
+          <li>Choose a folder and tap <b>Save</b>. Wait for the export-complete notification.</li>
+        </ol>
+        <p>
+          This route starts in the phone’s Settings app.
+          <a href="https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DAndroid&amp;hl=en" target="_blank" rel="noopener noreferrer">Google’s Android export instructions ↗</a>
+        </p>
+      </details>
+      <details class="export-guide" name="export-method">
+        <summary>iPhone / iPad · Google Maps settings</summary>
+        <ol>
+          <li>Open <b>Google Maps</b>, tap your profile picture, then <b>Settings → Location &amp; Privacy</b>. Some versions call this <b>Personal content</b>.</li>
+          <li>Tap <b>Export Timeline data</b>, then choose <b>Save to Files</b> in the share sheet.</li>
+          <li>Choose a folder and tap <b>Save</b>. The exported file is named <b>location-history.json</b>.</li>
+        </ol>
+        <p>
+          <a href="https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DiOS&amp;hl=en" target="_blank" rel="noopener noreferrer">Google’s iPhone / iPad export instructions ↗</a>
+        </p>
+      </details>
+      <details class="export-guide" name="export-method">
+        <summary>Legacy · Google Takeout (deprecated)</summary>
+        <p>
+          This is the old route for cloud-stored Location History. For Timeline that has moved to your phone, use the device export above. Previously downloaded Takeout archives still work here.
+        </p>
+        <ol>
+          <li>Open <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout ↗</a>, sign in to the relevant Google account, and choose <b>Deselect all</b>.</li>
+          <li>If available, select <b>Location History (Timeline)</b> and choose <b>JSON</b> as its format.</li>
+          <li>Choose <b>Next step → Export once</b>, select a <b>ZIP</b> archive, then <b>Create export</b>. Download the archive when Google says it is ready.</li>
+          <li>Extract the ZIP. In its Location History folder, find <b>Records.json</b>, <b>Location History.json</b>, or monthly JSON files under <b>Semantic Location History</b>.</li>
+        </ol>
+      </details>
+      <p>
+        Transfer the exported JSON to the device where you use this site, then choose <b>Open location history</b>. Extract ZIP archives first. Select all the JSON files you want to merge together in the same import.
       </p>
       <h3>
         Visualization modes

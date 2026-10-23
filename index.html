@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="styles.css?v=3">
-    <script type="module" src="app.mjs?v=3">
+    <script type="module" src="app.mjs?v=4">
     </script>
   </head>
   <body>
@@ -551,7 +551,7 @@
         performance
       </h3>
       <p>
-        Your imported history is kept in memory, never uploaded or saved. Clear or reload to remove it. The selected map provider receives normal map requests for the area you view, jsDelivr serves MapLibre, and Google Fonts serves the typefaces. No analytics or session recording runs here. Imports are limited to two million points and 512 MB per uncompressed file.
+        Your imported history is kept in memory, never uploaded or saved. Clear or reload to remove it. The selected map provider receives normal map requests for the area you view, jsDelivr serves MapLibre, and Google Fonts serves the typefaces. No analytics or session recording runs here. Large history files are read in chunks, with a limit of five million combined observations. Available device memory also affects import capacity.
       </p>
       <h3>
         Base maps

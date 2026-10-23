@@ -1,5 +1,5 @@
 import {MAPS, PALETTES, createYandexTileLoader} from './maps.mjs?v=2';
-import {DAY, shiftPeriod} from './data.mjs';
+import {DAY, shiftPeriod} from './data.mjs?v=2';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -215,7 +215,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=2', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

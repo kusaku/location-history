@@ -60,3 +60,16 @@ test('worker detects gzip by magic bytes and recovers from malformed JSON and gz
     }
   } finally { await worker.terminate(); }
 });
+
+test('a failure after streamed batches preserves the previously imported dataset', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    await request('import', {files: [json({locations: [record(0)]})]});
+    const records = Array.from({length: 2001}, (_, i) => record(i + 1000));
+    const truncated = JSON.stringify({locations: records}).slice(0, -2);
+    const failed = await request('import', {files: [new Blob([truncated])]});
+    assert.equal(failed.type, 'error');
+    assert.equal((await request('query')).result.count, 1);
+    assert.equal((await request('import', {files: [json({locations: records})]})).report.total, 2001);
+  } finally { await worker.terminate(); }
+});

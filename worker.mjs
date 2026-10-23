@@ -1,27 +1,6 @@
-import {parseHistory, preparePoints, queryHistory, MAX_POINTS} from './data.mjs';
+import {preparePoints, queryHistory, MAX_POINTS} from './data.mjs?v=2';
+import {readHistory} from './import.mjs';
 let points = [], report = null;
-const MAX_BYTES = 512 * 1024 * 1024;
-async function readFile(file) {
-  if (file.size > MAX_BYTES) throw new Error('This file exceeds the 512 MB import limit. Split it into smaller exports.');
-  const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
-  let stream = file.stream();
-  if (head[0] === 0x1f && head[1] === 0x8b) {
-    if (typeof DecompressionStream === 'undefined') throw new Error('Gzip is unavailable in this browser. Unzip the JSON first.');
-    stream = stream.pipeThrough(new DecompressionStream('gzip'));
-  }
-  const reader = stream.getReader(), decoder = new TextDecoder();
-  let text = '', bytes = 0;
-  try {
-    while (true) {
-      const {value, done} = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > MAX_BYTES) throw new Error('The uncompressed file exceeds the 512 MB limit. Split it into smaller exports.');
-      text += decoder.decode(value, {stream: true});
-    }
-    return text + decoder.decode();
-  } finally { await reader.cancel().catch(() => {}); }
-}
 self.onmessage = async ({data}) => {
   const {id, type} = data;
   try {
@@ -31,11 +10,18 @@ self.onmessage = async ({data}) => {
       for (let i = 0; i < data.files.length; i++) {
         const file = data.files[i];
         self.postMessage({type: 'progress', id, message: `Reading ${file.name} (${i + 1}/${data.files.length})…`});
-        const parsed = parseHistory(JSON.parse((await readFile(file)).replace(/^\uFEFF/, '')));
-        if (staged.length + parsed.points.length > MAX_POINTS) throw new Error('The combined import exceeds two million points. Import a smaller date range.');
-        for (const p of parsed.points) staged.push(p);
+        let lastProgress = 0;
+        const parsed = await readHistory(file, batch => {
+          if (staged.length + batch.length > MAX_POINTS) throw new Error('The combined import exceeds five million points. Import a smaller date range.');
+          for (const p of batch) staged.push(p);
+        }, ({bytes, size}) => {
+          if (Date.now() - lastProgress < 200) return;
+          lastProgress = Date.now();
+          self.postMessage({type: 'progress', id, message: `Reading ${file.name} (${i + 1}/${data.files.length}) · ${Math.min(100, Math.round(bytes / Math.max(1, size) * 100))}% · ${staged.length.toLocaleString('en')} locations…`});
+        });
         skipped += parsed.skipped;
       }
+      self.postMessage({type: 'progress', id, message: `Sorting and merging ${staged.length.toLocaleString('en')} locations…`});
       const prepared = preparePoints(staged);
       points = prepared.points;
       report = {total: points.length, min: points[0].t, max: points.at(-1).t, skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name)};

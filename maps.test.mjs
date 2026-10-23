@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, MAPS, MAP_ORDER} from './maps.mjs';
+import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, MAPS, MAP_GROUPS, MAP_ORDER} from './maps.mjs';
 
 const bounds = (west = 13, east = 14, south = 52, north = 53) => ({getWest: () => west, getEast: () => east, getSouth: () => south, getNorth: () => north});
 const map = {getBounds: () => bounds(), getZoom: () => 10.5};
@@ -154,9 +154,12 @@ test('Azure relief accepts empty contributor attribution and uses the 512px tile
   assert.equal(style.sources.basemap.tileSize, 512);
 });
 
-test('map choices preserve provider order and contain no unavailable or ambiguous satellite option', () => {
-  assert.deepEqual(MAP_ORDER.slice(0, 4), ['google', 'yandex', 'osm', 'satellite']);
+test('map choices group views with consistent provider order and no unavailable or ambiguous option', () => {
+  assert.deepEqual(MAP_GROUPS.map(group => group.id), ['roads', 'terrain', 'satellite', 'hybrid', 'dark']);
+  assert.deepEqual(MAP_ORDER.slice(0, 4), ['google', 'yandex', 'osm', 'azure']);
+  assert.deepEqual(MAP_GROUPS.find(group => group.id === 'satellite').maps, ['google-satellite', 'yandex-satellite', 'azure-satellite', 'satellite']);
+  assert.deepEqual(MAP_GROUPS.find(group => group.id === 'hybrid').maps, ['google-hybrid', 'yandex-hybrid', 'azure-hybrid']);
   assert.equal(MAP_ORDER.length, Object.keys(MAPS).length); assert.equal(new Set(MAP_ORDER).size, MAP_ORDER.length);
   assert.equal(MAPS.satellite.name, 'Esri satellite');
-  for (const key of MAP_ORDER) assert.ok(MAPS[key]);
+  for (const key of MAP_ORDER) assert.ok(MAPS[key].provider);
 });

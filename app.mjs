@@ -1,4 +1,4 @@
-import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels} from './maps.mjs?v=7';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels} from './maps.mjs?v=8';
 import {createNativeMaps} from './native-maps.mjs';
 import {DAY, shiftPeriod} from './data.mjs?v=3';
 import {loadSettings, saveSettings, dateSelection} from './settings.mjs';
@@ -269,11 +269,21 @@ function createWorker() {
   worker.onerror = () => { setBusy(false); exporting = false; $('export').disabled = true; querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
 }
 function bindControls() {
-  for (const key of MAP_ORDER) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'basemap-button'; button.dataset.map = key;
-    button.setAttribute('aria-pressed', String(key === state.basemap)); button.setAttribute('aria-label', `${MAPS[key].name} base map`);
-    const swatch = document.createElement('i'); swatch.className = `map-swatch swatch-${MAPS[key].swatch ?? key}`; swatch.setAttribute('aria-hidden', 'true');
-    const label = document.createElement('span'); label.textContent = MAPS[key].name; button.append(swatch, label); button.onclick = () => selectBasemap(key, true); $('basemaps').append(button);
+  for (const group of MAP_GROUPS) {
+    const section = document.createElement('div'); section.className = 'basemap-group'; section.setAttribute('role', 'group'); section.setAttribute('aria-labelledby', `maps-${group.id}`);
+    const heading = document.createElement('h3'); heading.id = `maps-${group.id}`; heading.textContent = group.name;
+    const grid = document.createElement('div'); grid.className = 'basemap-grid'; section.append(heading, grid); $('basemaps').append(section);
+    for (const key of group.maps) {
+      const provider = MAPS[key], button = document.createElement('button'); button.type = 'button'; button.className = 'basemap-button'; button.dataset.map = key;
+      const name = provider.name.includes(provider.provider) ? provider.name : `${provider.provider} ${provider.name}`;
+      button.setAttribute('aria-pressed', String(key === state.basemap)); button.setAttribute('aria-label', `${name} · ${group.name} base map`);
+      const swatch = document.createElement('span'); swatch.className = `map-swatch provider-${provider.provider.toLowerCase()} style-${key}`; swatch.setAttribute('aria-hidden', 'true');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 160 80'); svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', `./map-previews.svg?v=1#${group.id}`); svg.append(use);
+      const stamp = document.createElement('small'); stamp.textContent = provider.provider; swatch.append(svg, stamp);
+      const label = document.createElement('span'); label.className = 'basemap-label'; label.textContent = provider.name;
+      button.append(swatch, label); button.onclick = () => selectBasemap(key, true); grid.append(button);
+    }
   }
   for (let i = 0; i < 64; i++) $('histogram').append(document.createElement('span'));
   for (let i = 0; i <= 24; i++) {

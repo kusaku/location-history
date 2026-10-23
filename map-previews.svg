@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <!-- Illustrative previews share geography, with colours inherited from each card. -->
+  <defs>
+    <path id="river" d="M-8-8H25C20 9 24 22 37 29S59 46 53 61 39 78 44 88H17C10 71 28 60 29 50S18 42 9 33-4 14-8-8Z"/>
+    <path id="park" d="M108-5H165V32L142 38 126 31 120 15 100 11Z"/>
+    <path id="blocks" d="M45 1H58V11H45ZM66 2H81V12H66ZM89 3H102V12H89ZM57 21H73V31H57ZM81 21H98V31H81ZM105 24H118V36H105ZM70 42H85V53H70ZM94 43H110V55H94ZM120 47H137V58H120ZM143 43H159V56H143ZM64 65H80V79H64ZM90 65H105V78H90ZM116 67H134V81H116ZM144 65H160V80H144Z"/>
+    <path id="minor-roads" d="M43-8 65 88M78-8 91 88M110-8 117 88M137-8 143 88M25 16H169M38 37 164 41M48 60 165 62"/>
+    <path id="highway" d="M-10 80C30 70 57 49 84 39S134 25 171-5"/>
+    <g id="map-labels" fill="var(--map-label,#60676a)" font-family="sans-serif" font-size="6" font-weight="600">
+      <text x="93" y="58">CENTRAL</text>
+      <text x="126" y="14" font-size="5">PARK</text>
+    </g>
+    <pattern id="roofs" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-8)">
+      <rect width="12" height="12" fill="var(--image-city,#7c7e70)"/>
+      <path d="M1 1H5V5H1ZM7 1H11V5H7ZM1 7H5V11H1ZM7 7H11V11H7Z" fill="var(--image-roof,#b3ad98)"/>
+    </pattern>
+    <g id="imagery">
+      <rect width="160" height="80" fill="var(--image-land,#43533c)"/>
+      <path d="M30-4 75-4 71 17 37 21ZM92-3 116-3 112 24 86 22ZM6 38 24 47 16 70-3 64ZM48 62 67 67 64 84 35 84Z" fill="var(--field-a,#7b7b4b)"/>
+      <path d="M38 23 71 19 76 39 48 47ZM75-4 91-4 85 21 73 17ZM-6 68 16 73 12 85H-6ZM112-4H162V19L132 27 116 17Z" fill="var(--field-b,#5c7046)"/>
+      <path d="M76 20 86 25 101 30 96 43 79 41ZM30 62 44 57 45 66 35 82 23 82ZM130 21 165 22V37L145 34Z" fill="var(--field-c,#9a9270)"/>
+      <path d="M85 34 118 28 164 42V85H66L62 63 77 49Z" fill="url(#roofs)"/>
+      <g fill="var(--image-land,#43533c)" opacity=".8">
+        <circle cx="114" cy="8" r="12"/><circle cx="129" cy="7" r="10"/><circle cx="146" cy="9" r="11"/>
+        <circle cx="143" cy="26" r="6"/><circle cx="18" cy="66" r="5"/><circle cx="58" cy="46" r="7"/>
+      </g>
+      <use href="#river" fill="var(--image-water,#224858)" stroke="var(--image-shore,#82917b)" stroke-width="1.3"/>
+      <use href="#minor-roads" fill="none" stroke="var(--image-road,#c2bda3)" stroke-width="1.2" opacity=".65"/>
+      <use href="#highway" fill="none" stroke="var(--image-road,#c2bda3)" stroke-width="2.4" opacity=".8"/>
+    </g>
+  </defs>
+  <symbol id="roads" viewBox="0 0 160 80">
+    <rect width="160" height="80" fill="var(--map-land,#e9ebe5)"/>
+    <use href="#blocks" fill="var(--map-block,#d9ddd7)"/>
+    <use href="#park" fill="var(--map-park,#b9d7b2)"/>
+    <use href="#river" fill="var(--map-water,#b1d8e8)"/>
+    <use href="#minor-roads" fill="none" stroke="var(--map-road,#fff)" stroke-width="4"/>
+    <use href="#highway" fill="none" stroke="var(--map-casing,#e2bf71)" stroke-width="8"/>
+    <use href="#highway" fill="none" stroke="var(--map-highway,#ffe9a6)" stroke-width="5"/>
+    <use href="#map-labels"/>
+  </symbol>
+  <symbol id="terrain" viewBox="0 0 160 80">
+    <rect width="160" height="80" fill="var(--terrain-low,#c5d5ad)"/>
+    <path d="M37-5C47 14 74 16 82 36S72 64 89 87H165V-5Z" fill="var(--terrain-mid,#a8bf94)"/>
+    <path d="M87-6C78 12 95 25 103 32S113 61 142 65 165 45 165 40V-6Z" fill="var(--terrain-high,#c7c2a0)"/>
+    <path d="M117-6C96 10 114 29 128 32S139 57 165 48V-6Z" fill="var(--terrain-peak,#e6dfc1)"/>
+    <g fill="none" stroke="var(--terrain-contour,#7d916d)" stroke-width=".9" opacity=".6">
+      <path d="M34-5C44 18 69 15 76 37S65 69 84 87M45-5C53 13 79 17 87 35S82 64 99 84M68-5C62 14 91 20 96 35S98 65 116 81M88-5C77 14 104 25 108 36S112 65 142 72 170 57 170 51M105-5C87 13 116 27 119 39S140 67 167 53M127-5C106 6 119 20 133 27S145 50 167 38M149-5C127 5 132 17 147 19S155 32 168 25"/>
+    </g>
+    <use href="#river" fill="var(--map-water,#a8cbdc)"/>
+    <use href="#highway" fill="none" stroke="var(--map-road,#fff5d9)" stroke-width="2.5"/>
+  </symbol>
+  <symbol id="satellite" viewBox="0 0 160 80"><use href="#imagery"/></symbol>
+  <symbol id="hybrid" viewBox="0 0 160 80">
+    <use href="#imagery"/>
+    <use href="#highway" fill="none" stroke="#202723" stroke-width="5"/>
+    <use href="#highway" fill="none" stroke="var(--hybrid-road,#f4da8c)" stroke-width="2.6"/>
+    <g fill="#fff" stroke="#1b2529" stroke-width="2" paint-order="stroke" font-family="sans-serif" font-size="7" font-weight="600">
+      <text x="89" y="58">Central</text><text x="124" y="15" font-size="6">Park</text>
+    </g>
+  </symbol>
+  <symbol id="dark" viewBox="0 0 160 80"><use href="#roads"/></symbol>
+</svg>

@@ -54,6 +54,8 @@ Coordinates and timestamps are validated. Exact duplicates use timestamp **and**
 
 ## Maps and providers
 
+The selector groups views as Roads → Terrain → Satellite → Hybrid → Dark, with a consistent Google/Yandex/OpenStreetMap/Azure/Esri/OpenFreeMap provider order where available. Provider-labelled, local SVG illustrations use a shared geography and distinct cartographic palettes; terrain has contours and hybrid includes roads and labels. The previews do not fetch provider tiles or load native SDKs. Map IDs and saved preferences stay stable when their display order changes.
+
 The built-in choices require no credentials:
 
 | Map | Provider | Endpoint / documentation |

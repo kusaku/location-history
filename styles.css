@@ -458,9 +458,21 @@ select {
   border-radius: 3px;
 }
 
+.basemap-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.basemap-group h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .basemap-grid {
   display: grid;
-  grid-template-columns: repeat(3,1fr);
+  grid-template-columns: repeat(auto-fill,minmax(80px,1fr));
   gap: 8px;
 }
 
@@ -471,94 +483,120 @@ select {
   overflow: hidden;
   text-align: left;
   background: #1c241d;
-  min-height: 60px;
+  min-width: 0;
 }
 
 .basemap-button[aria-pressed=true] {
   border-color: var(--accent);
   color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
-.basemap-button span {
-  display: block;
+.basemap-label {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
   font-size: 9px;
-  padding: 7px 8px;
+  line-height: 1.3;
+  padding: 6px 7px;
 }
 
 .map-swatch {
   display: block;
-  height: 28px;
-  background-color: #303e39;
+  height: 42px;
   position: relative;
   overflow: hidden;
+  background: #303e39;
+  --provider-colour: #98b685;
 }
 
-.map-swatch:before,.map-swatch:after {
-  content: '';
+.map-swatch svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map-swatch small {
   position: absolute;
-  width: 130%;
-  height: 7px;
-  background: #607464;
-  top: 13px;
-  left: -6px;
-  transform: rotate(-27deg);
-  border: 1px solid #7d8f79;
+  left: 4px;
+  bottom: 4px;
+  max-width: calc(100% - 8px);
+  padding: 2px 4px;
+  border-left: 2px solid var(--provider-colour);
+  border-radius: 2px;
+  background: #17201ee6;
+  color: #fff;
+  font-size: 7px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
-.map-swatch:after {
-  transform: rotate(52deg);
-  width: 80%;
-  height: 4px;
-  left: 13px;
-  background: inherit;
+.provider-google {
+  --provider-colour: #79aaff;
+  --map-land: #e9ecdf; --map-block: #dbe0d5; --map-park: #badbab; --map-water: #b3dbf4;
+  --map-road: #fff; --map-highway: #ffe08b; --map-casing: #edc75e;
+  --image-land: #43513a; --field-a: #908155; --field-b: #657347; --field-c: #b3a17b;
+  --image-city: #7c7b70; --image-roof: #c2b8a3; --image-water: #254e60; --image-shore: #83937d;
+  --hybrid-road: #f7d66b;
 }
 
-.swatch-light {
-  background: #e1e0d5;
+.provider-yandex {
+  --provider-colour: #ff8273;
+  --map-land: #f4f3ee; --map-block: #e4e3df; --map-park: #c8e5b6; --map-water: #a8d5f1;
+  --map-road: #fff; --map-highway: #ffdf38; --map-casing: #dec369; --map-label: #71706d;
+  --image-land: #304f3d; --field-a: #59764b; --field-b: #466451; --field-c: #949073;
+  --image-city: #616d6a; --image-roof: #a4aaa1; --image-water: #183c4b; --image-shore: #587663;
+  --hybrid-road: #fff3b3;
 }
 
-.swatch-light:before,.swatch-light:after {
-  border-color: #faf9ee;
-  background: #f5f3e9;
+.provider-openstreetmap {
+  --provider-colour: #a4d58b;
+  --map-land: #eee7dc; --map-block: #ded7d0; --map-park: #b7d7a9; --map-water: #abd4df;
+  --map-road: #fffefb; --map-highway: #f8d7ac; --map-casing: #d59f9f; --map-label: #75695d;
 }
 
-.swatch-streets {
-  background: #bcd1be;
+.provider-azure {
+  --provider-colour: #6cd1f1;
+  --map-land: #edf0f1; --map-block: #d7dde0; --map-park: #cee5cf; --map-water: #92c8e3;
+  --map-road: #fff; --map-highway: #f4bc79; --map-casing: #e5a362; --map-label: #5b6b7b;
+  --terrain-low: #e2decf; --terrain-mid: #bfc8af; --terrain-high: #c4b5a0; --terrain-peak: #eee4cd; --terrain-contour: #958574;
+  --image-land: #2d4847; --field-a: #627c68; --field-b: #3c6057; --field-c: #95a390;
+  --image-city: #596d78; --image-roof: #a5b7be; --image-water: #173d63; --image-shore: #6a8995;
+  --hybrid-road: #ffddb1;
 }
 
-.swatch-streets:before {
-  background: #fff9de;
-  border-color: #e0bb8d;
+.provider-esri {
+  --provider-colour: #eec17b;
+  --image-land: #594c3b; --field-a: #9e8b59; --field-b: #726846; --field-c: #b6a17c;
+  --image-city: #81796c; --image-roof: #c9bda4; --image-water: #31575b; --image-shore: #9a9e83;
 }
 
-.swatch-bright {
-  background: #d5d3ad;
+.provider-openfreemap {
+  --provider-colour: #c0adf3;
+  --map-land: #edf0e2; --map-block: #d9dfcf; --map-park: #b9d9c3; --map-water: #a8d9dd;
+  --map-highway: #fff5c3; --map-casing: #e3bd82;
 }
 
-.swatch-bright:before {
-  background: #fbf2d2;
-  border-color: #f9bf81;
+.style-bright {
+  --map-land: #f3ecd2; --map-block: #e5ddc0; --map-park: #c7d795; --map-water: #99d8e3;
+  --map-highway: #ffdc86; --map-casing: #efa963;
 }
 
-.swatch-satellite {
-  background: radial-gradient(ellipse at 80% 90%,#293d5c 0 25%,transparent 26%),repeating-linear-gradient(35deg,#3a4830 0 5px,#647147 6px 10px,#43432d 11px 14px);
+.style-light {
+  --map-land: #f1f0ed; --map-block: #e5e3e0; --map-park: #dedfd6; --map-water: #cbdce1;
+  --map-highway: #fff; --map-casing: #dad8d0; --map-label: #89918b;
 }
 
-.swatch-satellite:before,.swatch-satellite:after {
-  opacity: .25;
+.style-azure-dark {
+  --map-land: #26313e; --map-block: #303e4d; --map-park: #324644; --map-water: #142a3e;
+  --map-road: #536477; --map-highway: #9fadc4; --map-casing: #1d2837; --map-label: #cad3df;
 }
 
-.swatch-osm {
-  background: #dbdfbd;
+.style-dark {
+  --map-land: #171b20; --map-block: #23272e; --map-park: #26342c; --map-water: #0d1723;
+  --map-road: #40454d; --map-highway: #777d89; --map-casing: #12151b; --map-label: #a9aeb7;
 }
-
-.swatch-osm:before {
-  background: #ffecad;
-  border-color: #e7b0a8;
-}
-
-.swatch-google { background: #d7e9f5; }
-.swatch-google-terrain { background: #b8c8a1; }
 
 .filters summary {
   cursor: pointer;
@@ -1345,6 +1383,9 @@ dialog p {
 }
 
 @media(max-width:700px) {
+  .basemap-section {
+    grid-column: 1/-1;
+  }
   .native-map {
     --native-footer: 56px;
   }

@@ -8,12 +8,12 @@ const raster = (tiles, attribution, maxzoom = 19, tileSize = 256) => ({
   layers: [{id: 'background', type: 'background', paint: {'background-color': '#dce3e5'}}, {id: 'basemap', type: 'raster', source: 'basemap'}],
 });
 export const MAPS = {
-  dark: {name: 'Midnight', detail: 'OpenFreeMap · dark vector', style: 'https://tiles.openfreemap.org/styles/dark', tone: 'dark'},
-  light: {name: 'Paper', detail: 'OpenFreeMap · light vector', style: 'https://tiles.openfreemap.org/styles/positron', tone: 'light'},
-  streets: {name: 'Streets', detail: 'OpenFreeMap · Liberty', style: 'https://tiles.openfreemap.org/styles/liberty', tone: 'light'},
-  bright: {name: 'Bright', detail: 'OpenFreeMap · Bright', style: 'https://tiles.openfreemap.org/styles/bright', tone: 'light'},
-  satellite: {name: 'Esri satellite', detail: 'Esri · World Imagery', tone: 'dark', swatch: 'satellite', style: raster('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9">Esri World Imagery</a> · Esri, Vantor, Earthstar Geographics, GIS User Community', 19)},
-  osm: {name: 'OpenStreetMap', detail: 'OpenStreetMap · standard', tone: 'light', style: raster('https://tile.openstreetmap.org/{z}/{x}/{y}.png', osm)},
+  dark: {name: 'Midnight', provider: 'OpenFreeMap', detail: 'OpenFreeMap · dark vector', style: 'https://tiles.openfreemap.org/styles/dark', tone: 'dark'},
+  light: {name: 'Paper', provider: 'OpenFreeMap', detail: 'OpenFreeMap · light vector', style: 'https://tiles.openfreemap.org/styles/positron', tone: 'light'},
+  streets: {name: 'Streets', provider: 'OpenFreeMap', detail: 'OpenFreeMap · Liberty', style: 'https://tiles.openfreemap.org/styles/liberty', tone: 'light'},
+  bright: {name: 'Bright', provider: 'OpenFreeMap', detail: 'OpenFreeMap · Bright', style: 'https://tiles.openfreemap.org/styles/bright', tone: 'light'},
+  satellite: {name: 'Esri satellite', provider: 'Esri', detail: 'Esri · World Imagery', tone: 'dark', style: raster('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9">Esri World Imagery</a> · Esri, Vantor, Earthstar Geographics, GIS User Community', 19)},
+  osm: {name: 'OpenStreetMap', provider: 'OpenStreetMap', detail: 'OpenStreetMap · standard', tone: 'light', style: raster('https://tile.openstreetmap.org/{z}/{x}/{y}.png', osm)},
 };
 
 const escapeHTML = text => String(text).replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
@@ -69,7 +69,7 @@ export function createGoogleProvider(apiKey, mapType = 'roadmap', fetcher = glob
     return `<span class="google-maps-brand" translate="no">Google Maps</span> ${escapeHTML(data.copyright)}`;
   }
   return {
-    name: mapType === 'terrain' ? 'Google terrain' : 'Google Maps',
+    name: mapType === 'terrain' ? 'Google terrain' : 'Google Maps', provider: 'Google',
     detail: mapType === 'terrain' ? 'Google Maps · terrain' : 'Google Maps · roads', tone: 'light',
     attribution, tiles,
     async style(map) {
@@ -95,7 +95,7 @@ export function createYandexProvider(apiKey) {
     const url = `https://yandex.com/maps/?ll=${encodeURIComponent(`${center.lng},${center.lat}`)}&z=${Math.max(0, Math.min(20, map.getZoom() + 1)).toFixed(2)}`;
     return `© Yandex · <a href="https://yandex.ru/legal/maps_termsofuse/">Terms of use</a> · <a href="${url}" target="_blank" rel="noopener">Open in Maps ↗</a>`;
   };
-  return {name: 'Yandex Maps', detail: 'Yandex · map tiles', tone: 'light', tiles, attribution,
+  return {name: 'Yandex Maps', provider: 'Yandex', detail: 'Yandex · map tiles', tone: 'light', tiles, attribution,
     async style(map) {
       const style = raster(tiles()[0], '', 20);
       style.metadata = {providerAttribution: await attribution(map)};
@@ -106,7 +106,7 @@ export function createYandexProvider(apiKey) {
 if (MAP_CONFIG.yandexTilesApiKey) MAPS.yandex = createYandexProvider(MAP_CONFIG.yandexTilesApiKey);
 
 const nativeProvider = (sdk, apiKey, mapType, name, detail) => ({
-  name, detail, tone: 'dark', swatch: 'satellite',
+  name, detail, provider: sdk === 'google' ? 'Google' : 'Yandex', tone: 'dark',
   native: {sdk, apiKey, mapType}, style: {version: 8, sources: {}, layers: []},
 });
 if (MAP_CONFIG.googleMapsJavaScriptApiKey) {
@@ -153,7 +153,7 @@ export function createAzureProvider(apiKey, type = 'road', fetcher = globalThis.
     // Relief can return an empty list; still show the Microsoft provider credit.
     return [`<a href="https://www.microsoft.com/maps/product/terms.html">©${new Date().getUTCFullYear()} Microsoft Azure Maps</a>`, ...copyrights].join(' · ');
   }
-  return {name: spec.name, detail: `Microsoft Azure · ${spec.detail}`, tone: spec.tone, swatch: ['satellite', 'hybrid'].includes(type) ? 'satellite' : type === 'dark' ? 'dark' : 'light', tiles, attribution,
+  return {name: spec.name, provider: 'Azure', detail: `Microsoft Azure · ${spec.detail}`, tone: spec.tone, tiles, attribution,
     async style(map) {
       const style = raster(tiles()[0], '', spec.maxzoom, tileSize);
       style.sources.basemap.minzoom = spec.minzoom ?? 0;
@@ -170,8 +170,15 @@ if (MAP_CONFIG.azureMapsSubscriptionKey) for (const type of Object.keys(AZURE_ST
   MAPS[type === 'road' ? 'azure' : `azure-${type}`] = createAzureProvider(MAP_CONFIG.azureMapsSubscriptionKey, type);
 }
 
-// Satellite labels identify the imagery provider; missing credentials stay hidden.
-export const MAP_ORDER = ['google', 'yandex', 'osm', 'satellite', 'google-satellite', 'yandex-satellite', 'azure', 'azure-satellite', 'google-terrain', 'google-hybrid', 'yandex-hybrid', 'azure-hybrid', 'azure-dark', 'azure-relief', 'dark', 'light', 'streets', 'bright'].filter(key => MAPS[key]);
+// Group by view, keeping provider order consistent and unavailable maps hidden.
+export const MAP_GROUPS = [
+  {id: 'roads', name: 'Roads', maps: ['google', 'yandex', 'osm', 'azure', 'streets', 'bright', 'light']},
+  {id: 'terrain', name: 'Terrain', maps: ['google-terrain', 'azure-relief']},
+  {id: 'satellite', name: 'Satellite', maps: ['google-satellite', 'yandex-satellite', 'azure-satellite', 'satellite']},
+  {id: 'hybrid', name: 'Hybrid · satellite with labels', maps: ['google-hybrid', 'yandex-hybrid', 'azure-hybrid']},
+  {id: 'dark', name: 'Dark', maps: ['azure-dark', 'dark']},
+].map(group => ({...group, maps: group.maps.filter(key => MAPS[key])})).filter(group => group.maps.length);
+export const MAP_ORDER = MAP_GROUPS.flatMap(group => group.maps);
 
 // Spread requests below the free Tiles API's 30 requests/second allowance.
 // A project-wide limit still applies when several visitors use the same key.

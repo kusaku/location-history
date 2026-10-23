@@ -120,7 +120,7 @@ test('Azure relief accepts empty contributor attribution and uses the 512px tile
   const provider = createAzureProvider('test-key', 'relief', async url => { requestedZoom = new URL(url).searchParams.get('zoom'); return ok({copyrights: []}); });
   const style = await provider.style({...map, getZoom: () => 3.2});
   assert.equal(requestedZoom, '3');
-  assert.match(style.metadata.providerAttribution, />Microsoft Azure Maps<\/a>$/);
+  assert.ok(style.metadata.providerAttribution.endsWith(`>©${new Date().getUTCFullYear()} Microsoft Azure Maps</a>`));
   assert.equal(style.sources.basemap.tileSize, 512);
 });
 

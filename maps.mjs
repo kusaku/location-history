@@ -143,7 +143,7 @@ export function createAzureProvider(apiKey, type = 'road', fetcher = globalThis.
       }
     }
     // Relief can return an empty list; still show the Microsoft provider credit.
-    return [`<a href="https://www.microsoft.com/maps/product/terms.html">Microsoft Azure Maps</a>`, ...copyrights].join(' · ');
+    return [`<a href="https://www.microsoft.com/maps/product/terms.html">©${new Date().getUTCFullYear()} Microsoft Azure Maps</a>`, ...copyrights].join(' · ');
   }
   return {name: spec.name, detail: `Microsoft Azure · ${spec.detail}`, tone: spec.tone, swatch: ['satellite', 'hybrid'].includes(type) ? 'satellite' : type === 'dark' ? 'dark' : 'light', tiles, attribution,
     async style(map) {

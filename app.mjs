@@ -1,4 +1,4 @@
-import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader} from './maps.mjs?v=5';
+import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader} from './maps.mjs?v=6';
 import {createNativeMaps} from './native-maps.mjs';
 import {DAY, shiftPeriod} from './data.mjs?v=3';
 const $ = id => document.getElementById(id);

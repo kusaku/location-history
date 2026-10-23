@@ -1392,9 +1392,6 @@ dialog p {
   .sidebar-intro {
     padding-bottom: 14px;
   }
-  .sidebar-intro .eyebrow {
-    display: none;
-  }
   .sidebar-intro h1 {
     font-size: 26px;
   }
@@ -1517,10 +1514,6 @@ dialog p {
   }
   .timeline-inputs input[type=date] {
     width: 102px;
-  }
-  .presets button,
-  .period-navigation button {
-    padding: 6px 5px;
   }
 }
 

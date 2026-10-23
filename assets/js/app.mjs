@@ -48,7 +48,7 @@ function setBusy(busy) {
   $('workspace').setAttribute('aria-busy', String(busy));
 }
 function setEnabled(enabled) {
-  for (const id of ['map-summary', 'map-bottom']) $(id).hidden = !enabled;
+  for (const id of ['map-summary', 'map-bottom', 'fit']) $(id).hidden = !enabled;
   for (const id of ['clear', 'fit', 'date-start', 'date-end', 'range-start', 'range-end', 'play', 'period-back', 'period-forward']) $(id).disabled = !enabled;
   document.querySelectorAll('[data-period]').forEach(b => { b.disabled = !enabled; });
   for (const bar of $('histogram').children) bar.disabled = !enabled;

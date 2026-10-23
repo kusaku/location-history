@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="styles.css?v=7">
+    <link rel="stylesheet" href="styles.css?v=8">
     <script type="module" src="app.mjs?v=9">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
@@ -619,20 +619,49 @@
       <p>
         Choose a base map in Map settings. Google offers roads, terrain, satellite and hybrid; Yandex offers streets, satellite and hybrid. Microsoft Azure offers roads, dark roads, satellite, hybrid and world-scale shaded relief. OpenFreeMap, OpenStreetMap and Esri imagery are also available. Satellite shows imagery; hybrid adds street labels. Google and Yandex satellite maps use a flat, north-up view. Availability, usage limits and provider terms apply. Switching maps keeps your imported history and filters.
       </p>
-      <p class="guide-links">
-        <a href="https://www.google.com/help/terms_maps/" target="_blank" rel="noreferrer">
-          Google Maps terms
-        </a>
-        <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
-          Google privacy policy
-        </a>
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
-          OpenStreetMap attribution
-        </a>
-        <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noreferrer">
-          Yandex Maps terms
-        </a>
-      </p>
+      <dl class="guide-links" aria-label="Map provider links">
+        <div>
+          <dt>Google Maps</dt>
+          <dd>
+            <a href="https://www.google.com/help/terms_maps/" target="_blank" rel="noopener noreferrer" aria-label="Google Maps terms">Terms</a>
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" aria-label="Google privacy policy">Privacy</a>
+          </dd>
+        </div>
+        <div>
+          <dt>Yandex Maps</dt>
+          <dd>
+            <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noopener noreferrer" aria-label="Yandex Maps terms">Terms</a>
+            <a href="https://yandex.com/legal/confidential/" target="_blank" rel="noopener noreferrer" aria-label="Yandex privacy policy">Privacy</a>
+          </dd>
+        </div>
+        <div>
+          <dt>Azure Maps</dt>
+          <dd>
+            <a href="https://www.microsoft.com/licensing/terms/productoffering/MicrosoftAzure/all" target="_blank" rel="noopener noreferrer" aria-label="Microsoft Azure terms">Terms</a>
+            <a href="https://www.microsoft.com/en-us/privacy/privacystatement" target="_blank" rel="noopener noreferrer" aria-label="Microsoft privacy statement">Privacy</a>
+          </dd>
+        </div>
+        <div>
+          <dt>OpenStreetMap</dt>
+          <dd>
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" aria-label="OpenStreetMap attribution">Attribution</a>
+            <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer" aria-label="OpenStreetMap privacy policy">Privacy</a>
+          </dd>
+        </div>
+        <div>
+          <dt>Esri World Imagery</dt>
+          <dd>
+            <a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noopener noreferrer" aria-label="Esri World Imagery attribution and terms">Attribution</a>
+            <a href="https://www.esri.com/en-us/privacy/privacy-statements/privacy-statement" target="_blank" rel="noopener noreferrer" aria-label="Esri privacy statement">Privacy</a>
+          </dd>
+        </div>
+        <div>
+          <dt>OpenFreeMap</dt>
+          <dd>
+            <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer" aria-label="OpenFreeMap about and usage">About &amp; usage</a>
+          </dd>
+        </div>
+      </dl>
       <p class="hint">
         Dates and hours use UTC. Distance follows usable consecutive observations and can undercount travel. Unknown accuracy stays included. No data is a valid filter result.
       </p>

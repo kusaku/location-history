@@ -1125,7 +1125,7 @@ dialog {
   color: var(--ink);
   border: 1px solid #43503c;
   border-radius: 16px;
-  max-width: 600px;
+  max-width: 720px;
   width: calc(100% - 32px);
   max-height: 85dvh;
   padding: 28px;
@@ -1193,9 +1193,29 @@ dialog p {
 }
 
 .guide-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr));
+  gap: 16px 24px;
+}
+
+.guide-links dt {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.guide-links dd {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 18px;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.guide-links a {
+  white-space: nowrap;
 }
 
 .guide-links a,

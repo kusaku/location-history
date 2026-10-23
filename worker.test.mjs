@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Worker} from 'node:worker_threads';
+import {once} from 'node:events';
+import {gzipSync} from 'node:zlib';
+
+// Adapt browser worker messaging to Node without replacing the production worker code.
+const url = new URL('./worker.mjs', import.meta.url).href;
+async function startWorker() {
+  const worker = new Worker(`
+    const {parentPort} = require('node:worker_threads');
+    self = {postMessage: message => parentPort.postMessage(message)};
+    import(${JSON.stringify(url)}).then(() => {
+      parentPort.on('message', data => self.onmessage({data}));
+      parentPort.postMessage({type:'ready'});
+    });
+  `, {eval: true});
+  await once(worker, 'message');
+  let id = 0;
+  return {worker, request(type, args = {}) {
+    const requestId = ++id;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { cleanup(); reject(new Error('Worker response timed out')); }, 10000);
+      const onMessage = message => { if (message.id === requestId && message.type !== 'progress') { cleanup(); resolve(message); } };
+      const onError = error => { cleanup(); reject(error); };
+      const cleanup = () => { clearTimeout(timer); worker.off('message', onMessage); worker.off('error', onError); };
+      worker.on('message', onMessage); worker.once('error', onError);
+      worker.postMessage({type, id: requestId, ...args});
+    });
+  }};
+}
+const json = data => new Blob([JSON.stringify(data)], {type: 'application/json'});
+const record = (t, lon = 134000000, accuracy) => ({latitudeE7: 525000000, longitudeE7: lon, timestampMs: String(t), accuracy});
+
+test('worker merges files, preserves old data after failure, filters exact exports and clears memory', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    const imported = await request('import', {files: [json({locations: [record(0), record(1000)]}), json({locations: [record(1000), record(2000, 134010000, 500)]})]});
+    assert.equal(imported.type, 'imported'); assert.equal(imported.report.total, 3); assert.equal(imported.report.duplicates, 1);
+    const failed = await request('import', {files: [json({locations: [record(9000)]}), json({unsupported: true})]});
+    assert.equal(failed.type, 'error'); assert.equal(failed.operation, 'import');
+    const result = await request('query');
+    assert.equal(result.result.count, 3);
+    const exported = await request('export', {options: {start: 0, end: 2000, accuracy: 100, hourStart: 0, hourEnd: 24}});
+    const data = JSON.parse(exported.text);
+    assert.equal(data.features.length, 2); assert.equal(data.features[0].properties.timestamp, '1970-01-01T00:00:00.000Z');
+    await request('clear');
+    assert.equal((await request('query')).result.count, 0);
+  } finally { await worker.terminate(); }
+});
+
+test('worker detects gzip by magic bytes and recovers from malformed JSON and gzip', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    const compressed = new Blob([gzipSync(JSON.stringify({locations: [record(0)]}))]);
+    assert.equal((await request('import', {files: [compressed]})).report.total, 1);
+    for (const file of [new Blob(['{broken']), new Blob([new Uint8Array([0x1f, 0x8b, 0])])]) {
+      assert.equal((await request('import', {files: [file]})).type, 'error');
+      assert.equal((await request('query')).result.count, 1);
+    }
+  } finally { await worker.terminate(); }
+});

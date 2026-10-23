@@ -1,207 +1,585 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Location History Browser</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@latest/dist/leaflet.min.css"/>
-    <link rel="stylesheet" href="styles.css"/>
-    
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-J8N1Q1GVVB');
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="View Google Timeline location history with heatmaps, density cells, points, journeys, and date filters. Files are processed in your browser.">
+    <meta name="theme-color" content="#111713">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>
+      Location History
+    </title>
+    <link rel="canonical" href="https://kusaku.su/location-history/">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23111713'/%3E%3Ccircle cx='20' cy='20' r='11' fill='none' stroke='%23d5f476' stroke-width='2'/%3E%3Ccircle cx='20' cy='20' r='4' fill='%23d5f476'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="app.mjs">
     </script>
-    
-    <script type="text/javascript">
-        (function(m,e,t,r,i,k,a){
-            m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-            m[i].l=1*new Date();
-            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
-        })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=105986243', 'ym');
-
-        ym(105986243, 'init', {ssr:true, webvisor:true, clickmap:true, accurateTrackBounce:true, trackLinks:true});
-    </script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/leaflet@latest/dist/leaflet.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@latest/dist/leaflet-heat.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-</head>
-<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <div id="progressContainer" class="hidden fixed top-0 left-0 right-0 h-1 z-[3000]">
-        <div class="progress-bar h-full">
-            <div id="progressFill" class="progress-fill h-full" style="width: 0%"></div>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">
+      Skip to map
+    </a>
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <symbol id="i-upload" viewBox="0 0 24 24">
+          <path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>
+        </symbol>
+        <symbol id="i-heat" viewBox="0 0 24 24">
+          <path d="M13 3c2 5-4 5-1 9 1-2 3-2 3-4 5 5 4 13-3 13S2 14 7 9c0 4 3 4 3 4-2-4 2-6 3-10Z"/>
+        </symbol>
+        <symbol id="i-hex" viewBox="0 0 24 24">
+          <path d="m12 2 9 5v10l-9 5-9-5V7Z M3 7l9 5 9-5M12 12v10"/>
+        </symbol>
+        <symbol id="i-points" viewBox="0 0 24 24">
+          <circle cx="6" cy="7" r="2"/>
+          <circle cx="17" cy="5" r="2"/>
+          <circle cx="12" cy="16" r="2"/>
+          <circle cx="20" cy="18" r="1"/>
+          <circle cx="3" cy="18" r="1"/>
+        </symbol>
+        <symbol id="i-route" viewBox="0 0 24 24">
+          <circle cx="5" cy="5" r="2"/>
+          <circle cx="19" cy="19" r="2"/>
+          <path d="M7 5h9a4 4 0 0 1 0 8H8a3 3 0 0 0 0 6h9"/>
+        </symbol>
+        <symbol id="i-fit" viewBox="0 0 24 24">
+          <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>
+          <circle cx="12" cy="12" r="3"/>
+        </symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24">
+          <rect x="5" y="10" width="14" height="11" rx="3"/>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>
+        </symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24">
+          <path d="M5 12h14m-5-5 5 5-5 5"/>
+        </symbol>
+      </defs>
+    </svg>
+    <header class="app-header">
+      <a class="brand" href="./" aria-label="Location History home">
+        <span class="brand-mark" aria-hidden="true">
+          <i>
+          </i>
+        </span>
+        <span>
+          Location
+          <span class="brand-light">
+            history
+          </span>
+        </span>
+      </a>
+      <div class="header-right">
+        <span class="local-badge">
+          <span class="status-dot">
+          </span>
+          On your device
+        </span>
+        <button id="help" class="quiet-button" type="button">
+          Guide
+          <span aria-hidden="true">
+            ↗
+          </span>
+        </button>
+        <a class="author" href="https://kusaku.su/">
+          by kusaku
+        </a>
+      </div>
+    </header>
+    <div class="app-layout">
+      <aside class="sidebar" aria-label="Map settings" id="settings">
+        <a class="back-to-map" href="#workspace">
+          ↑ Back to map
+        </a>
+        <div class="sidebar-intro">
+          <h1>
+            Map settings
+          </h1>
         </div>
-    </div>
-    
-    <div class="controls-container bg-white opacity-95 backdrop-blur-sm shadow-sm px-4 py-2 w-full">
-        <div class="w-full space-y-2">
-            <!-- Top Row: File Input, Status, Map Style (centered), Theme Switcher -->
-            <div class="control-section justify-between items-center" style="position: relative; flex-wrap: nowrap;">
-                <div class="control-section" style="flex-shrink: 1; min-width: 0;">
-                    <label class="file-input-wrapper">
-                        <input type="file" id="historyFile" accept=".json,application/json,.gz,.gzip,application/gzip,application/x-gzip" multiple />
-                        <span class="file-input-button">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                            </svg>
-                            <span>Load History</span>
-                        </span>
-                    </label>
-                </div>
-                
-                <div class="control-section justify-center" style="flex: 1 1 auto; min-width: 0; flex-shrink: 1;">
-                    <div class="map-style-group">
-                        <button class="map-style-btn active" data-tile="satellite" title="Satellite Imagery">
-                            Satellite
-                        </button>
-                        <button class="map-style-btn" data-tile="osm" title="OpenStreetMap Standard">
-                            OSM
-                        </button>
-                        <button class="map-style-btn" data-tile="osm-bike" title="OpenStreetMap Cycle Map">
-                            OSM-bike
-                        </button>
-                        <button class="map-style-btn" data-tile="esri-topo" title="ESRI Topographic">
-                            Topo
-                        </button>
-                        <button class="map-style-btn" data-tile="esri-streets" title="ESRI Street Map">
-                            Streets
-                        </button>
-                        <button class="map-style-btn" data-tile="opentopo" title="OpenTopoMap">
-                            OpenTopo
-                        </button>
-                        <button class="map-style-btn" data-tile="carto-light" title="CartoDB Positron">
-                            Light
-                        </button>
-                        <button class="map-style-btn" data-tile="carto-dark" title="CartoDB Dark Matter">
-                            Dark
-                        </button>
-                    </div>
-                    
-                    <div class="map-style-group" style="margin-left: 0.5rem;">
-                        <button class="gradient-btn active" data-gradient="spectrum" title="Spectrum Gradient">
-                            Spectrum
-                        </button>
-                        <button class="gradient-btn" data-gradient="fire" title="Fire Gradient">
-                            Fire
-                        </button>
-                        <button class="gradient-btn" data-gradient="cool" title="Cool Gradient">
-                            Cool
-                        </button>
-                        <button class="gradient-btn" data-gradient="grass" title="Grass Gradient">
-                            Grass
-                        </button>
-                        <button class="gradient-btn" data-gradient="dark" title="Dark Gradient (for light maps)">
-                            Dark
-                        </button>
-                    </div>
-                    
-                    <div class="flex items-center gap-2" style="margin-left: 0.5rem;">
-                        <div class="flex items-center gap-1">
-                            <label for="radiusSlider" style="font-size: 0.7rem; color: #6b7280; white-space: nowrap;">R:</label>
-                            <input type="range" id="radiusSlider" min="1" max="10" value="2" step="0.5" style="width: 80px;" tabindex="0" role="slider" aria-label="Heatmap radius" aria-valuemin="1" aria-valuemax="10" aria-valuenow="2" />
-                            <span id="radiusValue" style="font-size: 0.7rem; color: #0969da; min-width: 25px; text-align: right;">2</span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            <label for="blurSlider" style="font-size: 0.7rem; color: #6b7280; white-space: nowrap;">B:</label>
-                            <input type="range" id="blurSlider" min="1" max="10" value="2" step="0.5" style="width: 80px;" tabindex="0" role="slider" aria-label="Heatmap blur" aria-valuemin="1" aria-valuemax="10" aria-valuenow="2" />
-                            <span id="blurValue" style="font-size: 0.7rem; color: #0969da; min-width: 25px; text-align: right;">2</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="control-section">
-                    <div class="map-style-group">
-                        <button id="aboutToggle" class="map-style-btn" title="About">
-                            About
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="control-section" style="flex-shrink: 0; margin-left: auto; order: 999;">
-                    <div id="themeToggle" class="theme-switcher flex items-center gap-1 bg-white rounded-lg p-1 shadow-md border border-gray-200">
-                        <button id="themeLight" class="theme-btn rounded text-sm font-medium transition-colors" title="Light mode" aria-label="Light theme">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                            </svg>
-                        </button>
-                        <button id="themeDark" class="theme-btn rounded text-sm font-medium transition-colors" title="Dark mode" aria-label="Dark theme">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                            </svg>
-                        </button>
-                        <button id="themeSystem" class="theme-btn rounded text-sm font-medium transition-colors" title="System (follow OS setting)" aria-label="System theme">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
+        <section class="control-section import-section" aria-labelledby="source-title">
+          <div class="section-heading">
+            <h2 id="source-title">
+              01
+              <span>
+                History
+              </span>
+            </h2>
+            <button id="clear" class="text-button" type="button" disabled>
+              Clear
+            </button>
+          </div>
+          <button id="import" type="button" class="upload-button">
+            <svg class="icon">
+              <use href="#i-upload"/>
+            </svg>
+            <span>
+              Open location history
+              <small>
+                JSON or JSON.GZ · multiple files
+              </small>
+            </span>
+            <span aria-hidden="true">
+              +
+            </span>
+          </button>
+          <input id="history-file" type="file" accept=".json,.geojson,.gz,.gzip,application/json,application/gzip" multiple hidden>
+          <div class="source-row">
+            <span id="source-label">
+              No history loaded
+            </span>
+            <button id="sample" type="button" class="text-button">
+              Load sample
+              <span aria-hidden="true">
+                ↗
+              </span>
+            </button>
+          </div>
+          <p id="import-detail" class="hint">
+          </p>
+        </section>
+        <section class="control-section" aria-labelledby="view-title">
+          <div class="section-heading">
+            <h2 id="view-title">
+              02
+              <span>
+                Visualization
+              </span>
+            </h2>
+          </div>
+          <div id="modes" class="mode-grid" role="group" aria-label="Visualization">
+            <button type="button" data-mode="heat" aria-pressed="true">
+              <svg class="icon">
+                <use href="#i-heat"/>
+              </svg>
+              Heatmap
+            </button>
+            <button type="button" data-mode="hex" aria-pressed="false">
+              <svg class="icon">
+                <use href="#i-hex"/>
+              </svg>
+              Hexagons
+            </button>
+            <button type="button" data-mode="points" aria-pressed="false">
+              <svg class="icon">
+                <use href="#i-points"/>
+              </svg>
+              Points
+            </button>
+            <button type="button" data-mode="route" aria-pressed="false">
+              <svg class="icon">
+                <use href="#i-route"/>
+              </svg>
+              Journeys
+            </button>
+          </div>
+          <p id="mode-description" class="hint">
+            Density of nearby recorded locations.
+          </p>
+          <div id="density-controls">
+            <label for="metric">
+              Measure density by
+            </label>
+            <select id="metric">
+              <option value="records">
+                Recorded locations
+              </option>
+              <option value="days">
+                Distinct recorded days
+              </option>
+              <option value="time">
+                Estimated stationary time
+              </option>
+            </select>
+            <p id="metric-note" class="hint">
+              Every recorded location contributes equally.
+            </p>
+          </div>
+          <div class="slider-field" id="radius-field">
+            <div class="label-row">
+              <label for="radius" id="radius-label">
+                Spread
+              </label>
+              <output id="radius-value" for="radius">
+                24 px
+              </output>
             </div>
-            
-            <!-- Bottom Row: Date Range Slider -->
-            <div class="control-section">
-                <div class="flex-1 min-w-0">
-                    <div class="dual-range-container">
-                        <div class="dual-range-track" id="dualRangeTrack">
-                            <div class="dual-range-fill" id="dualRangeFill"></div>
-                            <div class="dual-range-handle start-handle" id="startHandle" tabindex="0" role="slider" aria-label="Start date" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
-                            <div class="dual-range-handle end-handle" id="endHandle" tabindex="0" role="slider" aria-label="End date" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
-                        </div>
-                    </div>
-                    <div class="dual-range-labels">
-                        <span id="startDateLabel" class="dual-range-value">--</span>
-                        <span id="message" class="status-badge"></span>
-                        <span id="endDateLabel" class="dual-range-value">--</span>
-                    </div>
-                </div>
+            <input id="radius" type="range" min="8" max="60" value="24" step="1">
+          </div>
+          <div class="slider-field" id="intensity-field">
+            <div class="label-row">
+              <label for="intensity">
+                Intensity
+              </label>
+              <output id="intensity-value" for="intensity">
+                1.0×
+              </output>
             </div>
-            
+            <input id="intensity" type="range" min="0.2" max="3" value="1" step="0.1">
+          </div>
+          <div class="slider-field">
+            <div class="label-row">
+              <label for="opacity">
+                Opacity
+              </label>
+              <output id="opacity-value" for="opacity">
+                85%
+              </output>
+            </div>
+            <input id="opacity" type="range" min="10" max="100" value="85" step="5">
+          </div>
+          <div class="label-row palette-label">
+            <span>
+              Colour palette
+            </span>
+            <span id="palette-name">
+              Ember
+            </span>
+          </div>
+          <div id="palettes" class="palettes" role="group" aria-label="Colour palette">
+            <button class="palette ember" data-palette="ember" type="button" aria-label="Ember" aria-pressed="true">
+            </button>
+            <button class="palette ocean" data-palette="ocean" type="button" aria-label="Ocean" aria-pressed="false">
+            </button>
+            <button class="palette spectral" data-palette="spectral" type="button" aria-label="Spectrum" aria-pressed="false">
+            </button>
+          </div>
+        </section>
+        <section class="control-section" aria-labelledby="basemap-title">
+          <div class="section-heading">
+            <h2 id="basemap-title">
+              03
+              <span>
+                Base map
+              </span>
+            </h2>
+            <span class="mini-tag">
+              MAPS
+            </span>
+          </div>
+          <div id="basemaps" class="basemap-grid" role="group" aria-label="Base map">
+          </div>
+          <p id="map-provider" class="hint">
+            OpenFreeMap · dark vector
+          </p>
+        </section>
+        <details class="control-section filters">
+          <summary>
+            Filters
+            <span aria-hidden="true">
+              +
+            </span>
+          </summary>
+          <div class="details-content">
+            <div class="two-columns">
+              <div>
+                <label for="hour-start">
+                  From hour · UTC
+                </label>
+                <select id="hour-start">
+                </select>
+              </div>
+              <div>
+                <label for="hour-end">
+                  Until hour · UTC
+                </label>
+                <select id="hour-end">
+                </select>
+              </div>
+            </div>
+            <label for="accuracy">
+              Location accuracy
+            </label>
+            <select id="accuracy">
+              <option value="0">
+                All locations
+              </option>
+              <option value="100">
+                Within 100 metres
+              </option>
+              <option value="500">
+                Within 500 metres
+              </option>
+              <option value="1000">
+                Within 1 kilometre
+              </option>
+            </select>
+            <p class="hint">
+              Locations without accuracy metadata stay included.
+            </p>
+            <button id="export" class="secondary-button" type="button" disabled>
+              Export filtered GeoJSON
+              <span aria-hidden="true">
+                ↗
+              </span>
+            </button>
+          </div>
+        </details>
+        <footer class="sidebar-footer">
+          <svg class="icon">
+            <use href="#i-lock"/>
+          </svg>
+          <p>
+            Your files stay in this browser.
+            <br>
+            <span>
+              Map tiles load from the selected provider.
+            </span>
+          </p>
+        </footer>
+      </aside>
+      <main class="workspace" id="workspace" tabindex="-1" aria-label="Location history explorer">
+        <div id="map" aria-label="Interactive location history map">
         </div>
-    </div>
-
-    <div id="map" class="relative"></div>
-
-    <!-- About Modal -->
-    <div id="aboutModal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10000; background-color: rgba(0, 0, 0, 0.75);">
-        <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div class="p-8">
-                <div class="flex justify-between items-start mb-6">
-                    <h2 class="text-3xl font-bold text-gray-900">Location History Visualizer</h2>
-                    <button id="aboutClose" class="text-gray-500 hover:text-gray-700 hover:text-indigo-600 text-2xl leading-none cursor-pointer transition-colors px-2 py-1 rounded hover:bg-gray-100" title="Close">&times;</button>
-                </div>
-                <div class="prose prose-sm max-w-none text-gray-700">
-                    <p class="mb-4">
-                        Visualize your Google Location History data with interactive heatmaps. 
-                        Supports both original JSON files and compressed <code class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">.json.gz</code> files for faster loading.
-                    </p>
-                    
-                    <h4 class="text-lg font-semibold text-gray-900 mt-6 mb-3">Quick Start</h4>
-                    <ol class="list-decimal list-inside mb-4 space-y-2">
-                        <li>Export location data from <a href="https://takeout.google.com" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline">Google Takeout</a> (JSON format)</li>
-                        <li>Extract ZIP and find <code class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">Records.json</code> in "Location History" folder</li>
-                        <li>Click "Load History" and select your file(s)</li>
-                        <li>Use the date slider to filter by time, customize map styles and gradients</li>
-                    </ol>
-                    
-                    <h4 class="text-lg font-semibold text-gray-900 mt-6 mb-3">Tips</h4>
-                    <ul class="list-disc list-inside mb-4 space-y-2">
-                        <li>Tab + arrow keys to navigate sliders (hold arrows for acceleration)</li>
-                        <li>Try different map styles and gradients to find your preferred visualization</li>
-                        <li>Adjust radius and blur sliders to fine-tune heatmap intensity</li>
-                    </ul>
-                    
-                    <p class="mt-6 text-sm text-gray-500">
-                        <strong>Privacy:</strong> All processing happens locally. No data is sent to any server.
-                    </p>
-                </div>
-            </div>
+        <div class="map-heading">
+          <div>
+            <p class="eyebrow" id="dataset-tag">
+              No history loaded
+            </p>
+            <h2 id="map-title">
+              Location history
+            </h2>
+          </div>
+          <button type="button" id="mobile-settings" class="secondary-button">
+            Map settings
+            <span aria-hidden="true">
+              ↗
+            </span>
+          </button>
         </div>
+        <div class="map-stats" aria-label="Filtered history statistics">
+          <div>
+            <strong id="stat-records">
+              —
+            </strong>
+            <span>
+              locations
+            </span>
+          </div>
+          <div>
+            <strong id="stat-days">
+              —
+            </strong>
+            <span>
+              recorded days
+            </span>
+          </div>
+          <div>
+            <strong id="stat-distance">
+              —
+            </strong>
+            <span>
+              km along tracks
+            </span>
+          </div>
+        </div>
+        <div class="map-actions">
+          <button id="fit" type="button" class="map-action" aria-label="Fit selected history" title="Fit selected history" disabled>
+            <svg class="icon">
+              <use href="#i-fit"/>
+            </svg>
+          </button>
+        </div>
+        <div id="empty-state" class="empty-state">
+          <span class="empty-orbit" aria-hidden="true">
+            ◎
+          </span>
+          <h3>
+            No history loaded
+          </h3>
+          <p>
+            Open a Google Timeline JSON export or load the sample dataset.
+          </p>
+          <button id="empty-sample" type="button" class="primary-button">
+            Load sample
+            <svg class="icon">
+              <use href="#i-arrow"/>
+            </svg>
+          </button>
+          <button id="empty-import" type="button" class="text-button empty-import">
+            Open history
+          </button>
+        </div>
+        <div id="status" class="status-message" role="status" aria-live="polite" hidden>
+        </div>
+        <div id="map-error" class="map-error" role="alert" hidden>
+        </div>
+        <div class="map-bottom">
+          <div class="legend-row">
+            <div class="legend">
+              <span id="legend-low">
+                Less
+              </span>
+              <span id="legend-ramp" class="legend-ramp">
+              </span>
+              <span id="legend-high">
+                More
+              </span>
+              <span id="legend-unit">
+                recorded locations
+              </span>
+            </div>
+            <span id="render-note">
+            </span>
+          </div>
+          <section class="timeline" aria-labelledby="timeline-title">
+            <div class="timeline-heading">
+              <div>
+                <span class="eyebrow" id="timeline-title">
+                  Date range
+                </span>
+                <p id="range-summary">
+                  Load history to filter by date
+                </p>
+              </div>
+              <div class="timeline-controls">
+                <div class="presets" role="group" aria-label="Date presets">
+                  <button type="button" data-period="1" aria-pressed="false" disabled>
+                    Day
+                  </button>
+                  <button type="button" data-period="30" aria-pressed="false" disabled>
+                    30d
+                  </button>
+                  <button type="button" data-period="365" aria-pressed="false" disabled>
+                    1y
+                  </button>
+                  <button type="button" data-period="all" aria-pressed="true" disabled>
+                    All time
+                  </button>
+                </div>
+                <div class="period-navigation" role="group" aria-label="Period navigation">
+                  <button id="period-back" type="button" aria-label="Previous period" title="Previous period" disabled>
+                    ←
+                  </button>
+                  <button id="play" type="button" aria-label="Play timeline" disabled>
+                    ▶
+                  </button>
+                  <button id="period-forward" type="button" aria-label="Next period" title="Next period" disabled>
+                    →
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="histogram" id="histogram" aria-label="Location counts across the full imported history">
+            </div>
+            <div class="timeline-inputs">
+              <label>
+                From
+                <input id="date-start" type="date" aria-label="Start date" disabled>
+              </label>
+              <div class="range-controls">
+                <label class="sr-only" for="range-start">
+                  Timeline start
+                </label>
+                <input id="range-start" type="range" min="0" max="1000" value="0" disabled>
+                <label class="sr-only" for="range-end">
+                  Timeline end
+                </label>
+                <input id="range-end" type="range" min="0" max="1000" value="1000" disabled>
+              </div>
+              <label>
+                To
+                <input id="date-end" type="date" aria-label="End date" disabled>
+              </label>
+              <span class="utc-tag">
+                UTC
+              </span>
+            </div>
+          </section>
+        </div>
+        <div id="drop-overlay" class="drop-overlay" hidden>
+          <svg class="icon">
+            <use href="#i-upload"/>
+          </svg>
+          <strong>
+            Drop history files here
+          </strong>
+          <span>
+            JSON and gzip files · processed on your device
+          </span>
+        </div>
+      </main>
     </div>
-
-    <script src="script.js"></script>
-</body>
+    <dialog id="guide">
+      <div class="dialog-heading">
+        <p class="eyebrow">
+          Location history
+        </p>
+        <button id="close-guide" type="button" class="quiet-button" aria-label="Close guide">
+          ✕
+        </button>
+      </div>
+      <h2>
+        User guide
+      </h2>
+      <p>
+        Open one or more Google Takeout Records JSON files, monthly semantic history files, or an on-device Timeline JSON export. Gzip, our original delta-compressed sample, and timestamped GeoJSON points work too. A new import replaces the current history; files selected together are merged and exact duplicates removed.
+      </p>
+      <h3>
+        Visualization modes
+      </h3>
+      <p>
+        <b>
+          Heatmap
+        </b>
+        blends nearby locations.
+        <b>
+          Hexagons
+        </b>
+        groups them into cells that adapt to zoom.
+        <b>
+          Points
+        </b>
+        shows up to 20,000 representative locations in view.
+        <b>
+          Journeys
+        </b>
+        connects consecutive observations, breaking at gaps over six hours, excluded records, dateline crossings, or implausible speeds.
+      </p>
+      <h3>
+        Density metrics
+      </h3>
+      <p>
+        Measure density by records, distinct UTC days per cell, or estimated stationary time. Time uses recorded visit duration or stationary intervals of at most 30 minutes within 200 metres, clipped to the observation’s UTC day and chosen hours. It is an estimate, not a complete measure of time spent. Colour strength adapts to the 95th percentile of occupied cells in view; compare patterns, not absolute values between zoom levels. Spread changes the radius in screen pixels. Click a hexagon or point for details.
+      </p>
+      <h3>
+        Privacy
+        &amp;
+        performance
+      </h3>
+      <p>
+        Your imported history is kept in memory, never uploaded or saved. Clear or reload to remove it. The selected map provider receives normal map requests for the area you view, jsDelivr serves MapLibre, and Google Fonts serves the typefaces. No analytics or session recording runs here. Imports are limited to two million points and 512 MB per uncompressed file.
+      </p>
+      <h3>
+        Base maps
+      </h3>
+      <p>
+        Choose a base map in Map settings. OpenFreeMap and OpenStreetMap show streets; Esri provides satellite imagery. Google provides roads and terrain; Yandex provides streets. Availability and provider terms apply. Switching maps keeps your imported history and filters.
+      </p>
+      <p class="guide-links">
+        <a href="https://www.google.com/help/terms_maps/" target="_blank" rel="noreferrer">
+          Google Maps terms
+        </a>
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+          Google privacy policy
+        </a>
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+          OpenStreetMap attribution
+        </a>
+        <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noreferrer">
+          Yandex Maps terms
+        </a>
+      </p>
+      <p class="hint">
+        Dates and hours use UTC. Distance follows usable consecutive observations and can undercount travel. Unknown accuracy stays included. No data is a valid filter result.
+      </p>
+    </dialog>
+    <noscript>
+      <div class="noscript">
+        JavaScript is needed to process your history and draw the map.
+      </div>
+    </noscript>
+  </body>
 </html>

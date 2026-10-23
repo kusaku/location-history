@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleProvider, googleViewport} from './maps.mjs';
+import {createGoogleProvider, createAzureProvider, googleViewport, MAPS, MAP_ORDER} from './maps.mjs';
 
 const bounds = (west = 13, east = 14, south = 52, north = 53) => ({getWest: () => west, getEast: () => east, getSouth: () => south, getNorth: () => north});
 const map = {getBounds: () => bounds(), getZoom: () => 10.5};
@@ -78,4 +78,44 @@ test('Yandex tile requests are paced, cancellable and return cache headers', asy
   const cancelled = new AbortController(); cancelled.abort();
   await assert.rejects(loader(params, cancelled), {name: 'AbortError'});
   assert.equal(starts.length, 4);
+});
+
+test('Azure renders the documented road, imagery and relief tilesets with matching attribution', async () => {
+  const requests = [];
+  for (const [type, tileset, maxzoom] of [['road', 'microsoft.base.road', 22], ['dark', 'microsoft.base.darkgrey', 22], ['satellite', 'microsoft.imagery', 19], ['relief', 'microsoft.terra.main', 6]]) {
+    const provider = createAzureProvider('test-key', type, async url => { requests.push(new URL(url)); return ok({copyrights: ['<a data-azure-maps-attribution-tileset="example">&copy;2026 Example &amp; data</a>']}); });
+    const style = await provider.style(map), source = style.sources.basemap;
+    assert.match(source.tiles[0], /api-version=2024-04-01/); assert.match(source.tiles[0], /tileSize=256/);
+    assert.ok(source.tiles[0].includes(`tilesetId=${tileset}`)); assert.equal(source.maxzoom, maxzoom);
+    assert.match(style.metadata.providerAttribution, /©2026 Example &amp; data/);
+    assert.equal(requests.at(-1).searchParams.get('tilesetId'), tileset);
+    assert.equal(requests.at(-1).searchParams.get('zoom'), String(Math.min(maxzoom, 12)));
+  }
+});
+
+test('Azure hybrid combines imagery and road labels, and splits attribution at the dateline', async () => {
+  const requests = [], provider = createAzureProvider('test-key', 'hybrid', async url => { requests.push(new URL(url)); return ok({copyrights: ['© Example']}); });
+  const style = await provider.style({getBounds: () => bounds(170, 190), getZoom: () => 10});
+  assert.equal(requests.length, 4);
+  assert.deepEqual(requests.map(url => url.searchParams.get('bounds')), ['170,52,180,53', '-180,52,-170,53', '170,52,180,53', '-180,52,-170,53']);
+  assert.equal(style.layers.at(-1).id, 'basemap-labels'); assert.match(style.sources.labels.tiles[0], /microsoft.base.hybrid.road/);
+  assert.equal((style.metadata.providerAttribution.match(/© Example/g) ?? []).length, 1);
+});
+
+test('Azure rejects missing credits, escapes returned text and does not expose credentials in errors', async () => {
+  const failed = createAzureProvider('secret-test-key', 'road', async () => ({ok: false, status: 403}));
+  await assert.rejects(failed.style(map), error => /HTTP 403/.test(error.message) && !error.message.includes('secret-test-key'));
+  const missing = createAzureProvider('test-key', 'road', async () => ok({copyrights: []}));
+  await assert.rejects(missing.style(map), /required data attribution/);
+  const escaped = createAzureProvider('test-key', 'road', async () => ok({copyrights: ['<img src=x onerror=alert(1)>© "Example" & data']}));
+  const credit = await escaped.attribution(map);
+  assert.ok(!credit.includes('<img')); assert.match(credit, /© &quot;Example&quot; &amp; data/);
+  assert.throws(() => createAzureProvider('test-key', 'missing'), /Unknown Azure Maps style/);
+});
+
+test('map choices preserve provider order and contain no unavailable or ambiguous satellite option', () => {
+  assert.deepEqual(MAP_ORDER.slice(0, 4), ['google', 'yandex', 'osm', 'satellite']);
+  assert.equal(MAP_ORDER.length, Object.keys(MAPS).length); assert.equal(new Set(MAP_ORDER).size, MAP_ORDER.length);
+  assert.equal(MAPS.satellite.name, 'Esri satellite');
+  for (const key of MAP_ORDER) assert.ok(MAPS[key]);
 });

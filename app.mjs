@@ -1,4 +1,5 @@
-import {MAPS, PALETTES, createYandexTileLoader} from './maps.mjs?v=2';
+import {MAPS, MAP_ORDER, PALETTES, createYandexTileLoader} from './maps.mjs?v=3';
+import {createNativeMaps} from './native-maps.mjs';
 import {DAY, shiftPeriod} from './data.mjs?v=3';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
@@ -7,7 +8,7 @@ const formatDate = t => new Intl.DateTimeFormat('en', {day: 'numeric', month: 's
 const empty = () => ({type: 'FeatureCollection', features: []});
 const state = {mode: 'heat', metric: 'records', palette: 'ember', basemap: 'dark', radius: 24, intensity: 1, opacity: .85, report: null, result: null, importing: false, start: 0, end: 0, period: 'all'};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Individual observations. Click a point to see its timestamp.', route: 'Consecutive observations, with breaks for gaps and excluded data.'};
-let map, mapLibrary, attributionControl, worker, queryTimer, querying = false, queryDirty = false, exporting = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
+let map, mapLibrary, nativeMaps, attributionControl, worker, queryTimer, querying = false, queryDirty = false, exporting = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
 function setAttribution(html) {
   if (html === currentAttribution) return;
@@ -107,7 +108,7 @@ function paint() {
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
-  const before = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+  const before = map.getStyle().layers.find(l => l.type === 'symbol' || l.id === 'basemap-labels')?.id;
   for (const name of ['density', 'dots', 'route']) map.addSource(`history-${name}`, {type: 'geojson', data: empty(), maxzoom: 18, tolerance: .5, buffer: 64});
   map.addLayer({id: 'history-heat', type: 'heatmap', source: 'history-density', paint: {'heatmap-weight': ['get', 'weight']}}, before);
   map.addLayer({id: 'history-hex', type: 'fill', source: 'history-density', paint: {'fill-outline-color': '#ffffff35'}}, before);
@@ -120,6 +121,8 @@ async function selectBasemap(key) {
   document.querySelectorAll('[data-map]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.map === key)));
   $('map-error').hidden = true;
   try {
+    const native = provider.native ? await nativeMaps.prepare(provider.native) : null;
+    if (request !== styleRequest) return;
     const style = typeof provider.style === 'function' ? await provider.style(map) : typeof provider.style === 'string' ? await (async () => {
       const response = await fetch(provider.style, {signal: AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -132,9 +135,11 @@ async function selectBasemap(key) {
       if (layer.paint?.['fill-pattern'] === 'wood-pattern') delete layer.paint['fill-pattern'];
     }
     state.basemap = key;
+    nativeMaps.activate(native);
+    $('workspace').classList.toggle('native-map', Boolean(provider.native));
     $('workspace').classList.toggle('light-map', provider.tone === 'light');
-    $('workspace').classList.toggle('google-map', key === 'google' || key === 'google-terrain');
-    $('workspace').classList.toggle('yandex-map', key === 'yandex');
+    $('workspace').classList.toggle('google-map', key.startsWith('google'));
+    $('workspace').classList.toggle('yandex-map', key.startsWith('yandex'));
     $('map-provider').textContent = provider.detail;
     map.setStyle(style, {diff: false});
     setAttribution(provider.attribution ? style.metadata?.providerAttribution ?? '' : '');
@@ -252,10 +257,10 @@ function createWorker() {
   worker.onerror = () => { setBusy(false); exporting = false; $('export').disabled = true; querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
 }
 function bindControls() {
-  for (const key of ['google', 'yandex', 'osm', 'satellite', 'google-terrain', 'dark', 'light', 'streets', 'bright'].filter(key => MAPS[key])) {
+  for (const key of MAP_ORDER) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'basemap-button'; button.dataset.map = key;
     button.setAttribute('aria-pressed', String(key === state.basemap)); button.setAttribute('aria-label', `${MAPS[key].name} base map`);
-    const swatch = document.createElement('i'); swatch.className = `map-swatch swatch-${key}`; swatch.setAttribute('aria-hidden', 'true');
+    const swatch = document.createElement('i'); swatch.className = `map-swatch swatch-${MAPS[key].swatch ?? key}`; swatch.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span'); label.textContent = MAPS[key].name; button.append(swatch, label); button.onclick = () => selectBasemap(key); $('basemaps').append(button);
   }
   for (let i = 0; i < 64; i++) $('histogram').append(document.createElement('span'));
@@ -325,6 +330,7 @@ async function init() {
     const maplibre = mapLibrary = await import('https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.mjs');
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
+    nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
     map.addControl(new maplibre.NavigationControl({showCompass: false}), 'top-right');
     attributionControl = new maplibre.AttributionControl({compact: false});
     map.addControl(attributionControl, 'bottom-right');

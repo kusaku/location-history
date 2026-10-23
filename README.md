@@ -73,6 +73,16 @@ The dedicated Cloud project is `location-history-512511`. Its browser key permit
 
 Keys in `map-config.mjs` are deliberately public, as required by a static browser app. Keep application/API restrictions and quotas in the provider console. Never add Apple signing keys, service-account credentials, server secrets, or session tokens to this file. The remaining maps continue working when a configured provider is unavailable.
 
+### Satellite SDK integrations
+
+The existing `Satellite` source is Esri World Imagery; its selector is now explicitly named **Esri satellite**. Google and Yandex imagery are separate choices.
+
+Google's [EEA Tiles adjustments](https://developers.google.com/maps/comms/eea/map-tiles) block satellite images through the Tile API for this project. Its supported alternative is Maps JavaScript API's satellite/hybrid map types. Configure `googleMapsJavaScriptApiKey` only after enabling that API, applying a website/API restriction, and verifying the requested spending cap. The Dynamic Maps allowance is separate from Tile API usage: 10,000 map loads/month, with paid overage. An allowance or budget alert is not a hard cap.
+
+Yandex's free JavaScript API supports `yandex#satellite` and `yandex#hybrid`, unlike its street-only Tiles API. The existing `yandexJavaScriptApiKey` is restricted to `kusaku.su`; the account currently shows a free allowance of 100 API requests/day. No paid plan was activated.
+
+`native-maps.mjs` loads an SDK only when its satellite/hybrid choice is selected. One instance per SDK is reused across style switches, preserving billing behavior. A transparent MapLibre overlay keeps all four visualization modes and local history processing. Camera updates include the 256px/512px zoom offset and fractional zoom. SDK maps use a flat, north-up view; rotation and pitch controls are restored when returning to tile/vector providers. A reserved footer keeps native copyright controls visible and clickable.
+
 ### Yandex Maps
 
 The supported [Tiles API](https://yandex.ru/maps-api/docs/tiles-api/) has a free plan limited to 30 requests/second, with no daily limit in the account console. `createYandexProvider` requests `projection=web_mercator` explicitly; Yandex's default elliptical projection would misalign the imported geometry. It uses the `future_map` street style, a terms link, and an Open in Maps link for the current viewport. Yandex's [documentation](https://yandex.com/maps-api/docs/tiles-api/index.html) requires a clickable corner logo; this site omits that overlay at the owner's request. The [supported styles](https://yandex.com/maps-api/docs/tiles-api/request.html) do not include terrain; the Tiles API only supplies roadmap tiles. The custom MapLibre protocol spaces tile requests by at least 40 ms and supports cancellation and normal HTTP caching. The service-wide limit still applies across visitors.
@@ -81,10 +91,18 @@ Activation can take up to 15 minutes. Set `yandexTilesApiKey` only after a live 
 
 The key is configured in `MAP_CONFIG`. On 2026-10-23 live Web Mercator tile requests passed with HTTP 200, PNG output, and browser CORS support. Initial account propagation exceeded the documented activation window; no frontend workaround was needed.
 
+### Azure Maps
+
+The Gen2 renderer supports roads, dark roads, satellite imagery, satellite with road labels, and shaded relief (the relief tiles stop at zoom 6). Selectors appear only when `azureMapsSubscriptionKey` is configured. It uses the documented Render `2024-04-01` endpoints and fetches current attribution for every tileset, including both sides of a dateline-crossing view. Missing attribution fails closed.
+
+The [monthly allowance](https://azure.microsoft.com/pricing/details/azure-maps/) includes 5,000 base-map and 1,000 imagery transactions; 15 tile requests count as one transaction. This corresponds to 75,000 road tiles and 15,000 imagery tiles. These are usage allowances, not hard monthly caps. Free-trial spending protection prevents automatic charges until an explicit upgrade; Azure's free trial is time-limited. Never claim that a paid Azure subscription is capped by these allowances.
+
+Use a dedicated Maps account with CORS limited to `https://kusaku.su`. Azure shared keys authorize all Maps REST services for their account; CORS is a browser restriction, not authentication against non-browser clients. A public static app cannot conceal a shared key. SAS tokens permit narrower access and rate limits but expire within 24 hours and require a renewal service or job. Never put Azure management credentials, service-principal secrets, or other account secrets in this repository.
+
 ### Other providers
 
 - Apple MapKit JS requires a Maps token. The signed-in account currently reports **Access Unavailable** for Certificates, Identifiers & Profiles until it belongs to a developer program/team. No membership was purchased and no Apple provider is exposed.
-- Azure Maps was skipped at the user's request because the account has no active subscription. Bing Maps Basic is retired; new integrations should use Azure Maps. No Microsoft credential or selector is included.
+- Bing Maps Basic is retired; new Microsoft integrations use Azure Maps.
 
 OpenFreeMap replaces CARTO, whose current public basemap terms require a licence/grant. The old Thunderforest cycle layer required a key, and legacy Esri streets/topographic and OpenTopoMap layers have been removed from the selector.
 

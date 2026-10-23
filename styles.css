@@ -638,6 +638,26 @@ select {
   inset: 0;
 }
 
+.native-basemap {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.native-map {
+  --native-footer: 40px;
+}
+
+.native-map #map {
+  pointer-events: none;
+}
+
+.native-map .maplibregl-canvas-container {
+  pointer-events: auto;
+  /* Preserve clickable SDK copyright controls beneath the history overlay. */
+  clip-path: inset(0 0 var(--native-footer) 0);
+}
+
 .map-heading {
   position: absolute;
   top: 28px;
@@ -796,7 +816,7 @@ select {
 
 .map-bottom {
   position: absolute;
-  bottom: max(32px, var(--attribution-space, 0px));
+  bottom: max(32px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 10px));
   left: 28px;
   right: 28px;
   pointer-events: none;
@@ -1225,7 +1245,7 @@ dialog p {
   .map-bottom {
     left: 36px;
     right: 36px;
-    bottom: max(36px, var(--attribution-space, 0px));
+    bottom: max(36px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 10px));
   }
   .histogram {
     height: 52px;
@@ -1303,6 +1323,9 @@ dialog p {
 }
 
 @media(max-width:700px) {
+  .native-map {
+    --native-footer: 56px;
+  }
   .app-header {
     height: 62px;
     padding: 0 18px;
@@ -1421,7 +1444,7 @@ dialog p {
     top: 276px;
   }
   .map-bottom {
-    bottom: max(32px, var(--attribution-space, 0px));
+    bottom: max(32px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 10px));
     left: 14px;
     right: 14px;
   }

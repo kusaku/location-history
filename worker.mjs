@@ -1,6 +1,6 @@
-import {preparePoints, queryHistory, MAX_POINTS} from './data.mjs?v=2';
-import {readHistory} from './import.mjs';
-let points = [], report = null;
+import {preparePoints, createHistoryQuery, exportHistory, MAX_POINTS} from './data.mjs?v=3';
+import {readHistory} from './import.mjs?v=2';
+let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;
   try {
@@ -23,17 +23,23 @@ self.onmessage = async ({data}) => {
       }
       self.postMessage({type: 'progress', id, message: `Sorting and merging ${staged.length.toLocaleString('en')} locations…`});
       const prepared = preparePoints(staged);
-      points = prepared.points;
-      report = {total: points.length, min: points[0].t, max: points.at(-1).t, skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name)};
+      const nextQuery = createHistoryQuery(prepared.points);
+      points = prepared.points; query = nextQuery; geometry = {};
+      const report = {total: points.length, min: points[0].t, max: points.at(-1).t, skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name)};
       self.postMessage({type: 'imported', id, report});
     } else if (type === 'query') {
-      self.postMessage({type: 'result', id, result: queryHistory(points, data.options)});
+      const result = query(data.options), versions = {};
+      for (const key of ['density', 'dots', 'routes']) {
+        if (geometry[key]?.value !== result[key]) geometry[key] = {value: result[key], version: ++version};
+        versions[key] = geometry[key].version;
+        // Acknowledge what the UI actually displayed, including after a discarded query.
+        if (data.known?.[key] === versions[key]) delete result[key];
+      }
+      self.postMessage({type: 'result', id, result: {...result, versions}});
     } else if (type === 'export') {
-      const {start, end, accuracy, hourStart, hourEnd} = data.options;
-      const features = points.filter(p => p.t >= start && p.t <= end && (!accuracy || p.accuracy === null || p.accuracy <= accuracy) && new Date(p.t).getUTCHours() >= hourStart && new Date(p.t).getUTCHours() < hourEnd).map(p => ({type: 'Feature', properties: {timestamp: new Date(p.t).toISOString(), accuracy: p.accuracy}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}}));
-      self.postMessage({type: 'exported', id, text: JSON.stringify({type: 'FeatureCollection', features})});
+      self.postMessage({type: 'exported', id, ...exportHistory(points, data.options)});
     } else if (type === 'clear') {
-      points = []; report = null;
+      points = []; query = createHistoryQuery(points); geometry = {};
       self.postMessage({type: 'cleared', id});
     }
   } catch (error) { self.postMessage({type: 'error', id, operation: type, message: error.message || 'The file could not be read.'}); }

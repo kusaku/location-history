@@ -1,5 +1,5 @@
 import {MAPS, PALETTES, createYandexTileLoader} from './maps.mjs?v=2';
-import {DAY, shiftPeriod} from './data.mjs?v=2';
+import {DAY, shiftPeriod} from './data.mjs?v=3';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -7,7 +7,7 @@ const formatDate = t => new Intl.DateTimeFormat('en', {day: 'numeric', month: 's
 const empty = () => ({type: 'FeatureCollection', features: []});
 const state = {mode: 'heat', metric: 'records', palette: 'ember', basemap: 'dark', radius: 24, intensity: 1, opacity: .85, report: null, result: null, importing: false, start: 0, end: 0, period: 'all'};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Individual observations. Click a point to see its timestamp.', route: 'Consecutive observations, with breaks for gaps and excluded data.'};
-let map, mapLibrary, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
+let map, mapLibrary, attributionControl, worker, queryTimer, querying = false, queryDirty = false, exporting = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
 function setAttribution(html) {
   if (html === currentAttribution) return;
@@ -51,21 +51,22 @@ function currentOptions() {
   // Pad the viewport so heat kernels and cells remain complete at its edges.
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
-  return {...state, report: undefined, result: undefined, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  const {start, end, mode, metric, radius} = state;
+  return {start, end, mode, metric, radius, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
   if (querying) { queryDirty = true; return; }
+  clearTimeout(queryTimer);
   querying = true; queryDirty = false;
-  worker.postMessage({type: 'query', id: ++queryId, options: currentOptions()});
+  worker.postMessage({type: 'query', id: ++queryId, options: currentOptions(), known: state.result?.versions});
 }
-function refresh() { clearTimeout(queryTimer); queryTimer = setTimeout(requestQuery, 90); }
-function paintSources() {
+function refresh() { clearTimeout(queryTimer); if (querying) queryDirty = true; queryTimer = setTimeout(requestQuery, 90); }
+function paintSources(changes = state.result) {
   if (!map?.getSource('history-density')) return;
-  map.getSource('history-density').setData(state.result?.density ?? empty());
-  map.getSource('history-dots').setData(state.result?.dots ?? empty());
-  map.getSource('history-route').setData(state.result?.routes ?? empty());
-  paint();
+  for (const [source, key] of [['density', 'density'], ['dots', 'dots'], ['route', 'routes']]) {
+    if (!changes || key in changes) map.getSource(`history-${source}`).setData(changes?.[key] ?? empty());
+  }
 }
 function colourExpression(input, includeTransparent = false) {
   const colors = PALETTES[state.palette].colors;
@@ -112,7 +113,7 @@ function installLayers() {
   map.addLayer({id: 'history-hex', type: 'fill', source: 'history-density', paint: {'fill-outline-color': '#ffffff35'}}, before);
   map.addLayer({id: 'history-dots', type: 'circle', source: 'history-dots', paint: {'circle-stroke-color': '#142018', 'circle-stroke-width': .4}}, before);
   map.addLayer({id: 'history-route', type: 'line', source: 'history-route', layout: {'line-join': 'round', 'line-cap': 'round'}}, before);
-  paintSources(); refresh();
+  paintSources(); paint(); refresh();
 }
 async function selectBasemap(key) {
   const request = ++styleRequest, provider = MAPS[key];
@@ -145,7 +146,7 @@ async function selectBasemap(key) {
   }
 }
 function showResult(result) {
-  state.result = result;
+  state.result = {...state.result, ...result};
   $('stat-records').textContent = number.format(result.count);
   $('stat-days').textContent = number.format(result.days);
   $('stat-distance').textContent = number.format(result.km);
@@ -160,7 +161,7 @@ function showResult(result) {
     bar.className = inRange ? 'selected' : 'outside';
     bar.title = `${number.format(result.histogram[i])} locations`;
   });
-  paintSources();
+  paintSources(result);
 }
 function syncDates() {
   if (!state.report) return;
@@ -204,7 +205,7 @@ async function loadSample() {
 }
 function clearHistory() {
   sampleRequest++; stopPlayback(); popup?.remove();
-  worker.terminate(); createWorker(); querying = false; queryDirty = false; setBusy(false);
+  clearTimeout(queryTimer); worker.terminate(); createWorker(); querying = false; queryDirty = false; exporting = false; setBusy(false);
   state.report = null; state.result = null; state.period = 'all'; setEnabled(false); paintSources();
   $('empty-state').hidden = false; $('source-label').textContent = 'No history loaded'; $('dataset-tag').textContent = 'No history loaded';
   $('import-detail').textContent = ''; $('range-summary').textContent = 'Load history to filter by date'; $('render-note').textContent = '';
@@ -215,12 +216,13 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=2', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=3', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
       if (data.operation === 'import') setBusy(false);
       if (data.operation === 'query') { querying = false; queryDirty = false; }
+      if (data.operation === 'export') { exporting = false; $('export').disabled = !state.report; }
       status(data.message, true);
     } else if (data.type === 'imported') {
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
@@ -240,13 +242,14 @@ function createWorker() {
       showResult(data.result);
       if (state.fitNext) { state.fitNext = false; fitHistory(); }
     } else if (data.type === 'exported') {
-      const url = URL.createObjectURL(new Blob([data.text], {type: 'application/geo+json'}));
-      const link = document.createElement('a'); link.href = url; link.download = `location-history-${date(state.start)}-${date(state.end)}.geojson`; link.click();
+      exporting = false; $('export').disabled = !state.report;
+      const url = URL.createObjectURL(data.blob);
+      const link = document.createElement('a'); link.href = url; link.download = `location-history-${date(data.start)}-${date(data.end)}.geojson`; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      status('Filtered history exported.');
+      status(`Exported ${number.format(data.count)} filtered locations.`);
     }
   };
-  worker.onerror = () => { setBusy(false); querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
+  worker.onerror = () => { setBusy(false); exporting = false; $('export').disabled = true; querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
 }
 function bindControls() {
   for (const key of ['google', 'yandex', 'osm', 'satellite', 'google-terrain', 'dark', 'light', 'streets', 'bright'].filter(key => MAPS[key])) {
@@ -267,12 +270,12 @@ function bindControls() {
   $('metric').onchange = event => { state.metric = event.target.value; paint(); refresh(); };
   document.querySelectorAll('[data-mode]').forEach(button => { button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); paint(); refresh(); }; });
   document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.palette = button.dataset.palette; document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); paint(); }; });
-  for (const id of ['radius', 'intensity', 'opacity']) $(id).oninput = event => { state[id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(); if (id === 'radius') refresh(); };
+  for (const id of ['radius', 'intensity', 'opacity']) $(id).oninput = event => { state[id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
   $('import').onclick = $('empty-import').onclick = () => $('history-file').click();
   $('history-file').onchange = event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); };
   $('sample').onclick = $('empty-sample').onclick = loadSample;
   $('clear').onclick = clearHistory; $('fit').onclick = fitHistory;
-  $('export').onclick = () => { status('Preparing filtered GeoJSON…', false, true); worker.postMessage({type: 'export', id: ++queryId, options: currentOptions()}); };
+  $('export').onclick = () => { if (exporting) return; exporting = true; $('export').disabled = true; status('Preparing filtered GeoJSON…', false, true); worker.postMessage({type: 'export', id: ++queryId, options: currentOptions()}); };
   for (const id of ['date-start', 'date-end']) $(id).onchange = () => {
     stopPlayback();
     const start = Date.parse($('date-start').value), end = Date.parse($('date-end').value) + DAY - 1;

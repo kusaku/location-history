@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
-import {parseHistory, preparePoints, queryHistory, wrappedBounds, project, timestamp, shiftPeriod, DAY} from './data.mjs';
+import {parseHistory, preparePoints, queryHistory, createHistoryQuery, exportHistory, wrappedBounds, project, timestamp, shiftPeriod, DAY} from './data.mjs';
 const point = (t, lon = 13.4, lat = 52.5, accuracy = null) => ({t, lon, lat, accuracy, duration: 0});
 const records = locations => parseHistory({locations}).points;
 const legacy = (time, lat = 525000000, lon = 134000000) => ({timestampMs: String(time), latitudeE7: lat, longitudeE7: lon});
@@ -116,4 +116,66 @@ test('bundled 266,682-point history imports and filters without dropping records
   const prepared = preparePoints(parseHistory(data).points);
   assert.equal(prepared.points.length, 266682);
   assert.equal(queryHistory(prepared.points).count, 266682);
+});
+
+test('malformed semantic waypoints are skipped without losing valid path observations', () => {
+  const parsed = parseHistory({semanticSegments: [{timelinePath: [null, false, {point: 'geo:52.5,13.4', time: '2025-01-01T00:00:00Z'}]}]});
+  assert.equal(parsed.skipped, 2); assert.equal(parsed.points.length, 1);
+});
+
+test('spatial index agrees with a chronological viewport scan across wrapping, poles, and filters', () => {
+  let seed = 42;
+  const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+  const points = Array.from({length: 12000}, (_, i) => point((i - 6000) * 60000, random() * 360 - 180, random() * 180 - 90, i % 3 ? 20 : 500));
+  points.push(point(8 * DAY, -180, -90), point(8 * DAY + 1, 180, 90));
+  const query = createHistoryQuery(points);
+  for (const viewport of [[13, 52, 14, 53], [178, -90, 182, 90], [-182, -90, -178, 90], [530, -90, 550, 90], [-720, -90, 720, 90], [-180, -90, 180, 90], [0, 89, 180, 90]]) {
+    for (const accuracy of [0, 100]) for (const hourStart of [0, 8]) {
+      const selected = points.filter(p => p.t >= -DAY && p.t <= 9 * DAY && (!accuracy || p.accuracy <= accuracy) && new Date(p.t).getUTCHours() >= hourStart);
+      const center = (viewport[0] + viewport[2]) / 2;
+      const visible = selected.filter(p => { const lon = p.lon + 360 * Math.round((center - p.lon) / 360); return lon >= viewport[0] && lon <= viewport[2] && p.lat >= viewport[1] && p.lat <= viewport[3]; });
+      const result = query({mode: 'points', viewport, accuracy, hourStart, start: -DAY, end: 9 * DAY});
+      assert.equal(result.count, selected.length); assert.equal(result.visible, visible.length);
+      assert.deepEqual(result.dots.features.map(f => f.geometry.coordinates), visible.map(p => [p.lon, p.lat]));
+      assert.deepEqual(result.bounds, wrappedBounds(selected));
+    }
+  }
+});
+
+test('panning reuses selection statistics and route geometry; date and quality changes invalidate them', () => {
+  const points = [point(0), point(60000, 13.401), point(DAY, 14), point(DAY + 60000, 14.001, 52.5, 500)];
+  const query = createHistoryQuery(points);
+  const first = query({mode: 'route'}), pan = query({mode: 'route', viewport: [13, 52, 15, 53]});
+  assert.equal(first.routes, pan.routes); assert.equal(first.histogram, pan.histogram); assert.equal(first.bounds, pan.bounds);
+  const day = query({mode: 'route', end: DAY - 1});
+  assert.equal(day.count, 2); assert.notEqual(day.routes, first.routes); assert.equal(day.histogram, first.histogram);
+  assert.equal(query({accuracy: 100}).count, 3);
+  assert.equal(query({hourStart: 1}).count, 0);
+  assert.equal(query().count, 4);
+});
+
+test('route simplification preserves both endpoints without allocating every coordinate', () => {
+  const points = Array.from({length: 20001}, (_, i) => point(i * 1000, 13 + i / 1000000));
+  const result = createHistoryQuery(points)({mode: 'route'});
+  const coordinates = result.routes.features[0].geometry.coordinates;
+  assert.deepEqual(coordinates[0], [points[0].lon, points[0].lat]);
+  assert.deepEqual(coordinates.at(-1), [points.at(-1).lon, points.at(-1).lat]);
+  assert.equal(coordinates.length, 6668);
+  assert.equal(result.density.features.length, 0);
+});
+
+test('date range queries preserve inclusive fractional timestamp boundaries', () => {
+  assert.equal(queryHistory([point(.1), point(.5), point(.9)], {start: .1, end: .5}).count, 2);
+});
+
+test('bounded GeoJSON exports preserve all filtered observations across batch boundaries', async () => {
+  const points = Array.from({length: 5000}, (_, i) => point(i * 1000, 13.4, 52.5, i % 2 ? null : 500));
+  const result = exportHistory(points, {start: 1000, end: 4999000, accuracy: 100});
+  const parsed = JSON.parse(await result.blob.text());
+  assert.equal(result.count, 2500); assert.equal(parsed.features.length, 2500);
+  assert.equal(result.start, 1000); assert.equal(result.end, 4999000);
+  assert.equal(parsed.features[0].properties.timestamp, '1970-01-01T00:00:01.000Z');
+  assert.equal(parsed.features.at(-1).properties.timestamp, new Date(4999000).toISOString());
+  assert.equal(parseHistory(parsed).points.length, result.count);
+  assert.deepEqual(JSON.parse(await exportHistory(points, {start: 9e6}).blob.text()).features, []);
 });

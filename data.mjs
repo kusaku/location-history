@@ -43,6 +43,7 @@ export function parseHistory(data, {allowEmpty = false} = {}) {
     const path = entry.timelinePath ?? activity?.simplifiedRawPath?.points ?? activity?.waypointPath?.waypoints;
     if (Array.isArray(path) && path.length) {
       for (const p of path) {
+        if (!p || typeof p !== 'object') { skipped++; continue; }
         let t = p.time ?? p.timestamp ?? p.timestampMs;
         if (t === undefined && p.durationMinutesOffsetFromStartTime !== undefined) t = start + number(p.durationMinutesOffsetFromStartTime) * 60_000;
         // Untimed waypoints cannot be used as timestamped observations.
@@ -110,9 +111,11 @@ export function project(lon, lat) {
   return [(lon + 180) / 360, 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)];
 }
 function unproject(x, y) { return [x * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) / rad]; }
-export function wrappedBounds(points) {
-  if (!points.length) return null;
-  const lons = Float64Array.from(points, p => (p.lon + 360) % 360).sort();
+export function wrappedBounds(points, indices = null) {
+  const length = indices?.length ?? points.length;
+  if (!length) return null;
+  const at = i => points[indices ? indices[i] : i];
+  const lons = Float64Array.from({length}, (_, i) => (at(i).lon + 360) % 360).sort();
   let gap = -1, index = 0, south = 90, north = -90;
   for (let i = 0; i < lons.length; i++) {
     const size = (i === lons.length - 1 ? lons[0] + 360 : lons[i + 1]) - lons[i];
@@ -121,12 +124,12 @@ export function wrappedBounds(points) {
   let west = lons[(index + 1) % lons.length], east = lons[index];
   if (east < west) east += 360;
   if (west > 180) { west -= 360; east -= 360; }
-  for (const p of points) { south = Math.min(south, p.lat); north = Math.max(north, p.lat); }
+  for (let i = 0; i < length; i++) { const p = at(i); south = Math.min(south, p.lat); north = Math.max(north, p.lat); }
   return [[west, Math.max(-85, Math.min(85, south))], [east, Math.min(85, Math.max(-85, north))]];
 }
-function lowerBound(points, time) {
+function lowerBound(points, time, inclusive = false) {
   let lo = 0, hi = points.length;
-  while (lo < hi) { const m = (lo + hi) >>> 1; if (points[m].t < time) lo = m + 1; else hi = m; }
+  while (lo < hi) { const m = (lo + hi) >>> 1; if (points[m].t < time || (inclusive && points[m].t === time)) lo = m + 1; else hi = m; }
   return lo;
 }
 function hexRound(q, r) {
@@ -138,63 +141,154 @@ function hexRound(q, r) {
   return [x, y];
 }
 const collection = features => ({type: 'FeatureCollection', features});
-export function queryHistory(points, options = {}) {
-  const {start = -Infinity, end = Infinity, accuracy = 0, hourStart = 0, hourEnd = 24, metric = 'records', mode = 'heat', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
-  const selected = [], days = new Set(), histogram = Array(64).fill(0);
+const EMPTY = collection([]);
+const hour = t => Math.floor(((t % DAY) + DAY) % DAY / 3_600_000);
+function accepts(p, accuracy, hourStart, hourEnd) {
+  return (!accuracy || p.accuracy === null || p.accuracy <= accuracy) && hour(p.t) >= hourStart && hour(p.t) < hourEnd;
+}
+
+// One compact index and one current filter/selection cache per committed dataset.
+// Panning never recomputes the histogram, distance, date bounds, or route geometry.
+export function createHistoryQuery(points) {
+  const columns = 128, rows = 64, cells = columns * rows;
+  const cell = p => Math.min(rows - 1, Math.floor((p.lat + 90) / 180 * rows)) * columns + Math.min(columns - 1, Math.floor((p.lon + 180) / 360 * columns));
+  const offsets = new Uint32Array(cells + 1), order = new Uint32Array(points.length), projectedY = new Float64Array(points.length);
+  for (let i = 0; i < points.length; i++) { offsets[cell(points[i]) + 1]++; projectedY[i] = project(0, points[i].lat)[1]; }
+  for (let i = 1; i <= cells; i++) offsets[i] += offsets[i - 1];
+  const cursors = offsets.slice();
+  for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
   const min = points[0]?.t ?? 0, max = points.at(-1)?.t ?? 0;
-  const accepts = p => (!accuracy || p.accuracy === null || p.accuracy <= accuracy) && ((hourStart === 0 && hourEnd === 24) || (new Date(p.t).getUTCHours() >= hourStart && new Date(p.t).getUTCHours() < hourEnd));
-  for (const p of points) if (accepts(p)) histogram[Math.min(63, Math.floor((p.t - min) / Math.max(1, max - min) * 64))]++;
-  const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));
-  const size = (mode === 'hex' ? Math.max(8, radius) : Math.max(3, radius / 4)) / scale;
-  const bins = new Map(), visible = [], routes = [], route = [];
-  let km = 0, previous = null, previousIndex = -1, visibleCount = 0;
-  const finishRoute = () => { if (route.length > 1) routes.push({type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: route.splice(0)}}); else route.length = 0; };
-  const center = (viewport[0] + viewport[2]) / 2;
+  let filterKey, filter, selectionKey, selection;
+
+  return (options = {}) => {
+    const {start = -Infinity, end = Infinity, accuracy = 0, hourStart = 0, hourEnd = 24, metric = 'records', mode = 'heat', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
+    const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}`;
+    if (filterKey !== nextFilterKey) {
+      const mask = new Uint8Array(points.length), histogram = Array(64).fill(0);
+      for (let i = 0; i < points.length; i++) if (accepts(points[i], accuracy, hourStart, hourEnd)) {
+        mask[i] = 1;
+        histogram[Math.min(63, Math.floor((points[i].t - min) / Math.max(1, max - min) * 64))]++;
+      }
+      filter = {mask, histogram}; filterKey = nextFilterKey;
+    }
+    const nextSelectionKey = `${filterKey}:${start}:${end}`;
+    if (selectionKey !== nextSelectionKey) {
+      const from = lowerBound(points, start), to = lowerBound(points, end, true);
+      const indices = new Uint32Array(Math.max(0, to - from)), runs = [], days = new Set();
+      let count = 0, km = 0, previous = -1, run = 0;
+      for (let i = from; i < to; i++) {
+        if (!filter.mask[i]) continue;
+        const p = points[i];
+        if (previous >= 0) {
+          const dt = p.t - points[previous].t, d = distance(points[previous], p);
+          if (i === previous + 1 && dt > 0 && dt <= 6 * 3_600_000 && d / (dt / 3_600_000) <= 1000 && Math.abs(p.lon - points[previous].lon) < 180) km += d;
+          else { if (count - run > 1) runs.push([run, count]); run = count; }
+        }
+        indices[count++] = i; previous = i; days.add(Math.floor(p.t / DAY));
+      }
+      if (count - run > 1) runs.push([run, count]);
+      const selected = indices.subarray(0, count);
+      selection = {from, to, indices: selected, runs, count, days: days.size, km: Math.round(km), bounds: wrappedBounds(points, selected), routes: null};
+      selectionKey = nextSelectionKey;
+    }
+    const {from, to, indices} = selection;
+    const center = (viewport[0] + viewport[2]) / 2;
+    const inView = p => {
+      const lon = p.lon + 360 * Math.round((center - p.lon) / 360);
+      return lon >= viewport[0] && lon <= viewport[2] && p.lat >= viewport[1] && p.lat <= viewport[3];
+    };
+    const firstRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[1] + 90) / 180 * rows)));
+    const lastRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[3] + 90) / 180 * rows)));
+    const ranges = []; let candidates = 0;
+    for (let x = 0; x < columns; x++) {
+      const lon = (x + .5) / columns * 360 - 180;
+      const wrapped = lon + 360 * Math.round((center - lon) / 360);
+      if (wrapped + 180 / columns < viewport[0] || wrapped - 180 / columns > viewport[2]) continue;
+      for (let y = firstRow; y <= lastRow; y++) {
+        const cell = y * columns + x, a = offsets[cell], b = offsets[cell + 1];
+        if (a !== b) { ranges.push([a, b]); candidates += b - a; }
+      }
+    }
+    const visible = new Uint32Array(Math.min(candidates, indices.length)); let visibleCount = 0;
+    if (candidates < indices.length / 2) {
+      for (const [a, b] of ranges) for (let j = a; j < b; j++) {
+        const i = order[j];
+        if (i >= from && i < to && filter.mask[i] && inView(points[i])) visible[visibleCount++] = i;
+      }
+      // Chronological ordering preserves representative sampling and density sums.
+      visible.subarray(0, visibleCount).sort();
+    } else {
+      for (const i of indices) if (inView(points[i])) visible[visibleCount++] = i;
+    }
+    let density = EMPTY, dots = EMPTY, routes = EMPTY, peak = 1, drawn = 0;
+    if (mode === 'points') {
+      const stride = Math.max(1, Math.ceil(visibleCount / 20_000)), features = [];
+      for (let j = 0; j < visibleCount; j += stride) {
+        const p = points[visible[j]];
+        features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
+      }
+      dots = collection(features); drawn = features.length;
+    } else if (mode === 'route') {
+      if (!selection.routes) selection.routes = collection(selection.runs.map(([a, b]) => {
+        const coordinates = [], step = Math.max(1, Math.ceil((b - a) / 10_000));
+        for (let j = a; j < b; j += step) { const p = points[indices[j]]; coordinates.push([p.lon, p.lat]); }
+        if ((b - a - 1) % step) { const p = points[indices[b - 1]]; coordinates.push([p.lon, p.lat]); }
+        return {type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates}};
+      }));
+      routes = selection.routes; drawn = routes.features.length;
+    } else {
+      const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));
+      const size = (mode === 'hex' ? Math.max(8, radius) : Math.max(3, radius / 4)) / scale;
+      const bins = new Map();
+      for (let j = 0; j < visibleCount; j++) {
+        const i = visible[j], p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
+        const x = (lon + 180) / 360, y = projectedY[i];
+        let a, b, cx, cy;
+        if (mode === 'hex') {
+          [a, b] = hexRound((Math.sqrt(3) / 3 * x - y / 3) / size, 2 / 3 * y / size);
+          cx = size * Math.sqrt(3) * (a + b / 2); cy = size * 1.5 * b;
+        } else { a = Math.floor(x / size); b = Math.floor(y / size); cx = (a + .5) * size; cy = (b + .5) * size; }
+        const key = `${a}:${b}`;
+        let bin = bins.get(key);
+        if (!bin) { bin = {x: cx, y: cy, count: 0, duration: 0, days: new Set()}; bins.set(key, bin); }
+        bin.count++; bin.days.add(Math.floor(p.t / DAY));
+        bin.duration += Math.max(0, Math.min(p.t + p.duration, end + 1, (Math.floor(p.t / DAY) + 1) * DAY + (hourEnd - 24) * 3_600_000) - p.t) / 60_000;
+      }
+      const value = b => metric === 'days' ? b.days.size : metric === 'time' ? b.duration : b.count;
+      const values = [...bins.values()].map(value).filter(v => v > 0).sort((a, b) => a - b);
+      peak = values[Math.floor((values.length - 1) * .95)] || 1;
+      const features = [];
+      for (const b of bins.values()) {
+        const v = value(b);
+        if (!v) continue;
+        const properties = {value: v, count: b.count, days: b.days.size, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
+        const coordinates = mode === 'hex' ? [Array.from({length: 7}, (_, i) => unproject(b.x + size * Math.cos(rad * (60 * (i % 6) - 30)), b.y + size * Math.sin(rad * (60 * (i % 6) - 30))))] : unproject(b.x, b.y);
+        features.push({type: 'Feature', properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
+      }
+      density = collection(features); drawn = features.length;
+    }
+    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds: selection.bounds, histogram: filter.histogram, peak, drawn};
+  };
+}
+
+// Convenience for one-off queries. The worker retains createHistoryQuery's index.
+export function queryHistory(points, options) { return createHistoryQuery(points)(options); }
+
+// Bounded strings and feature batches avoid the JS string-size limit on large exports.
+export function exportHistory(points, {start = -Infinity, end = Infinity, accuracy = 0, hourStart = 0, hourEnd = 24} = {}) {
+  const parts = ['{"type":"FeatureCollection","features":['];
+  let batch = [], count = 0;
+  const flush = () => {
+    if (!batch.length) return;
+    parts.push(count ? ',' : '', JSON.stringify(batch).slice(1, -1));
+    count += batch.length; batch = [];
+  };
   for (let i = lowerBound(points, start); i < points.length && points[i].t <= end; i++) {
     const p = points[i];
-    if (!accepts(p)) continue;
-    selected.push(p); days.add(Math.floor(p.t / DAY));
-    if (previous) {
-      const dt = p.t - previous.t, d = distance(previous, p);
-      if (i === previousIndex + 1 && dt > 0 && dt <= 6 * 3_600_000 && d / (dt / 3_600_000) <= 1000 && Math.abs(p.lon - previous.lon) < 180) km += d;
-      else finishRoute();
-    }
-    if (mode === 'route') route.push([p.lon, p.lat]);
-    previous = p; previousIndex = i;
-    const lon = p.lon + 360 * Math.round((center - p.lon) / 360);
-    if (lon < viewport[0] || lon > viewport[2] || p.lat < viewport[1] || p.lat > viewport[3]) continue;
-    visibleCount++;
-    if (mode === 'points') visible.push(p);
-    const [x, y] = project(lon, p.lat);
-    let a, b, cx, cy;
-    if (mode === 'hex') {
-      [a, b] = hexRound((Math.sqrt(3) / 3 * x - y / 3) / size, 2 / 3 * y / size);
-      cx = size * Math.sqrt(3) * (a + b / 2); cy = size * 1.5 * b;
-    } else { a = Math.floor(x / size); b = Math.floor(y / size); cx = (a + 0.5) * size; cy = (b + 0.5) * size; }
-    const key = `${a}:${b}`;
-    let bin = bins.get(key);
-    if (!bin) { bin = {x: cx, y: cy, count: 0, duration: 0, days: new Set()}; bins.set(key, bin); }
-    bin.count++; bin.days.add(Math.floor(p.t / DAY));
-    bin.duration += Math.max(0, Math.min(p.t + p.duration, end + 1, (Math.floor(p.t / DAY) + 1) * DAY + (hourEnd - 24) * 3_600_000) - p.t) / 60_000;
+    if (!accepts(p, accuracy, hourStart, hourEnd)) continue;
+    batch.push({type: 'Feature', properties: {timestamp: new Date(p.t).toISOString(), accuracy: p.accuracy}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
+    if (batch.length === 2048) flush();
   }
-  finishRoute();
-  const values = [...bins.values()].map(b => metric === 'days' ? b.days.size : metric === 'time' ? b.duration : b.count).filter(v => v > 0).sort((a, b) => a - b);
-  const peak = values[Math.floor((values.length - 1) * 0.95)] || 1;
-  const features = [];
-  for (const b of bins.values()) {
-    const value = metric === 'days' ? b.days.size : metric === 'time' ? b.duration : b.count;
-    if (!value) continue;
-    const properties = {value, count: b.count, days: b.days.size, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(value / peak))};
-    const coordinates = mode === 'hex' ? [Array.from({length: 7}, (_, i) => unproject(b.x + size * Math.cos(rad * (60 * (i % 6) - 30)), b.y + size * Math.sin(rad * (60 * (i % 6) - 30))))] : unproject(b.x, b.y);
-    features.push({type: 'Feature', properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
-  }
-  const stride = Math.max(1, Math.ceil(visibleCount / 20_000));
-  return {
-    density: collection(features),
-    dots: collection(mode === 'points' ? visible.filter((_, i) => i % stride === 0).map(p => ({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}})) : []),
-    // Simplify long paths for the browser; preserve endpoints and every break.
-    routes: collection(mode === 'route' ? routes.map(f => { const c = f.geometry.coordinates, step = Math.max(1, Math.ceil(c.length / 10_000)); f.geometry.coordinates = c.filter((_, i) => i % step === 0 || i === c.length - 1); return f; }) : []),
-    count: selected.length, visible: visibleCount, days: days.size, km: Math.round(km), histogram, peak,
-    bounds: wrappedBounds(selected), drawn: mode === 'points' ? Math.ceil(visibleCount / stride) : features.length,
-  };
+  flush(); parts.push(']}');
+  return {blob: new Blob(parts, {type: 'application/geo+json'}), count, start, end};
 }

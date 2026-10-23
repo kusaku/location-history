@@ -31,6 +31,12 @@ Open http://localhost:8080/location-history/. Every app URL is relative; the can
 - **Import:** multiple files, drag and drop, explicit sample loading, and transactional replacement. Large JSON and gzip files are read incrementally, with byte progress and a running location count. A failed import keeps the existing dataset. Select all files together to merge them. Clear or reload removes imported history from memory.
 - **Export:** the exact filtered observations as timestamped GeoJSON points; no display sampling or viewport clipping is applied.
 
+### Performance verification
+
+Run `node scripts/benchmark.mjs` for the bundled sample, or append local JSON/gzip paths for larger histories. `--revision <commit>` runs the same queries against an earlier `data.mjs`. Files stay local; the output contains aggregate statistics and geometry hashes. See [PERFORMANCE.md](PERFORMANCE.md) for measured before/after results and limitations.
+
+The worker builds a compact spatial index and caches only the current quality/hour filter and date selection. Panning reuses the histogram, date bounds, distance, and journey geometry. Points and Journeys skip density aggregation. Unchanged geometry is transferred only when the UI has not already acknowledged its version, so discarded queries cannot leave missing overlays. GPU style changes do not rerun filtering. Exports use bounded feature batches and Blob parts rather than a whole-history feature array and JSON string.
+
 Dates and hours use **UTC**, including distinct-day counts. Accuracy filters keep observations without accuracy metadata. Empty selections are valid.
 
 ## Supported inputs
@@ -88,8 +94,8 @@ OpenFreeMap replaces CARTO, whose current public basemap terms require a licence
 - **Native CSS** handles the responsive desktop workspace and mobile map/settings layout. DM Sans and Space Grotesk are optional fonts served by Google Fonts, with system fallbacks.
 - `app.mjs`: UI, map rendering, provider switching, debounced queries with backpressure, and local download.
 - `import.mjs`: incremental UTF-8/JSON decoding, gzip decompression, bounded record batches, schema validation, and read progress.
-- `worker.mjs`: transactional import staging, filtering, and export.
-- `data.mjs`: pure parsing, validation, duplicate handling, spatial aggregation, density normalization, track splitting, and dateline-aware bounds.
+- `worker.mjs`: transactional import staging, dataset query lifecycle, acknowledged geometry transfers, and export.
+- `data.mjs`: parsing, validation, duplicate handling, indexed viewport queries, density normalization, cached selection statistics, track splitting, dateline-aware bounds, and bounded GeoJSON export.
 - `maps.mjs`: provider URLs, session lifecycle, attribution, rate limiting, and palettes. `map-config.mjs` contains only public browser keys.
 - `data.test.mjs`, `import.test.mjs`, `worker.test.mjs`, and `maps.test.mjs`: Node built-in tests covering import formats, UTF-8 and JSON chunk boundaries, the full 266,682-point sample, gzip, transactional failures after partial parsing, filtering, period navigation, exact exports, clearing memory, provider requests, attribution, invalid sessions, and cancellation. No test dependency installation.
 

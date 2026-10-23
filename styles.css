@@ -1,12 +1,10 @@
 :root {
   color-scheme: dark;
   --bg: #111713;
-  --panel: #171e19;
   --border: #2c352d;
   --muted: #99a59b;
   --ink: #f1f4e9;
   --accent: #d5f476;
-  --radius: 12px;
   font-family: 'DM Sans',system-ui,sans-serif;
   font-size: 13px;
   background: var(--bg);
@@ -32,6 +30,9 @@ button,a,input,select,summary {
 button {
   color: inherit;
   cursor: pointer;
+  border: 0;
+  background: none;
+  transition: background .16s,color .16s,border-color .16s;
 }
 
 a {
@@ -39,26 +40,17 @@ a {
   text-underline-offset: 3px;
 }
 
-button {
-  border: 0;
-  background: none;
-}
-
-button: disabled,input:disabled {
+button:disabled,input:disabled {
   opacity: .4;
   cursor: default;
 }
 
-button: focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 
-button {
-  transition: background .16s,color .16s,border-color .16s;
-}
-
-button: hover:not(:disabled) {
+button:hover:not(:disabled) {
   filter: brightness(1.12);
 }
 
@@ -239,13 +231,6 @@ button: hover:not(:disabled) {
   font-style: normal;
 }
 
-.intro-copy {
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--muted);
-  max-width: 210px;
-  margin: 0;
-}
 
 .control-section {
   border-top: 1px solid var(--border);
@@ -695,6 +680,11 @@ select {
   display: flex;
   gap: 26px;
   pointer-events: none;
+  background: #141d17dc;
+  border: 1px solid #63725a55;
+  border-radius: 9px;
+  padding: 12px 15px;
+  backdrop-filter: blur(10px);
 }
 
 .map-stats>div {
@@ -708,13 +698,11 @@ select {
   font-size: 22px;
   font-weight: 500;
   letter-spacing: -.6px;
-  text-shadow: 0 1px 6px #000;
 }
 
 .map-stats span {
   font-size: 9px;
   color: #c5d1c7;
-  text-shadow: 0 1px 5px #000;
 }
 
 .map-actions {
@@ -820,7 +808,10 @@ select {
   justify-content: space-between;
   margin: 0 0 12px;
   gap: 15px;
-  text-shadow: 0 1px 4px #000;
+  background: #141d17d9;
+  border: 1px solid #63725a44;
+  border-radius: 6px;
+  padding: 7px 9px;
 }
 
 .legend {
@@ -940,6 +931,7 @@ select {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .timeline-inputs label {
@@ -977,10 +969,23 @@ select {
 .range-controls input {
   width: 50%;
   min-width: 20px;
-  height: 4px;
+  height: 24px;
   accent-color: var(--accent);
   cursor: pointer;
   margin: 0;
+}
+
+.back-to-map {
+  display: none;
+}
+
+.empty-import {
+  display: block;
+  margin: 8px auto 0;
+}
+
+.empty-state .primary-button {
+  margin-top: 16px;
 }
 
 .empty-state {
@@ -1358,9 +1363,15 @@ dialog p {
     font-size: 28px;
     margin: 0;
   }
-  .sidebar-intro .intro-copy {
-    max-width: 150px;
-    font-size: 11px;
+  .back-to-map {
+    display: inline-block;
+    grid-column: 1/-1;
+    color: var(--accent);
+    font-size: 12px;
+    margin: 0 0 24px;
+    text-decoration: none;
+    min-height: 44px;
+    align-content: center;
   }
   .sidebar-footer {
     grid-column: 1/-1;
@@ -1386,10 +1397,11 @@ dialog p {
   }
   .map-stats {
     top: 100px;
-    gap: 27px;
+    padding: 10px 12px;
+    gap: 23px;
   }
   .map-stats strong {
-    font-size: 21px;
+    font-size: 19px;
   }
   .map-stats span {
     font-size: 8px;
@@ -1400,7 +1412,7 @@ dialog p {
     padding: 10px;
     background: #172219eb;
     gap: 7px;
-    min-height: 36px;
+    min-height: 44px;
   }
   .maplibregl-ctrl-top-right {
     top: 157px;
@@ -1439,7 +1451,7 @@ dialog p {
     line-height: 1.5;
   }
   .presets {
-    gap: 1px;
+    gap: 2px;
   }
   .timeline-controls {
     width: 100%;
@@ -1448,13 +1460,15 @@ dialog p {
   }
   .presets button,
   .period-navigation button {
-    font-size: 9px;
-    padding: 6px;
+    font-size: 10px;
+    min-height: 36px;
+    padding: 7px;
   }
   .period-navigation button {
-    min-width: 26px;
+    min-width: 36px;
   }
   .legend-row {
+    padding: 6px 7px;
     margin-bottom: 10px;
   }
   .legend {
@@ -1471,7 +1485,7 @@ dialog p {
   .empty-state {
     top: 44%;
     width: 310px;
-    padding: 20px;
+    padding: 16px 20px;
   }
   .empty-state h3 {
     font-size: 22px;
@@ -1529,9 +1543,6 @@ dialog p {
   .sidebar-intro {
     display: flex;
   }
-  .sidebar-intro .intro-copy {
-    max-width: 120px;
-  }
   .sidebar-intro h1 {
     font-size: 26px;
   }
@@ -1564,68 +1575,5 @@ dialog p {
     scroll-behavior: auto!important;
     transition: none!important;
     animation: none!important;
-  }
-}
-
-/* A constant backdrop keeps statistics and the legend legible on every base map. */
-.map-stats {
-  background: #141d17dc;
-  border: 1px solid #63725a55;
-  border-radius: 9px;
-  padding: 12px 15px;
-  backdrop-filter: blur(10px);
-}
-
-.map-stats strong,.map-stats span {
-  text-shadow: none;
-}
-
-.legend-row {
-  background: #141d17d9;
-  border: 1px solid #63725a44;
-  border-radius: 6px;
-  padding: 7px 9px;
-  text-shadow: none;
-}
-
-.back-to-map {
-  display: none;
-}
-
-.empty-import {
-  display: block;
-  margin: 8px auto 0;
-}
-
-.empty-state .primary-button {
-  margin-top: 16px;
-}
-
-@media(max-width:700px) {
-  .map-stats {
-    left: 20px;
-    padding: 10px 12px;
-    gap: 23px;
-  }
-  .map-stats strong {
-    font-size: 19px;
-  }
-  .map-stats span {
-    font-size: 8px;
-  }
-  .legend-row {
-    padding: 6px 7px;
-  }
-  .back-to-map {
-    display: inline-block;
-    grid-column: 1/-1;
-    color: var(--accent);
-    font-size: 11px;
-    margin: 0 0 24px;
-    text-decoration: none;
-  }
-  .empty-state {
-    padding-top: 16px;
-    padding-bottom: 16px;
   }
 }

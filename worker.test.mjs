@@ -42,7 +42,7 @@ test('worker merges files, preserves old data after failure, filters exact expor
     const result = await request('query');
     assert.equal(result.result.count, 3);
     const exported = await request('export', {options: {start: 0, end: 2000, accuracy: 100, hourStart: 0, hourEnd: 24}});
-    const data = JSON.parse(exported.text);
+    const data = JSON.parse(await exported.blob.text());
     assert.equal(data.features.length, 2); assert.equal(data.features[0].properties.timestamp, '1970-01-01T00:00:00.000Z');
     await request('clear');
     assert.equal((await request('query')).result.count, 0);
@@ -71,5 +71,25 @@ test('a failure after streamed batches preserves the previously imported dataset
     assert.equal(failed.type, 'error');
     assert.equal((await request('query')).result.count, 1);
     assert.equal((await request('import', {files: [json({locations: records})]})).report.total, 2001);
+  } finally { await worker.terminate(); }
+});
+
+test('worker sends changed geometry and never assumes a discarded response was displayed', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    await request('import', {files: [json({locations: [record(0), record(60000, 134010000)]})]});
+    const first = (await request('query', {options: {mode: 'points'}})).result;
+    const discarded = (await request('query', {options: {mode: 'route'}, known: first.versions})).result;
+    assert.equal(discarded.routes.features.length, 1);
+    const received = (await request('query', {options: {mode: 'route'}, known: first.versions})).result;
+    assert.deepEqual(received.routes, discarded.routes);
+    const pan = (await request('query', {options: {mode: 'route', viewport: [10, 50, 15, 55]}, known: received.versions})).result;
+    assert.equal(pan.routes, undefined); assert.equal(pan.dots, undefined); assert.equal(pan.density, undefined);
+    assert.equal(pan.count, 2);
+    const points = (await request('query', {options: {mode: 'points'}, known: pan.versions})).result;
+    assert.equal(points.routes.features.length, 0); assert.equal(points.dots.features.length, 2);
+    await request('import', {files: [json({locations: [record(90000)]})]});
+    const replaced = (await request('query', {known: points.versions})).result;
+    assert.equal(replaced.count, 1); assert.ok(replaced.density);
   } finally { await worker.terminate(); }
 });

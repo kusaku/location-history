@@ -48,6 +48,7 @@ function setBusy(busy) {
   $('workspace').setAttribute('aria-busy', String(busy));
 }
 function setEnabled(enabled) {
+  for (const id of ['map-summary', 'map-bottom']) $(id).hidden = !enabled;
   for (const id of ['clear', 'fit', 'date-start', 'date-end', 'range-start', 'range-end', 'play', 'period-back', 'period-forward']) $(id).disabled = !enabled;
   document.querySelectorAll('[data-period]').forEach(b => { b.disabled = !enabled; });
   for (const bar of $('histogram').children) bar.disabled = !enabled;
@@ -139,7 +140,6 @@ async function selectBasemap(key, remember = false) {
     state.basemap = key;
     nativeMaps.activate(native);
     $('workspace').classList.toggle('native-map', Boolean(provider.native));
-    $('workspace').classList.toggle('light-map', provider.tone === 'light');
     $('workspace').classList.toggle('google-map', key.startsWith('google'));
     $('workspace').classList.toggle('yandex-map', key.startsWith('yandex'));
     map.setStyle(style, {diff: false});
@@ -208,7 +208,9 @@ function moveWindow(direction) {
 }
 function fitHistory() {
   if (!state.result?.bounds) return;
-  map.fitBounds(state.result.bounds, {padding: {top: 190, bottom: Math.min(240, window.innerHeight * .32), left: 40, right: 50}, maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 700});
+  const height = map.getContainer().clientHeight, heading = document.querySelector('.map-heading'), timeline = $('map-bottom');
+  const padding = {top: Math.min(heading.offsetTop + heading.offsetHeight + 12, height * .25), bottom: Math.min(height - timeline.offsetTop + 12, height * .45), left: 32, right: 48};
+  map.fitBounds(state.result.bounds, {padding, maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 700});
 }
 function importFiles(files, sample = false) {
   if (!files.length || state.importing) return;

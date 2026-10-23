@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=14">
-    <script type="module" src="assets/js/app.mjs?v=19">
+    <link rel="stylesheet" href="assets/css/styles.css?v=15">
+    <script type="module" src="assets/js/app.mjs?v=20">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -298,46 +298,38 @@
         <div id="map" aria-label="Interactive location history map">
         </div>
         <div class="map-heading">
-          <div>
-            <p class="eyebrow" id="dataset-tag">
-              No history loaded
-            </p>
-            <h2 id="map-title">
-              Location history
-            </h2>
+          <div id="map-summary" class="map-summary" hidden>
+            <p class="eyebrow" id="dataset-tag">No history loaded</p>
+            <div class="map-stats" aria-label="Filtered history statistics">
+              <div>
+                <strong id="stat-records">
+                  —
+                </strong>
+                <span>
+                  locations
+                </span>
+              </div>
+              <div>
+                <strong id="stat-days">
+                  —
+                </strong>
+                <span>
+                  recorded days
+                </span>
+              </div>
+              <div>
+                <strong id="stat-distance">
+                  —
+                </strong>
+                <span>
+                  km along tracks
+                </span>
+              </div>
+            </div>
           </div>
-          <button type="button" id="mobile-settings" class="secondary-button">
-            Map settings
-            <span aria-hidden="true">
-              ↗
-            </span>
+          <button type="button" id="mobile-settings" class="secondary-button" aria-label="Map settings">
+            Settings <span aria-hidden="true">↗</span>
           </button>
-        </div>
-        <div class="map-stats" aria-label="Filtered history statistics">
-          <div>
-            <strong id="stat-records">
-              —
-            </strong>
-            <span>
-              locations
-            </span>
-          </div>
-          <div>
-            <strong id="stat-days">
-              —
-            </strong>
-            <span>
-              recorded days
-            </span>
-          </div>
-          <div>
-            <strong id="stat-distance">
-              —
-            </strong>
-            <span>
-              km along tracks
-            </span>
-          </div>
         </div>
         <div class="map-actions">
           <button id="fit" type="button" class="map-action" aria-label="Fit selected history" title="Fit selected history" disabled>
@@ -347,47 +339,21 @@
           </button>
         </div>
         <div id="empty-state" class="empty-state">
-          <span class="empty-orbit" aria-hidden="true">
-            ◎
-          </span>
-          <h3>
-            No history loaded
-          </h3>
-          <p>
-            Open a Google Timeline JSON export or load the sample dataset.
-          </p>
-          <button id="empty-sample" type="button" class="primary-button">
-            Load sample
-            <svg class="icon">
-              <use href="#i-arrow"/>
-            </svg>
-          </button>
-          <button id="empty-import" type="button" class="text-button empty-import">
+          <h3>No history loaded</h3>
+          <p>Open your Google Timeline JSON files to explore your history.</p>
+          <button id="empty-import" type="button" class="primary-button">
             Open history
+            <svg class="icon"><use href="#i-upload"/></svg>
+          </button>
+          <button id="empty-sample" type="button" class="text-button">
+            Load sample <span aria-hidden="true">↗</span>
           </button>
         </div>
         <div id="status" class="status-message" role="status" aria-live="polite" hidden>
         </div>
         <div id="map-error" class="map-error" role="alert" hidden>
         </div>
-        <div class="map-bottom">
-          <div class="legend-row">
-            <div class="legend">
-              <span id="legend-low">
-                Less
-              </span>
-              <span id="legend-ramp" class="legend-ramp">
-              </span>
-              <span id="legend-high">
-                More
-              </span>
-              <span id="legend-unit">
-                recorded locations
-              </span>
-            </div>
-            <span id="render-note">
-            </span>
-          </div>
+        <div id="map-bottom" class="map-bottom" hidden>
           <section class="timeline" aria-labelledby="timeline-title">
             <div class="timeline-heading">
               <div>
@@ -428,44 +394,63 @@
             </div>
             <div class="histogram" id="histogram" role="group" aria-label="Select dates from the history histogram" title="Select a bar’s dates. Use arrow keys to move between bars, then Enter or Space to select.">
             </div>
-            <div class="timeline-inputs">
-              <label>
-                From
-                <input id="date-start" type="date" aria-label="Start date" disabled>
-              </label>
-              <div class="range-controls">
-                <label class="sr-only" for="range-start">
-                  Timeline start
+            <div class="timeline-fields">
+              <div class="timeline-inputs">
+                <label>
+                  From
+                  <input id="date-start" type="date" aria-label="Start date" disabled>
                 </label>
-                <input id="range-start" type="range" min="0" max="1000" value="0" disabled>
-                <label class="sr-only" for="range-end">
-                  Timeline end
+                <div class="range-controls">
+                  <label class="sr-only" for="range-start">
+                    Timeline start
+                  </label>
+                  <input id="range-start" type="range" min="0" max="1000" value="0" disabled>
+                  <label class="sr-only" for="range-end">
+                    Timeline end
+                  </label>
+                  <input id="range-end" type="range" min="0" max="1000" value="1000" disabled>
+                </div>
+                <label>
+                  To
+                  <input id="date-end" type="date" aria-label="End date" disabled>
                 </label>
-                <input id="range-end" type="range" min="0" max="1000" value="1000" disabled>
+                <span class="utc-tag">
+                  UTC
+                </span>
               </div>
-              <label>
-                To
-                <input id="date-end" type="date" aria-label="End date" disabled>
-              </label>
-              <span class="utc-tag">
-                UTC
-              </span>
+              <div class="window-filters" role="group" aria-label="Hour and accuracy filters">
+                <label for="hour-start">From hour · UTC
+                  <select id="hour-start"></select>
+                </label>
+                <label for="hour-end">Until hour · UTC
+                  <select id="hour-end"></select>
+                </label>
+                <label for="accuracy">Accuracy
+                  <select id="accuracy" title="Locations without accuracy information stay included">
+                    <option value="0">All</option>
+                    <option value="100">≤ 100 m</option>
+                    <option value="500">≤ 500 m</option>
+                    <option value="1000">≤ 1 km</option>
+                  </select>
+                </label>
+              </div>
             </div>
-            <div class="window-filters" role="group" aria-label="Hour and accuracy filters">
-              <label for="hour-start">From hour · UTC
-                <select id="hour-start"></select>
-              </label>
-              <label for="hour-end">Until hour · UTC
-                <select id="hour-end"></select>
-              </label>
-              <label for="accuracy">Accuracy
-                <select id="accuracy" title="Locations without accuracy information stay included">
-                  <option value="0">All</option>
-                  <option value="100">≤ 100 m</option>
-                  <option value="500">≤ 500 m</option>
-                  <option value="1000">≤ 1 km</option>
-                </select>
-              </label>
+            <div class="legend-row">
+              <div class="legend">
+                <span id="legend-low">
+                  Less
+                </span>
+                <span id="legend-ramp" class="legend-ramp">
+                </span>
+                <span id="legend-high">
+                  More
+                </span>
+                <span id="legend-unit">
+                  recorded locations
+                </span>
+              </div>
+              <span id="render-note">
+              </span>
             </div>
           </section>
         </div>

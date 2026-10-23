@@ -201,12 +201,12 @@ button:hover:not(:disabled) {
   scrollbar-width: thin;
   scrollbar-color: #3c493e transparent;
   border-right: 1px solid var(--border);
-  padding: 28px 24px 0;
+  padding: 20px 24px 0;
   background: var(--bg);
 }
 
 .sidebar-intro {
-  padding-bottom: 24px;
+  padding-bottom: 14px;
 }
 
 .eyebrow {
@@ -220,24 +220,24 @@ button:hover:not(:disabled) {
 
 .sidebar-intro h1 {
   font-family: 'Space Grotesk',system-ui,sans-serif;
-  font-size: 32px;
+  font-size: 27px;
   line-height: 1.16;
-  letter-spacing: -1.25px;
+  letter-spacing: -1px;
   font-weight: 500;
-  margin: 0 0 12px;
+  margin: 0;
 }
 
 .control-section {
   min-width: 0;
   border-top: 1px solid var(--border);
-  padding: 20px 0;
+  padding: 15px 0;
 }
 
 .section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   gap: 6px;
 }
 
@@ -273,8 +273,8 @@ button:hover:not(:disabled) {
   width: 100%;
   border: 1px dashed #4a5848;
   border-radius: 8px;
-  padding: 16px 12px;
-  min-height: 75px;
+  padding: 12px;
+  min-height: 62px;
   background: #1c251b;
 }
 
@@ -377,7 +377,7 @@ select {
 }
 
 .slider-field {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .label-row {
@@ -399,7 +399,7 @@ select {
 
 .slider-field input {
   display: block;
-  margin: 12px 0 0;
+  margin: 9px 0 0;
   width: 100%;
   height: 5px;
   accent-color: var(--accent);
@@ -407,7 +407,7 @@ select {
 }
 
 .palette-label {
-  margin-top: 21px;
+  margin-top: 15px;
   color: #b9c5b9;
 }
 
@@ -679,64 +679,54 @@ select {
 
 .map-heading {
   position: absolute;
-  top: 28px;
-  left: 28px;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
   pointer-events: none;
   z-index: 2;
 }
 
 .map-heading .eyebrow {
   color: #c5d1c7;
-  font-size: 9px;
+  font-size: 8px;
+  margin: 0 0 5px;
 }
 
-.map-heading h2 {
-  font-family: 'Space Grotesk',sans-serif;
-  font-size: 28px;
-  letter-spacing: -1px;
-  font-weight: 500;
-  margin: 0;
-  text-shadow: 0 1px 12px #0008;
-}
-
-.map-heading:before {
-  content: '';
-  position: absolute;
-  inset: -28px -70px -95px -28px;
-  z-index: -1;
-  background: radial-gradient(ellipse at top left,#101912cf,transparent 75%);
+.map-summary {
+  padding: 8px 10px;
+  background: #141d17e8;
+  border: 1px solid #63725a55;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
 #mobile-settings {
+  margin-left: auto;
   display: none;
   pointer-events: auto;
 }
 
 .map-stats {
-  position: absolute;
-  top: 112px;
-  left: 28px;
   display: flex;
-  gap: 26px;
-  pointer-events: none;
-  background: #141d17dc;
-  border: 1px solid #63725a55;
-  border-radius: 9px;
-  padding: 12px 15px;
-  backdrop-filter: blur(10px);
+  gap: 18px;
 }
 
 .map-stats>div {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 
 .map-stats strong {
   font-family: 'Space Grotesk',sans-serif;
-  font-size: 22px;
+  font-size: 18px;
+  line-height: 1.15;
   font-weight: 500;
-  letter-spacing: -.6px;
+  letter-spacing: -.5px;
 }
 
 .map-stats span {
@@ -747,7 +737,7 @@ select {
 .map-actions {
   position: absolute;
   right: 13px;
-  top: 148px;
+  top: 98px;
 }
 
 .map-action {
@@ -835,22 +825,19 @@ select {
 
 .map-bottom {
   position: absolute;
-  bottom: max(32px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 10px));
-  left: 28px;
-  right: 28px;
+  bottom: max(24px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 8px));
+  left: 16px;
+  right: 16px;
   pointer-events: none;
 }
 
 .legend-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  margin: 0 0 12px;
-  gap: 15px;
-  background: #141d17d9;
-  border: 1px solid #63725a44;
-  border-radius: 6px;
-  padding: 7px 9px;
+  margin-top: 7px;
+  gap: 4px 10px;
 }
 
 .legend {
@@ -875,6 +862,7 @@ select {
 .legend-row>span {
   font-size: 9px;
   color: #d5dfd1;
+  margin-left: auto;
 }
 
 .timeline {
@@ -882,8 +870,8 @@ select {
   background: #141d17f5;
   backdrop-filter: blur(16px);
   border: 1px solid #3c493b;
-  border-radius: 12px;
-  padding: 18px 20px 15px;
+  border-radius: 9px;
+  padding: 12px;
   box-shadow: 0 10px 36px #0003;
 }
 
@@ -892,17 +880,25 @@ select {
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
+}
+
+.timeline-heading>div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
 }
 
 .timeline .eyebrow {
   font-size: 8px;
   letter-spacing: 1.5px;
+  margin: 0;
 }
 
 .timeline-heading p {
   font-size: 11px;
-  margin: 5px 0 0;
+  margin: 0;
   color: #d6dfd1;
 }
 
@@ -910,7 +906,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   max-width: 100%;
 }
 
@@ -942,11 +938,11 @@ select {
 }
 
 .histogram {
-  height: 38px;
+  height: 28px;
   display: flex;
   align-items: end;
   gap: 3px;
-  margin: 18px 0 8px;
+  margin: 8px 0 6px;
 }
 
 .histogram button {
@@ -991,10 +987,18 @@ select {
   background: #d5f47615;
 }
 
+.timeline-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 12px;
+}
+
 .timeline-inputs {
   display: flex;
+  flex: 1 1 360px;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -1019,12 +1023,10 @@ select {
 
 .window-filters {
   display: grid;
+  flex: 1 1 260px;
   grid-template-columns: repeat(3,minmax(0,1fr));
-  gap: 8px;
-  max-width: 360px;
-  margin: 10px 0 0 auto;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+  gap: 6px;
+  max-width: 320px;
 }
 
 .window-filters label {
@@ -1035,9 +1037,9 @@ select {
 }
 
 .window-filters select {
-  margin-top: 4px;
+  margin-top: 3px;
   min-width: 0;
-  min-height: 32px;
+  min-height: 30px;
   padding: 5px 6px;
   font-size: 11px;
   border-radius: 5px;
@@ -1071,63 +1073,54 @@ select {
   display: none;
 }
 
-.empty-import {
-  display: block;
-  margin: 8px auto 0;
-}
-
-.empty-state .primary-button {
-  margin-top: 16px;
-}
-
 .empty-state {
   position: absolute;
-  top: 43%;
+  top: 50%;
   left: 50%;
   transform: translate(-50%,-50%);
-  width: 340px;
-  max-width: calc(100% - 40px);
-  padding: 25px;
+  width: 300px;
+  max-width: calc(100% - 32px);
+  padding: 18px;
   text-align: center;
-  background: #131d17e8;
+  background: #131d17ed;
   border: 1px solid #3b4939;
-  border-radius: 18px;
-  box-shadow: 0 12px 80px #0003;
+  border-radius: 12px;
+  box-shadow: 0 12px 60px #0003;
 }
 
-.empty-orbit {
-  font-size: 47px;
-  color: var(--accent);
-  line-height: 1;
+.empty-state .text-button {
+  margin-top: 5px;
 }
 
 .empty-state h3 {
   font-family: 'Space Grotesk',sans-serif;
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.2;
-  letter-spacing: -.7px;
+  letter-spacing: -.6px;
   font-weight: 500;
+  margin: 0;
 }
 
 .empty-state p {
   color: #afbea9;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.6;
+  margin: 8px 0 14px;
 }
 
 .primary-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 22px;
+  gap: 12px;
+  width: 100%;
   background: var(--accent);
   color: #1c2817;
   font-size: 12px;
   font-weight: 600;
-  padding: 12px 17px;
-  min-height: 42px;
+  padding: 10px 14px;
+  min-height: 40px;
   border-radius: 7px;
-  margin: 20px auto 0;
 }
 
 .status-message,.map-error {
@@ -1184,10 +1177,6 @@ select {
 .drop-overlay span {
   color: var(--muted);
   font-size: 12px;
-}
-
-.light-map .map-heading:before {
-  background: radial-gradient(ellipse at top left,#142016de,transparent 75%);
 }
 
 dialog {
@@ -1308,45 +1297,7 @@ dialog p {
     grid-template-columns: 350px minmax(0,1fr);
   }
   .sidebar {
-    padding: 34px 30px 0;
-  }
-  .sidebar-intro h1 {
-    font-size: 38px;
-  }
-  .control-section {
-    padding: 24px 0;
-  }
-  .map-heading {
-    top: 36px;
-    left: 36px;
-  }
-  .map-heading:before {
-    top: -36px;
-    left: -36px;
-  }
-  .map-heading h2 {
-    font-size: 36px;
-  }
-  .map-stats {
-    top: 134px;
-    left: 36px;
-  }
-  .map-stats strong {
-    font-size: 28px;
-  }
-  .map-bottom {
-    left: 36px;
-    right: 36px;
-    bottom: max(36px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 10px));
-  }
-  .histogram {
-    height: 52px;
-  }
-  .timeline {
-    padding: 21px 25px;
-  }
-  .timeline-heading p {
-    font-size: 12px;
+    padding: 22px 30px 0;
   }
 }
 
@@ -1355,31 +1306,10 @@ dialog p {
     grid-template-columns: 275px minmax(0,1fr);
   }
   .sidebar {
-    padding: 24px 18px 0;
+    padding: 20px 18px 0;
   }
   .sidebar-intro h1 {
-    font-size: 29px;
-  }
-  .map-heading {
-    left: 20px;
-    top: 22px;
-  }
-  .map-heading h2 {
-    font-size: 25px;
-  }
-  .map-stats {
-    left: 20px;
-    gap: 20px;
-  }
-  .map-stats strong {
-    font-size: 20px;
-  }
-  .map-bottom {
-    left: 16px;
-    right: 16px;
-  }
-  .timeline {
-    padding: 15px;
+    font-size: 26px;
   }
   .timeline-inputs {
     gap: 7px;
@@ -1408,9 +1338,6 @@ dialog p {
   }
   .timeline-heading p {
     font-size: 10px;
-  }
-  .timeline .eyebrow {
-    margin-bottom: 6px;
   }
 }
 
@@ -1458,59 +1385,32 @@ dialog p {
   .sidebar {
     border-right: 0;
     overflow: visible;
-    padding: 24px 20px 0;
+    padding: 18px 20px 0;
     display: block;
     width: 100%;
   }
   .sidebar-intro {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 24px;
-    gap: 15px;
+    padding-bottom: 14px;
   }
   .sidebar-intro .eyebrow {
     display: none;
   }
   .sidebar-intro h1 {
-    font-size: 28px;
-    margin: 0;
+    font-size: 26px;
   }
   .back-to-map {
     display: inline-block;
     color: var(--accent);
     font-size: 12px;
-    margin: 0 0 24px;
+    margin: 0 0 12px;
     text-decoration: none;
-    min-height: 44px;
+    min-height: 36px;
     align-content: center;
   }
   .map-heading {
-    top: 23px;
-    left: 20px;
-    right: 16px;
-    display: flex;
-    align-items: start;
-    justify-content: space-between;
-  }
-  .map-heading h2 {
-    font-size: 25px;
-  }
-  .map-heading .eyebrow {
-    font-size: 8px;
-    letter-spacing: 1.3px;
-    margin-bottom: 8px;
-  }
-  .map-heading:before {
-    inset: -25px -16px -100px -20px;
-  }
-  .map-stats {
-    top: 100px;
-    padding: 10px 12px;
-    gap: 23px;
-  }
-  .map-stats strong {
-    font-size: 19px;
+    top: 14px;
+    left: 14px;
+    right: 14px;
   }
   .map-stats span {
     font-size: 8px;
@@ -1518,25 +1418,22 @@ dialog p {
   #mobile-settings {
     display: flex;
     font-size: 9px;
-    padding: 10px;
+    padding: 8px;
     background: #172219eb;
-    gap: 7px;
-    min-height: 44px;
+    gap: 5px;
+    min-height: 36px;
   }
   .maplibregl-ctrl-top-right {
-    top: 157px;
+    top: 66px;
   }
   .map-actions {
-    top: 276px;
-  }
-  .map-bottom {
-    bottom: max(32px, var(--attribution-space, 0px), calc(var(--native-footer, 0px) + 10px));
-    left: 14px;
-    right: 14px;
+    top: 148px;
   }
   .timeline {
-    border-radius: 10px;
-    padding: 14px 12px 12px;
+    padding: 10px;
+  }
+  .window-filters {
+    max-width: none;
   }
   .timeline-inputs label {
     font-size: 0;
@@ -1551,13 +1448,11 @@ dialog p {
   }
   .histogram {
     gap: 2px;
-    margin-top: 14px;
-    height: 31px;
+    height: 24px;
   }
   .timeline-heading p {
-    max-width: 165px;
-    font-size: 9px;
-    line-height: 1.5;
+    font-size: 10px;
+    line-height: 1.4;
   }
   .presets {
     gap: 2px;
@@ -1565,20 +1460,16 @@ dialog p {
   .timeline-controls {
     width: 100%;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
   }
   .presets button,
   .period-navigation button {
-    font-size: 10px;
+    font-size: 9px;
     min-height: 36px;
-    padding: 7px;
+    padding: 6px 5px;
   }
   .period-navigation button {
-    min-width: 36px;
-  }
-  .legend-row {
-    padding: 6px 7px;
-    margin-bottom: 10px;
+    min-width: 32px;
   }
   .legend {
     gap: 7px;
@@ -1591,14 +1482,6 @@ dialog p {
     font-size: 8px;
     max-width: 160px;
   }
-  .empty-state {
-    top: 44%;
-    width: 310px;
-    padding: 16px 20px;
-  }
-  .empty-state h3 {
-    font-size: 22px;
-  }
   .map-error {
     top: 160px;
     left: 20px;
@@ -1610,17 +1493,8 @@ dialog p {
     top: 150px;
     font-size: 10px;
   }
-  .control-section {
-    padding: 20px 0;
-  }
   .source-row>span {
     max-width: none;
-  }
-  .source-row {
-    padding-top: 10px;
-  }
-  .upload-button {
-    min-height: 70px;
   }
   dialog {
     padding: 22px;
@@ -1632,14 +1506,11 @@ dialog p {
 }
 
 @media(max-width:400px) {
-  .sidebar-intro h1 {
-    font-size: 26px;
-  }
   .map-stats {
-    gap: 23px;
+    gap: 12px;
   }
   .map-stats strong {
-    font-size: 19px;
+    font-size: 16px;
   }
   .timeline-inputs {
     gap: 6px;
@@ -1650,12 +1521,6 @@ dialog p {
   .presets button,
   .period-navigation button {
     padding: 6px 5px;
-  }
-  .timeline-heading p {
-    max-width: 143px;
-  }
-  .map-heading h2 {
-    font-size: 23px;
   }
 }
 

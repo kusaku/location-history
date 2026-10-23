@@ -190,7 +190,7 @@ button:hover:not(:disabled) {
 
 .app-layout {
   display: grid;
-  grid-template-columns: 310px minmax(0,1fr);
+  grid-template-columns: 340px minmax(0,1fr);
   height: calc(100dvh - 72px);
   min-height: 520px;
 }

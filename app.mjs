@@ -184,7 +184,7 @@ function syncDates() {
 function stopPlayback() {
   clearTimeout(playback); playback = null;
   $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Play timeline'); $('play').setAttribute('aria-pressed', 'false');
-  syncDates();
+  $('play').disabled = !state.report || $('period-forward').disabled;
 }
 function setDates(start, end, period = null, periodDay = null) {
   state.start = start; state.end = end;

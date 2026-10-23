@@ -964,21 +964,46 @@ select {
   margin: 18px 0 8px;
 }
 
-.histogram span {
+.histogram button {
   flex: 1;
   min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 2px;
+  padding: 0;
+  background: none;
+  position: relative;
+}
+
+.histogram button::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   background: #617c4b;
   border-radius: 2px 2px 0 0;
-  height: 2px;
+  height: var(--bar-height, 3%);
   transition: height .2s,opacity .2s;
 }
 
-.histogram span.selected {
+.histogram button.selected::before {
   background: #d5f476;
 }
 
-.histogram span.outside {
+.histogram button.outside::before {
   opacity: .2;
+}
+
+.histogram button:not(:disabled):hover::before,
+.histogram button:focus-visible::before {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.histogram button:not(:disabled):hover,
+.histogram button:focus-visible {
+  background: #d5f47615;
 }
 
 .timeline-inputs {

@@ -16,7 +16,7 @@ test('new visitors default to Google, with a configured-provider fallback', () =
 
 test('display, map and filter preferences survive a storage round trip', () => {
   const storage = memoryStorage();
-  const input = {basemap: 'google-satellite', mode: 'hex', metric: 'days', palette: 'ocean', radius: 39, intensity: 1.7, opacity: .65, hourStart: 8, hourEnd: 19, accuracy: 500, period: '1', dateRange: [4 * DAY, 5 * DAY - 1]};
+  const input = {basemap: 'google-satellite', mode: 'hex', metric: 'days', palette: 'ocean', radius: 39, intensity: 1.7, opacity: .65, hourStart: 8, hourEnd: 19, accuracy: 500, period: '1', periodDay: null, dateRange: [4 * DAY, 5 * DAY - 1]};
   saveSettings(input, maps, storage);
   assert.equal(storage.key, 'location-history.settings.v1');
   assert.deepEqual(loadSettings(maps, storage), input);
@@ -58,10 +58,20 @@ test('malformed storage and storage failures never prevent loading or changing s
 test('date filters restore after import, bounded to the newly opened history', () => {
   const storage = memoryStorage();
   const settings = saveSettings({period: null, dateRange: [4 * DAY, 9 * DAY - 1]}, maps, storage);
-  assert.deepEqual(dateSelection(settings, 2 * DAY + 5000, 12 * DAY), {start: 4 * DAY, end: 9 * DAY - 1, period: null});
-  assert.deepEqual(dateSelection(settings, 6 * DAY, 10 * DAY), {start: 6 * DAY, end: 9 * DAY - 1, period: null});
-  assert.deepEqual(dateSelection(settings, 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 26 * DAY - 1, period: 'all'});
-  assert.deepEqual(dateSelection(saveSettings({period: '1', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 20 * DAY, 25 * DAY), {start: 25 * DAY, end: 26 * DAY - 1, period: '1'});
-  assert.deepEqual(dateSelection(saveSettings({period: '30'}, maps, storage), 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 26 * DAY - 1, period: '30'});
-  assert.deepEqual(dateSelection(saveSettings({period: 'all', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 2 * DAY, 12 * DAY), {start: 2 * DAY, end: 13 * DAY - 1, period: 'all'});
+  assert.deepEqual(dateSelection(settings, 2 * DAY + 5000, 12 * DAY), {start: 4 * DAY, end: 9 * DAY - 1, period: null, periodDay: null});
+  assert.deepEqual(dateSelection(settings, 6 * DAY, 10 * DAY), {start: 6 * DAY, end: 9 * DAY - 1, period: null, periodDay: null});
+  assert.deepEqual(dateSelection(settings, 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 26 * DAY - 1, period: 'all', periodDay: null});
+  assert.deepEqual(dateSelection(saveSettings({period: '1', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 21 * DAY - 1, period: '1', periodDay: null});
+  assert.deepEqual(dateSelection(saveSettings({period: '30'}, maps, storage), 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 26 * DAY - 1, period: '30', periodDay: null});
+  assert.deepEqual(dateSelection(saveSettings({period: 'all', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 2 * DAY, 12 * DAY), {start: 2 * DAY, end: 13 * DAY - 1, period: 'all', periodDay: null});
+});
+
+test('calendar navigation retains its preferred day across reloads and validates stored anchors', () => {
+  const storage = memoryStorage();
+  const min = Date.parse('2024-01-01T00:00:00Z'), max = Date.parse('2025-01-01T00:00:00Z');
+  const settings = saveSettings({period: '30', periodDay: 31, dateRange: [Date.parse('2024-02-29T00:00:00Z'), Date.parse('2024-03-31T00:00:00Z') - 1]}, maps, storage);
+  assert.equal(loadSettings(maps, storage).periodDay, 31);
+  assert.equal(dateSelection(settings, min, max).periodDay, 31);
+  for (const periodDay of [0, 32, '31', Infinity, 1.5]) assert.equal(saveSettings({...settings, periodDay}, maps, storage).periodDay, null);
+  assert.equal(saveSettings({...settings, period: 'all'}, maps, storage).periodDay, null);
 });

@@ -1,7 +1,8 @@
 import {DAY} from './data.mjs?v=4';
+import {resizeWindow} from './timeline.mjs?v=1';
 
 const STORAGE_KEY = 'location-history.settings.v1';
-const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85, hourStart: 0, hourEnd: 24, accuracy: 0, period: 'all', dateRange: null});
+const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85, hourStart: 0, hourEnd: 24, accuracy: 0, period: 'all', periodDay: null, dateRange: null});
 
 function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, basemap: availableMaps.includes('google') ? 'google' : availableMaps.includes('dark') ? 'dark' : availableMaps[0]};
@@ -19,6 +20,7 @@ function validatedSettings(input, availableMaps) {
   const range = input.dateRange;
   if (settings.period !== 'all' && Array.isArray(range) && range.length === 2 && range.every(value => Number.isInteger(value) && Math.abs(value) < 8.64e15) && range[0] <= range[1] && range[0] % DAY === 0 && (range[1] + 1) % DAY === 0) settings.dateRange = [...range];
   if (settings.period === null && !settings.dateRange) settings.period = 'all';
+  if (['30', '365'].includes(settings.period) && Number.isInteger(input.periodDay) && input.periodDay >= 1 && input.periodDay <= 31) settings.periodDay = input.periodDay;
   return settings;
 }
 
@@ -40,8 +42,8 @@ export function dateSelection(settings, min, max) {
   max = Math.floor(max / DAY) * DAY + DAY - 1;
   if (settings.dateRange) {
     const start = Math.max(min, settings.dateRange[0]), end = Math.min(max, settings.dateRange[1]);
-    if (start <= end) return {start, end, period: settings.period};
+    if (start <= end) return {start, end, period: settings.period, periodDay: start === settings.dateRange[0] ? settings.periodDay : null};
   }
   const period = settings.period ?? 'all';
-  return {start: period === 'all' ? min : Math.max(min, max - Number(period) * DAY + 1), end: max, period};
+  return {...resizeWindow(min, period, min, max), period, periodDay: null};
 }

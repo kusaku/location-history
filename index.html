@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="styles.css?v=10">
-    <script type="module" src="app.mjs?v=13">
+    <link rel="stylesheet" href="styles.css?v=11">
+    <script type="module" src="app.mjs?v=14">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -445,41 +445,41 @@
             <div class="timeline-heading">
               <div>
                 <span class="eyebrow" id="timeline-title">
-                  Date range
+                  Date window
                 </span>
                 <p id="range-summary">
                   Load history to filter by date
                 </p>
               </div>
               <div class="timeline-controls">
-                <div class="presets" role="group" aria-label="Date presets">
-                  <button type="button" data-period="1" aria-pressed="false" disabled>
+                <div class="presets" role="group" aria-label="Window size">
+                  <button type="button" data-period="1" aria-pressed="false" title="Resize the current window to one day" disabled>
                     Day
                   </button>
-                  <button type="button" data-period="30" aria-pressed="false" disabled>
-                    30d
+                  <button type="button" data-period="30" aria-pressed="false" title="Resize the current window to one calendar month" disabled>
+                    Month
                   </button>
-                  <button type="button" data-period="365" aria-pressed="false" disabled>
-                    1y
+                  <button type="button" data-period="365" aria-pressed="false" title="Resize the current window to one calendar year" disabled>
+                    Year
                   </button>
                   <button type="button" data-period="all" aria-pressed="true" disabled>
                     All time
                   </button>
                 </div>
                 <div class="period-navigation" role="group" aria-label="Period navigation">
-                  <button id="period-back" type="button" aria-label="Previous period" title="Previous period" disabled>
+                  <button id="period-back" type="button" aria-label="Move window backward" title="Move window backward" disabled>
                     ←
                   </button>
-                  <button id="play" type="button" aria-label="Play timeline" disabled>
+                  <button id="play" type="button" aria-label="Play timeline" aria-pressed="false" title="Play or pause window steps" disabled>
                     ▶
                   </button>
-                  <button id="period-forward" type="button" aria-label="Next period" title="Next period" disabled>
+                  <button id="period-forward" type="button" aria-label="Move window forward" title="Move window forward" disabled>
                     →
                   </button>
                 </div>
               </div>
             </div>
-            <div class="histogram" id="histogram" aria-label="Location counts across the full imported history">
+            <div class="histogram" id="histogram" role="group" aria-label="Select dates from the history histogram" title="Select a bar’s dates. Use arrow keys to move between bars, then Enter or Space to select.">
             </div>
             <div class="timeline-inputs">
               <label>
@@ -598,6 +598,12 @@
           Journeys
         </b>
         connects consecutive observations, breaking at gaps over six hours, excluded records, dateline crossings, or implausible speeds.
+      </p>
+      <h3>
+        Date window
+      </h3>
+      <p>
+        Day, Month, and Year resize the window from its current start; they do not jump to the latest dates. Months and years follow the UTC calendar. Backward and forward move the entire window by its selected size, and Play repeats forward steps until the end of the history. Custom windows step by their duration. Select any histogram bar to use its covering UTC dates. The 64 bars span the entire history, so their date ranges depend on the imported history. Use arrow keys to move between bars, then Enter or Space to select.
       </p>
       <h3>
         Density metrics

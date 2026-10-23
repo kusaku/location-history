@@ -1,7 +1,8 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=9';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, shiftPeriod} from './data.mjs?v=4';
-import {loadSettings, saveSettings, dateSelection} from './settings.mjs?v=2';
+import {DAY} from './data.mjs?v=4';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=1';
+import {loadSettings, saveSettings, dateSelection} from './settings.mjs?v=3';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -49,6 +50,7 @@ function setBusy(busy) {
 function setEnabled(enabled) {
   for (const id of ['clear', 'fit', 'export', 'date-start', 'date-end', 'range-start', 'range-end', 'play', 'period-back', 'period-forward']) $(id).disabled = !enabled;
   document.querySelectorAll('[data-period]').forEach(b => { b.disabled = !enabled; });
+  for (const bar of $('histogram').children) bar.disabled = !enabled;
 }
 function currentOptions() {
   const bounds = map?.getBounds();
@@ -73,6 +75,7 @@ function rememberSettings() {
     basemap: preferences.basemap,
     accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value),
     period: state.report ? state.period : preferences.period,
+    periodDay: state.report ? state.periodDay : preferences.periodDay,
     dateRange: state.report ? [state.start, state.end] : preferences.dateRange,
   }, MAP_ORDER);
 }
@@ -155,12 +158,13 @@ function showResult(result) {
   $('render-note').textContent = state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`;
   $('fit').disabled = !result.count;
   const max = Math.max(1, ...result.histogram);
-  const duration = Math.max(1, state.report.max - state.report.min);
   [...$('histogram').children].forEach((bar, i) => {
-    bar.style.height = `${Math.max(3, Math.sqrt(result.histogram[i] / max) * 100)}%`;
-    const inRange = state.report.min + ((i + 1) / 64) * duration >= state.start && state.report.min + (i / 64) * duration <= state.end;
-    bar.className = inRange ? 'selected' : 'outside';
-    bar.title = `${number.format(result.histogram[i])} locations`;
+    const range = histogramWindow(state.report.min, state.report.max, i, result.histogram.length);
+    bar.style.setProperty('--bar-height', `${Math.max(3, Math.sqrt(result.histogram[i] / max) * 100)}%`);
+    bar.className = range.end >= state.start && range.start <= state.end ? 'selected' : 'outside';
+    bar.title = `${formatDate(range.start)} — ${formatDate(range.end)} · ${number.format(result.histogram[i])} locations`;
+    bar.setAttribute('aria-label', bar.title);
+    bar.setAttribute('aria-pressed', String(state.start === range.start && state.end === range.end));
   });
   paintSources(result);
 }
@@ -174,13 +178,26 @@ function syncDates() {
   $('range-start').disabled = $('range-end').disabled = max === min;
   $('period-back').disabled = state.start <= min;
   $('period-forward').disabled = state.end >= max + DAY - 1;
+  $('play').disabled = !playback && $('period-forward').disabled;
   document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.period === state.period)));
 }
-function stopPlayback() { clearTimeout(playback); playback = null; $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Play timeline'); }
-function setDates(start, end, period = null) {
+function stopPlayback() {
+  clearTimeout(playback); playback = null;
+  $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Play timeline'); $('play').setAttribute('aria-pressed', 'false');
+  syncDates();
+}
+function setDates(start, end, period = null, periodDay = null) {
   state.start = start; state.end = end;
   state.period = period ?? (start <= state.report.min && end >= state.report.max ? 'all' : null);
+  state.periodDay = periodDay;
   syncDates(); refresh();
+}
+function moveWindow(direction) {
+  const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
+  const next = shiftWindow(state.start, state.end, min, max, direction, state.period, state.periodDay ?? undefined);
+  if (next.start === state.start && next.end === state.end) return false;
+  setDates(next.start, next.end, state.period, state.periodDay); rememberSettings();
+  return true;
 }
 function fitHistory() {
   if (!state.result?.bounds) return;
@@ -213,7 +230,7 @@ function clearHistory() {
   for (const id of ['stat-records', 'stat-days', 'stat-distance']) $(id).textContent = '—';
   for (const id of ['date-start', 'date-end']) $(id).value = '';
   $('range-start').value = 0; $('range-end').value = 1000;
-  for (const bar of $('histogram').children) { bar.style.height = '3%'; bar.className = ''; }
+  for (const bar of $('histogram').children) { bar.style.setProperty('--bar-height', '3%'); bar.className = ''; bar.removeAttribute('title'); bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false'); }
   status('History cleared from memory.');
 }
 function createWorker() {
@@ -268,7 +285,24 @@ function bindControls() {
       button.append(swatch, label); button.onclick = () => selectBasemap(key, true); grid.append(button);
     }
   }
-  for (let i = 0; i < 64; i++) $('histogram').append(document.createElement('span'));
+  for (let i = 0; i < 64; i++) {
+    const bar = document.createElement('button'); bar.type = 'button'; bar.disabled = true;
+    bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false');
+    bar.tabIndex = i === 0 ? 0 : -1;
+    bar.onclick = () => {
+      stopPlayback();
+      const range = histogramWindow(state.report.min, state.report.max, i, $('histogram').children.length);
+      setDates(range.start, range.end); rememberSettings();
+    };
+    bar.onkeydown = event => {
+      const bars = [...$('histogram').children];
+      const index = {ArrowLeft: Math.max(0, i - 1), ArrowRight: Math.min(bars.length - 1, i + 1), Home: 0, End: bars.length - 1}[event.key];
+      if (index === undefined) return;
+      event.preventDefault(); bars[index].focus();
+    };
+    bar.onfocus = () => { for (const sibling of $('histogram').children) sibling.tabIndex = sibling === bar ? 0 : -1; };
+    $('histogram').append(bar);
+  }
   for (let i = 0; i <= 24; i++) {
     if (i < 24) $('hour-start').add(new Option(`${String(i).padStart(2, '0')}:00`, i));
     if (i > 0) $('hour-end').add(new Option(`${String(i).padStart(2, '0')}:00`, i));
@@ -304,24 +338,25 @@ function bindControls() {
   };
   for (const id of ['range-start', 'range-end']) $(id).onchange = rememberSettings;
   document.querySelectorAll('[data-period]').forEach(button => { button.onclick = () => {
-    stopPlayback(); const end = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
-    const start = button.dataset.period === 'all' ? Math.floor(state.report.min / DAY) * DAY : Math.max(Math.floor(state.report.min / DAY) * DAY, end - Number(button.dataset.period) * DAY + 1);
-    setDates(start, end, button.dataset.period); rememberSettings();
-  }; });
-  for (const [id, direction] of [['period-back', -1], ['period-forward', 1]]) $(id).onclick = () => {
     stopPlayback();
     const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
-    const next = shiftPeriod(state.start, state.end, min, max, direction);
-    setDates(next.start, next.end, state.period); rememberSettings();
+    const period = button.dataset.period;
+    const day = period === state.period ? state.periodDay ?? undefined : undefined;
+    const next = resizeWindow(state.start, period, min, max, day);
+    setDates(next.start, next.end, period, ['30', '365'].includes(period) ? day ?? new Date(next.start).getUTCDate() : null); rememberSettings();
+  }; });
+  for (const [id, direction] of [['period-back', -1], ['period-forward', 1]]) $(id).onclick = () => {
+    stopPlayback(); moveWindow(direction);
   };
   $('play').onclick = () => {
     if (playback) { stopPlayback(); return; }
-    const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
-    const step = Math.max(DAY, Math.ceil((max - min) / DAY / 80) * DAY);
-    if (state.end >= max) state.end = min + step - 1;
-    state.start = min; state.period = null; syncDates(); refresh();
-    $('play').textContent = 'Ⅱ'; $('play').setAttribute('aria-label', 'Pause timeline');
-    const tick = () => { if (querying) { playback = setTimeout(tick, 500); return; } state.end = Math.min(max, state.end + step); state.period = state.end >= max ? 'all' : null; syncDates(); requestQuery(); if (state.end >= max) stopPlayback(); else playback = setTimeout(tick, 650); };
+    if ($('period-forward').disabled) return;
+    $('play').textContent = 'Ⅱ'; $('play').setAttribute('aria-label', 'Pause timeline'); $('play').setAttribute('aria-pressed', 'true');
+    const tick = () => {
+      if (querying) { playback = setTimeout(tick, 100); return; }
+      if (!moveWindow(1) || $('period-forward').disabled) { stopPlayback(); return; }
+      playback = setTimeout(tick, 650);
+    };
     playback = setTimeout(tick, 650);
   };
   $('help').onclick = () => $('guide').showModal(); $('close-guide').onclick = () => $('guide').close();

@@ -134,7 +134,6 @@ async function selectBasemap(key) {
     $('workspace').classList.toggle('light-map', provider.tone === 'light');
     $('workspace').classList.toggle('google-map', key === 'google' || key === 'google-terrain');
     $('workspace').classList.toggle('yandex-map', key === 'yandex');
-    $('yandex-brand').hidden = key !== 'yandex';
     $('map-provider').textContent = provider.detail;
     map.setStyle(style, {diff: false});
     setAttribution(provider.attribution ? style.metadata?.providerAttribution ?? '' : '');
@@ -324,10 +323,6 @@ async function init() {
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     map.addControl(new maplibre.NavigationControl({showCompass: false}), 'top-right');
-    const brand = document.createElement('a');
-    brand.id = 'yandex-brand'; brand.href = 'https://yandex.com/maps/'; brand.target = '_blank'; brand.rel = 'noopener'; brand.hidden = true;
-    const logo = document.createElement('img'); logo.src = './yandex-logo.svg'; logo.alt = 'Yandex Maps'; logo.width = 91; logo.height = 48;
-    brand.append(logo); map.getContainer().append(brand);
     attributionControl = new maplibre.AttributionControl({compact: false});
     map.addControl(attributionControl, 'bottom-right');
     new ResizeObserver(entries => $('workspace').style.setProperty('--attribution-space', `${entries[0].contentRect.height + 10}px`)).observe(map.getContainer().querySelector('.maplibregl-ctrl-bottom-right'));

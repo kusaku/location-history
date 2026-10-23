@@ -51,7 +51,7 @@ test('Google errors do not expose credentials or omit mandatory attribution', as
   await assert.rejects(noCredit.style(map), /required data attribution/);
 });
 
-test('Yandex uses Web Mercator and preserves logo, terms and map links', async () => {
+test('Yandex uses Web Mercator and preserves terms and map links', async () => {
   const {createYandexProvider} = await import('./maps.mjs');
   const provider = createYandexProvider('test-key');
   const style = await provider.style({getCenter: () => ({lng: 13.4, lat: 52.5}), getZoom: () => 10});

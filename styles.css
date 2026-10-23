@@ -781,12 +781,7 @@ select {
   margin-right: 6px;
 }
 
-#yandex-brand { position: absolute; left: 0; bottom: 0; z-index: 2; height: 48px; }
-#yandex-brand img { display: block; }
-.yandex-map .maplibregl-ctrl-attrib { max-width: calc(100% - 91px); font: 11px/17px Arial, sans-serif!important; }
-.yandex-map .maplibregl-ctrl-bottom-right { width: 100%; pointer-events: none; }
-.yandex-map .maplibregl-ctrl-attrib { pointer-events: auto; }
-.yandex-map .map-bottom { bottom: max(58px, var(--attribution-space, 0px)); }
+.yandex-map .maplibregl-ctrl-attrib { font: 11px/17px Arial, sans-serif!important; }
 
 .maplibregl-ctrl-bottom-right {
   right: 0;

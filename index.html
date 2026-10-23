@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=16">
+    <link rel="stylesheet" href="assets/css/styles.css?v=17">
     <script type="module" src="assets/js/app.mjs?v=21">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
@@ -387,50 +387,48 @@
                     →
                   </button>
                 </div>
+                <div class="window-filters" role="group" aria-label="Hour and accuracy filters">
+                  <label for="hour-start">From
+                    <select id="hour-start" aria-label="From hour UTC" title="From hour · UTC"></select>
+                  </label>
+                  <label for="hour-end">To
+                    <select id="hour-end" aria-label="Until hour UTC" title="Until hour · UTC"></select>
+                  </label>
+                  <label for="accuracy">Accuracy
+                    <select id="accuracy" title="Locations without accuracy information stay included">
+                      <option value="0">All</option>
+                      <option value="100">≤ 100 m</option>
+                      <option value="500">≤ 500 m</option>
+                      <option value="1000">≤ 1 km</option>
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
             <div class="histogram" id="histogram" role="group" aria-label="Select dates from the history histogram" title="Select a bar’s dates. Use arrow keys to move between bars, then Enter or Space to select.">
             </div>
-            <div class="timeline-fields">
-              <div class="timeline-inputs">
-                <label>
-                  From
-                  <input id="date-start" type="date" aria-label="Start date" disabled>
+            <div class="timeline-inputs">
+              <label>
+                From
+                <input id="date-start" type="date" aria-label="Start date" disabled>
+              </label>
+              <div class="range-controls">
+                <label class="sr-only" for="range-start">
+                  Timeline start
                 </label>
-                <div class="range-controls">
-                  <label class="sr-only" for="range-start">
-                    Timeline start
-                  </label>
-                  <input id="range-start" type="range" min="0" max="1000" value="0" disabled>
-                  <label class="sr-only" for="range-end">
-                    Timeline end
-                  </label>
-                  <input id="range-end" type="range" min="0" max="1000" value="1000" disabled>
-                </div>
-                <label>
-                  To
-                  <input id="date-end" type="date" aria-label="End date" disabled>
+                <input id="range-start" type="range" min="0" max="1000" value="0" disabled>
+                <label class="sr-only" for="range-end">
+                  Timeline end
                 </label>
-                <span class="utc-tag">
-                  UTC
-                </span>
+                <input id="range-end" type="range" min="0" max="1000" value="1000" disabled>
               </div>
-              <div class="window-filters" role="group" aria-label="Hour and accuracy filters">
-                <label for="hour-start">From hour · UTC
-                  <select id="hour-start"></select>
-                </label>
-                <label for="hour-end">Until hour · UTC
-                  <select id="hour-end"></select>
-                </label>
-                <label for="accuracy">Accuracy
-                  <select id="accuracy" title="Locations without accuracy information stay included">
-                    <option value="0">All</option>
-                    <option value="100">≤ 100 m</option>
-                    <option value="500">≤ 500 m</option>
-                    <option value="1000">≤ 1 km</option>
-                  </select>
-                </label>
-              </div>
+              <label>
+                To
+                <input id="date-end" type="date" aria-label="End date" disabled>
+              </label>
+              <span class="utc-tag">
+                UTC
+              </span>
             </div>
             <div class="legend-row">
               <div class="legend">

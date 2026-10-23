@@ -904,6 +904,8 @@ select {
 
 .timeline-controls {
   display: flex;
+  flex: 1 1 max-content;
+  justify-content: flex-end;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
@@ -987,22 +989,15 @@ select {
   background: #d5f47615;
 }
 
-.timeline-fields {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 8px 12px;
-}
-
 .timeline-inputs {
   display: flex;
-  flex: 1 1 360px;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.timeline-inputs label {
+.timeline-inputs label,
+.window-filters label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1012,39 +1007,36 @@ select {
   flex-shrink: 0;
 }
 
-.timeline-inputs input[type=date] {
+.timeline-inputs input[type=date],
+.window-filters select {
   padding: 5px 7px;
   font-size: 10px;
-  width: 126px;
   background: #1e2a1f;
   border-color: #34452e;
   min-height: 30px;
+}
+
+.timeline-inputs input[type=date] {
+  width: 126px;
 }
 
 .window-filters {
-  display: grid;
-  flex: 1 1 260px;
-  grid-template-columns: repeat(3,minmax(0,1fr));
+  display: flex;
+  align-items: center;
   gap: 6px;
-  max-width: 320px;
 }
 
 .window-filters label {
-  margin: 0;
-  min-width: 0;
-  font-size: 9px;
-  color: #9aac92;
+  gap: 5px;
 }
 
 .window-filters select {
-  margin-top: 3px;
+  width: 64px;
   min-width: 0;
-  min-height: 30px;
-  padding: 5px 6px;
-  font-size: 11px;
-  border-radius: 5px;
-  background: #1e2a1f;
-  border-color: #34452e;
+}
+
+.window-filters #accuracy {
+  width: 74px;
 }
 
 .utc-tag {
@@ -1320,6 +1312,9 @@ dialog p {
   }
   .timeline-inputs input[type=date] {
     width: 110px;
+  }
+  .timeline-inputs input[type=date],
+  .window-filters select {
     font-size: 9px;
   }
   .utc-tag {
@@ -1429,9 +1424,6 @@ dialog p {
   .timeline {
     padding: 10px;
   }
-  .window-filters {
-    max-width: none;
-  }
   .timeline-inputs label {
     font-size: 0;
   }
@@ -1502,7 +1494,23 @@ dialog p {
   }
 }
 
+@media(max-width:700px) {
+  .window-filters {
+    flex-basis: 100%;
+    justify-content: space-between;
+  }
+}
+
 @media(max-width:400px) {
+  .window-filters label {
+    gap: 4px;
+  }
+  .window-filters select {
+    width: 56px;
+  }
+  .window-filters #accuracy {
+    width: 64px;
+  }
   .map-stats {
     gap: 12px;
   }

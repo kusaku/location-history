@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=28">
-    <script type="module" src="js/app.mjs?v=36">
+    <link rel="stylesheet" href="css/styles.css?v=29">
+    <script type="module" src="js/app.mjs?v=37">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -362,11 +362,11 @@
           <aside id="place-history" class="place-panel" aria-labelledby="place-title" aria-busy="false" hidden>
             <div class="place-heading">
               <div><h2 id="place-title">Place history</h2><p id="place-kind" class="hint"></p></div>
+              <div id="place-scope" class="presets" role="group" aria-label="Place history date scope">
+                <button type="button" data-scope="window" aria-pressed="true">Current window</button>
+                <button type="button" data-scope="all" aria-pressed="false">All dates</button>
+              </div>
               <button id="place-close" class="quiet-button" type="button" aria-label="Close place history">✕</button>
-            </div>
-            <div id="place-scope" class="presets" role="group" aria-label="Place history date scope">
-              <button type="button" data-scope="window" aria-pressed="true">Current window</button>
-              <button type="button" data-scope="all" aria-pressed="false">All dates</button>
             </div>
             <div id="place-drawing" hidden>
               <p id="place-instruction" class="hint" role="status"></p>

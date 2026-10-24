@@ -841,6 +841,7 @@ select {
   left: var(--map-inset);
   right: var(--map-inset);
   pointer-events: none;
+  z-index: 3;
 }
 
 .legend-row {
@@ -1061,7 +1062,7 @@ select {
 .place-panel {
   width: 780px;
   max-width: 100%;
-  max-height: min(540px,max(230px,calc(100svh - 340px)));
+  max-height: min(540px,max(260px,calc(100svh - 300px)));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1084,6 +1085,10 @@ select {
   align-items: start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.place-heading>div:first-child {
+  flex: 1;
 }
 
 .place-heading h2 {
@@ -1139,6 +1144,10 @@ select {
   padding-top: 10px;
 }
 
+#place-results:has(#place-tab-calendar[aria-selected=true])>.hint {
+  display: none;
+}
+
 .place-calendar-toolbar,
 .place-calendar-years,
 .place-calendar-toolbar label,
@@ -1159,6 +1168,16 @@ select {
 
 .place-calendar-toolbar {
   margin-bottom: 10px;
+}
+
+.place-calendar-toolbar label {
+  margin: 0;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.place-calendar-toolbar select {
+  width: auto;
 }
 
 .place-calendar-years button {
@@ -1294,6 +1313,14 @@ select {
 }
 
 @media(max-width:550px) {
+  .place-heading {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+  #place-scope {
+    order: 1;
+    flex-basis: 100%;
+  }
   .place-stats {
     grid-template-columns: repeat(2,minmax(0,1fr));
   }

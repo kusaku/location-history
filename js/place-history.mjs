@@ -70,7 +70,7 @@ export function createPlaceCalendar(select) {
     focused = cells.findIndex(cell => !cell.disabled);
     if (focused >= 0) cells[focused].tabIndex = 0;
     $('place-calendar-days').replaceChildren(...cells);
-    $('place-calendar-summary').textContent = `${number.format(recorded)} recorded days · ${duration(minutes)}`;
+    $('place-calendar-summary').textContent = `${number.format(recorded)} recorded ${recorded === 1 ? 'day' : 'days'} · ${duration(minutes)}`;
     $('place-calendar-scale').title = `Maximum per day: ${metric === 'minutes' ? duration(peak) : `${number.format(peak)} locations`}`;
   }
   $('place-calendar-previous').onclick = () => { if (year > firstYear) { year--; render(); } };

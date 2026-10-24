@@ -192,12 +192,43 @@ test('panning reuses selection statistics and route geometry; date and quality c
 
 test('route simplification preserves both endpoints without allocating every coordinate', () => {
   const points = Array.from({length: 20001}, (_, i) => point(i * 1000, 13 + i / 1000000));
-  const result = createHistoryQuery(points)({mode: 'route'});
+  const result = createHistoryQuery(points)({mode: 'route', end: 365 * DAY});
   const coordinates = result.routes.features[0].geometry.coordinates;
   assert.deepEqual(coordinates[0], [points[0].lon, points[0].lat]);
   assert.deepEqual(coordinates.at(-1), [points.at(-1).lon, points.at(-1).lat]);
   assert.equal(coordinates.length, 6668);
   assert.equal(result.density.features.length, 0);
+});
+
+test('journey colours follow timestamps rather than distance and stay fixed to the selected window', () => {
+  const points = [point(0, 13), point(9000, 13.00001), point(10000, 13.0001)], query = createHistoryQuery(points);
+  const result = query({mode: 'route', start: 0, end: 10000}), parts = result.routes.features;
+  assert.ok(parts.length > 1 && parts.length <= 256);
+  assert.deepEqual(parts[0].geometry.coordinates[0], [13, 52.5]);
+  assert.deepEqual(parts.at(-1).geometry.coordinates.at(-1), [13.0001, 52.5]);
+  const middle = parts.find(part => part.properties.time < 5000 && part.properties.time + 10000 / 512 >= 5000);
+  assert.ok(Math.abs(middle.geometry.coordinates.at(-1)[0] - (13 + .00001 * 5000 / 9000)) < 1e-12);
+  for (let i = 1; i < parts.length; i++) {
+    assert.ok(parts[i].properties.time > parts[i - 1].properties.time);
+    assert.deepEqual(parts[i].geometry.coordinates[0], parts[i - 1].geometry.coordinates.at(-1));
+  }
+  const pan = query({mode: 'route', start: 0, end: 10000, viewport: [12, 52, 14, 53]});
+  assert.equal(pan.routes, result.routes);
+  const wider = query({mode: 'route', start: 0, end: 20000}).routes.features;
+  assert.ok(wider.length < parts.length);
+  assert.ok(wider.at(-1).properties.time / 20000 < .51); // Last record is halfway through this window.
+});
+
+test('time-coloured routes retain simplification limits, exact endpoints and disconnected gaps', () => {
+  const points = Array.from({length: 20001}, (_, i) => point(i * 1000, 13 + i / 1000000));
+  points.push(point(2 * DAY, 15), point(2 * DAY + 60000, 15.001));
+  const {routes} = createHistoryQuery(points)({mode: 'route', start: 0, end: 2 * DAY + 60000});
+  const parts = routes.features, all = parts.flatMap(part => part.geometry.coordinates);
+  assert.ok(parts.length <= 2 + 255);
+  assert.ok(all.length <= 6668 + 2 + 2 * 255);
+  assert.deepEqual(all[0], [points[0].lon, points[0].lat]);
+  assert.deepEqual(all.at(-1), [points.at(-1).lon, points.at(-1).lat]);
+  assert.ok(parts.every(part => part.geometry.coordinates.every(([lon]) => lon < 14) || part.geometry.coordinates.every(([lon]) => lon >= 15)));
 });
 
 test('date range queries preserve inclusive fractional timestamp boundaries', () => {

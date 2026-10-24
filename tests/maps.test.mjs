@@ -217,3 +217,21 @@ test('incremental control changes match a full paint with fewer map style update
   assert.doesNotThrow(() => paintHistory(undefined, state, 'opacity'));
   assert.doesNotThrow(() => paintHistory({getLayer: () => false}, state));
 });
+
+test('Points and Journeys share the palette across the full date window, independently of the viewport', () => {
+  const properties = new Map(), map = {getLayer: () => true, setLayoutProperty() {}, setPaintProperty(id, key, value) { properties.set(`${id}:${key}`, value); }};
+  const start = Date.UTC(2024, 0, 1), end = Date.UTC(2024, 0, 2) - 1;
+  const state = {mode: 'points', palette: 'ember', start, end};
+  paintHistory(map, state, 'time');
+  const dots = properties.get('history-dots:circle-color'), route = properties.get('history-route:line-color');
+  assert.deepEqual(dots, route);
+  assert.deepEqual(dots[2], ['max', 0, ['min', 1, ['/', ['-', ['get', 'time'], start], end - start]]]);
+  assert.equal(dots[3], 0); assert.equal(dots.at(-2), 1);
+  state.viewport = [0, 0, 1, 1]; paintHistory(map, state, 'time');
+  assert.deepEqual(properties.get('history-route:line-color'), route);
+  state.end += 86400000; paintHistory(map, state, 'time');
+  assert.notDeepEqual(properties.get('history-route:line-color'), route);
+  assert.equal(properties.size, 2); // No geometry or density paint work on a time-scale change.
+  state.end = state.start; paintHistory(map, state, 'time');
+  assert.deepEqual(properties.get('history-dots:circle-color')[2], ['max', 0, ['min', 1, ['/', ['-', ['get', 'time'], start], 1]]]);
+});

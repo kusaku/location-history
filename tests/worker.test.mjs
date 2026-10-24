@@ -81,7 +81,9 @@ test('worker sends changed geometry and never assumes a discarded response was d
     await request('import', {files: [json({locations: [record(0), record(60000, 134010000)]})]});
     const first = (await request('query', {options: {mode: 'points'}})).result;
     const discarded = (await request('query', {options: {mode: 'route'}, known: first.versions})).result;
-    assert.equal(discarded.routes.features.length, 1);
+    assert.ok(discarded.routes.features.length > 1);
+    assert.deepEqual(discarded.routes.features[0].geometry.coordinates[0], [13.4, 52.5]);
+    assert.deepEqual(discarded.routes.features.at(-1).geometry.coordinates.at(-1), [13.401, 52.5]);
     const received = (await request('query', {options: {mode: 'route'}, known: first.versions})).result;
     assert.deepEqual(received.routes, discarded.routes);
     const pan = (await request('query', {options: {mode: 'route', viewport: [10, 50, 15, 55]}, known: received.versions})).result;

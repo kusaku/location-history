@@ -1,9 +1,9 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=12';
-import {createPlaceHistory} from './place-history.mjs?v=16';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=13';
+import {createPlaceHistory} from './place-history.mjs?v=17';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS} from './data.mjs?v=17';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=14';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=17';
+import {DAY, HISTOGRAM_BINS} from './data.mjs?v=18';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=15';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=18';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -12,7 +12,7 @@ const formatDate = t => fullDate.format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
-const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Individual observations. Click a point to see its timestamp.', route: 'Consecutive observations, with breaks for gaps and excluded data.'};
+const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for its timestamp.', route: 'Paths coloured by time in Date window, with breaks for gaps and excluded data.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
 function setAttribution(html) {
@@ -95,7 +95,6 @@ function paint(changed) {
   document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.palette === view.palette)));
   $('legend-ramp').style.background = `linear-gradient(90deg,${palette.colors.join(',')})`;
   $('palette-name').textContent = palette.name;
-  $('legend-unit').textContent = {records: 'recorded locations', days: 'distinct UTC days', time: 'stationary minutes'}[view.metric];
   $('density-controls').hidden = !['heat', 'hex'].includes(state.mode);
   $('intensity-field').hidden = !['heat', 'hex'].includes(state.mode);
   $('radius-field').hidden = state.mode === 'route';
@@ -107,9 +106,14 @@ function paint(changed) {
   $('opacity-value').textContent = `${Math.round(view.opacity * 100)}%`;
   $('mode-description').textContent = descriptions[state.mode];
   $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[view.metric];
-  const legend = document.querySelector('.legend');
-  legend.hidden = state.mode === 'points' || state.mode === 'route';
+  paintLegend();
   paintHistory(map, {...state, ...view}, changed === 'mode' ? undefined : changed);
+}
+function paintLegend() {
+  const temporal = state.mode === 'points' || state.mode === 'route';
+  $('legend-low').textContent = temporal ? 'Earlier' : 'Less'; $('legend-high').textContent = temporal ? 'Later' : 'More';
+  $('legend-unit').textContent = temporal ? 'time · UTC' : {records: 'recorded locations', days: 'distinct UTC days', time: 'stationary minutes'}[state.views[state.mode].metric];
+  document.querySelector('.legend').title = temporal ? `${new Date(state.start).toISOString().replace('T', ' ')} → ${new Date(state.end).toISOString().replace('T', ' ')} · UTC` : '';
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
@@ -193,6 +197,7 @@ function syncDates() {
   $('period-forward').disabled = state.end >= max + DAY - 1;
   $('play').disabled = !playback && $('period-forward').disabled;
   document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.period === state.period)));
+  if (state.mode === 'points' || state.mode === 'route') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode]}, 'time'); }
 }
 function stopPlayback() {
   clearTimeout(playback); playback = null;
@@ -251,7 +256,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=17', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=18', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

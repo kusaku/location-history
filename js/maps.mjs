@@ -236,8 +236,12 @@ export function paintHistory(map, state, changed) {
   if (all || changed === 'mode') for (const [id, mode] of [['history-heat', 'heat'], ['history-hex', 'hex'], ['history-dots', 'points'], ['history-route', 'route']]) map.setLayoutProperty(id, 'visibility', state.mode === mode ? 'visible' : 'none');
   if (colour) {
     map.setPaintProperty('history-heat', 'heatmap-color', colourExpression(state.palette, ['heatmap-density'], true));
-    map.setPaintProperty('history-dots', 'circle-color', PALETTES[state.palette].colors[4]);
-    map.setPaintProperty('history-route', 'line-color', PALETTES[state.palette].colors[3]);
+  }
+  if (colour || changed === 'time') {
+    const position = ['max', 0, ['min', 1, ['/', ['-', ['get', 'time'], state.start ?? 0], Math.max(1, (state.end ?? 0) - (state.start ?? 0))]]];
+    const color = colourExpression(state.palette, position);
+    map.setPaintProperty('history-dots', 'circle-color', color);
+    map.setPaintProperty('history-route', 'line-color', color);
   }
   if (colour || strength) map.setPaintProperty('history-hex', 'fill-color', colourExpression(state.palette, ['min', 1, ['*', ['get', 'weight'], state.intensity]]));
   if (strength) map.setPaintProperty('history-heat', 'heatmap-intensity', state.intensity);

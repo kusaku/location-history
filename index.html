@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/styles.css?v=36">
-    <script type="module" src="js/app.mjs?v=42">
+    <script type="module" src="js/app.mjs?v=43">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -623,7 +623,7 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
       <h3>Filters and date windows</h3>
       <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
@@ -649,6 +649,7 @@
         </b>
         connects consecutive observations, breaking at gaps over six hours, excluded records, dateline crossings, or implausible speeds.
       </p>
+      <p>In <b>Points</b> and <b>Journeys</b>, the palette runs from <b>Earlier</b> to <b>Later</b> across Date window in UTC. Every path uses the same time scale, which stays fixed when panning. Click a point for its exact timestamp. Heatmap and Hexagons use colour for density instead.</p>
       <h3>
         Density metrics
       </h3>

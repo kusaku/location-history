@@ -1,4 +1,4 @@
-import {DAY} from './data.mjs?v=17';
+import {DAY} from './data.mjs?v=18';
 import {resizeWindow} from './timeline.mjs?v=13';
 
 const STORAGE_KEY = 'location-history.settings.v1';

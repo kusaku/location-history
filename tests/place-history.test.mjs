@@ -150,7 +150,7 @@ test('large table results format and render only the visible page', () => {
 test('place calendar lays out leap days and 54-week years in UTC, preserving exact daily totals', () => {
   const f = fixture(), selected = [], day = 86_400_000;
   try {
-    const calendar = createPlaceCalendar(entry => selected.push(entry));
+    const calendar = createPlaceCalendar(entry => selected.push(entry), () => {}, () => leap);
     const leap = Date.UTC(2024, 1, 29);
     const rows = [{start: Date.UTC(2023, 11, 31), count: 2, minutes: 30}, {start: leap, count: 4, minutes: .5}, {start: Date.UTC(2024, 2, 1), count: 1, minutes: 10}];
     calendar.setRows(rows, {start: Date.UTC(2023, 0, 1), end: Date.UTC(2024, 11, 31)});
@@ -261,7 +261,7 @@ test('quarter keeps Month available, shows all three months, and steps across ye
   const f = fixture(), day = 86_400_000, requests = [];
   try {
     f.get('place-calendar-view').value = 'quarter';
-    const calendar = createPlaceCalendar(() => {}, request => requests.push(request));
+    const calendar = createPlaceCalendar(() => {}, request => requests.push(request), () => leap);
     const leap = Date.UTC(2024, 1, 29);
     calendar.setRows([{start: leap, count: 3, minutes: 12}], {start: Date.UTC(2023, 0, 1), end: Date.UTC(2024, 11, 31)});
     const months = f.get('place-calendar-days').children;
@@ -277,7 +277,8 @@ test('quarter keeps Month available, shows all three months, and steps across ye
     f.get('place-calendar-next').click();
     assert.equal(f.get('place-calendar-caption').textContent, 'Q1 · 2024');
     f.get('place-calendar-view').value = 'month'; f.get('place-calendar-view').onchange();
-    assert.equal(f.get('place-calendar-days').children.length, 31);
+    assert.equal(f.get('place-calendar-caption').textContent, 'Feb 2024');
+    assert.equal(f.get('place-calendar-days').children.length, 29);
     assert.equal(requests.length, 0);
     assert.equal(placeCalendarPeriod(leap, 'quarter').end - placeCalendarPeriod(leap, 'quarter').start + 1, 91 * day);
   } finally { f.cleanup(); }
@@ -308,7 +309,7 @@ test('calendar dates and table rows update Date window without changing view, an
   const day = 86_400_000, start = Date.UTC(2024, 0, 1), end = Date.UTC(2024, 11, 31) + day - 1;
   const f = fixture({min: start, max: end});
   try {
-    Object.assign(f.options, {start, end});
+    Object.assign(f.options, {start: Date.UTC(2024, 3, 1), end});
     f.get('place-calendar-view').value = 'quarter';
     f.controller.select(area, 'Drawn area');
     const daily = [{start: Date.UTC(2024, 3, 3), count: 2, minutes: 10}, {start: Date.UTC(2024, 5, 20), count: 1, minutes: 1}];
@@ -331,6 +332,31 @@ test('calendar dates and table rows update Date window without changing view, an
     assert.equal(f.get('place-view-calendar').hidden, true); assert.equal(f.get('place-view-daily').hidden, false);
     f.get('place-tab-calendar').click();
     assert.equal(f.get('place-calendar-caption').textContent, caption); assert.equal(f.get('place-calendar-anchor').value, anchor);
+  } finally { f.cleanup(); }
+});
+
+test('switching from Year to smaller views opens the clicked day, including under All dates without a new result', () => {
+  const day = 86_400_000, start = Date.UTC(2024, 0, 1), end = Date.UTC(2024, 11, 31) + day - 1, clicked = Date.UTC(2024, 8, 19);
+  const f = fixture({min: start, max: end});
+  try {
+    Object.assign(f.options, {start: Date.UTC(2024, 5, 1), end});
+    f.controller.select(area, 'Drawn area');
+    f.controller.receive({type: 'place', id: f.sent[0].id, result: {count: 1, visits: 1, days: 1, minutes: 10, first: clicked, last: clicked, stays: [], daily: [{start: clicked, count: 1, minutes: 10}]}});
+    assert.equal(f.get('place-calendar-anchor').value, '2024-06-01');
+    f.get('place-scope').children[1].click();
+    f.controller.receive({type: 'place', id: f.sent.at(-1).id, result: {count: 1, visits: 1, days: 1, minutes: 10, first: clicked, last: clicked, stays: [], daily: [{start: clicked, count: 1, minutes: 10}]}});
+    const requests = f.sent.length;
+    f.get('place-calendar-days').children.find(cell => cell.dataset.date === '2024-09-19').click();
+    assert.equal(f.sent.length, requests); // No day-result refresh in All dates.
+    assert.deepEqual(f.dates, [[clicked, clicked + day - 1]]);
+    for (const [view, caption] of [['week', 'Mon, Sep 16, 2024 — Sun, Sep 22, 2024'], ['day', 'Thu, Sep 19, 2024'], ['quarter', 'Q3 · 2024'], ['month', 'Sep 2024'], ['year', '2024']]) {
+      f.get('place-calendar-view').value = view; f.get('place-calendar-view').onchange();
+      assert.equal(f.get('place-calendar-anchor').value, '2024-09-19');
+      assert.equal(f.get('place-calendar-caption').textContent, caption);
+    }
+    f.options.start = Date.UTC(2024, 10, 5); // Date window changed outside Place history.
+    f.get('place-calendar-view').value = 'day'; f.get('place-calendar-view').onchange();
+    assert.equal(f.get('place-calendar-anchor').value, '2024-11-05');
   } finally { f.cleanup(); }
 });
 

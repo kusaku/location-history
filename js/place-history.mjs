@@ -1,4 +1,4 @@
-import {DAY, placePolygon} from './data.mjs?v=17';
+import {DAY, placePolygon} from './data.mjs?v=18';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -31,12 +31,12 @@ export function placeCalendarPeriod(anchor, view) {
 
 // Daily views reuse aggregate totals. Hourly views ask the indexed worker for
 // only the visible day/week, with one pending request and stale-result checks.
-export function createPlaceCalendar(select, requestHours = () => {}) {
+export function createPlaceCalendar(select, requestHours = () => {}, windowStart) {
   let days = new Map(), scope = null, anchor = null, active = true, revision = 0;
   let hourId = 0, hourPending = null, hourWanted = null, hourKey = null, hours = [], hourError = '';
   const kind = () => $('place-calendar-view').value || 'year';
   const clamp = value => Math.max(scope.historyStart, Math.min(scope.historyEnd, value));
-  const latest = () => { let at = scope.start; for (const day of days.keys()) at = Math.max(at, day); return at; };
+  const firstDay = () => clamp(Math.floor((windowStart?.() ?? scope.start) / DAY) * DAY);
   function navigate(direction) {
     const view = kind(), date = new Date(placeCalendarPeriod(anchor, view).start);
     if (view === 'year') date.setUTCFullYear(date.getUTCFullYear() + direction);
@@ -210,7 +210,7 @@ export function createPlaceCalendar(select, requestHours = () => {}) {
     const at = Date.parse($('place-calendar-anchor').value);
     if (Number.isFinite(at)) anchor = clamp(at); render();
   };
-  $('place-calendar-view').onchange = render;
+  $('place-calendar-view').onchange = () => { if (scope) anchor = firstDay(); render(); };
   $('place-calendar-metric').onchange = render;
   return {
     setRows(rows, value) {
@@ -220,7 +220,7 @@ export function createPlaceCalendar(select, requestHours = () => {}) {
         historyStart: Math.floor((value.historyStart ?? value.start) / DAY) * DAY,
         historyEnd: Math.floor((value.historyEnd ?? value.end) / DAY) * DAY
       }; revision++;
-      if (anchor === null) anchor = latest();
+      if (anchor === null) anchor = firstDay();
       render();
     },
     setActive(value) { active = value; render(); },
@@ -284,7 +284,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     selectDates(Math.floor(entry.start / DAY) * DAY, Math.floor(Math.max(entry.start, (entry.end ?? entry.start + DAY) - 1) / DAY) * DAY + DAY - 1, entry.hour);
     refresh();
   };
-  const calendar = createPlaceCalendar(selectRow, ({id, start, end}) => send({type: 'place-hours', id, area, options: {...options(), start, end}}));
+  const calendar = createPlaceCalendar(selectRow, ({id, start, end}) => send({type: 'place-hours', id, area, options: {...options(), start, end}}), () => options().start);
   const stays = createPlaceTable('place-visits', [
     {key: 'start', label: 'From (UTC)', format: utcTime}, {key: 'end', label: 'To (UTC)', format: utcTime},
     {key: 'count', label: 'Locations', format: value => number.format(value)}, {key: 'minutes', label: 'Duration', format: duration},

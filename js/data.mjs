@@ -305,12 +305,33 @@ export function createHistoryQuery(points) {
       }
       dots = collection(features); drawn = features.length;
     } else if (mode === 'route') {
-      if (!selection.routes) selection.routes = collection(selection.runs.map(([a, b]) => {
-        const coordinates = [], step = Math.max(1, Math.ceil((b - a) / 10_000));
-        for (let j = a; j < b; j += step) { const p = points[indices[j]]; coordinates.push([p.lon, p.lat]); }
-        if ((b - a - 1) % step) { const p = points[indices[b - 1]]; coordinates.push([p.lon, p.lat]); }
-        return {type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates}};
-      }));
+      if (!selection.routes) {
+        // Split only at time-band boundaries, not every observation. At most
+        // 255 extra parts across the window give every run the same time scale.
+        const features = [], first = Number.isFinite(start) ? start : min, last = Number.isFinite(end) ? end : max;
+        const width = Math.max(1, last - first) / 256;
+        const bandAt = time => Math.max(0, Math.min(255, Math.floor((time - first) / width)));
+        for (const [a, b] of selection.runs) {
+          let previous = points[indices[a]], band = bandAt(previous.t), coordinates = [[previous.lon, previous.lat]];
+          const step = Math.max(1, Math.ceil((b - a) / 10_000));
+          const finish = () => { if (coordinates.length > 1) features.push({type: 'Feature', properties: {time: first + (band + .5) * width}, geometry: {type: 'LineString', coordinates}}); };
+          for (let j = Math.min(a + step, b - 1); j < b; j = Math.min(j + step, b - 1)) {
+            const next = points[indices[j]], nextBand = bandAt(next.t);
+            let boundary;
+            while (band < nextBand) {
+              boundary = first + (band + 1) * width;
+              const fraction = (boundary - previous.t) / (next.t - previous.t);
+              const coordinate = boundary === next.t ? [next.lon, next.lat] : [previous.lon + (next.lon - previous.lon) * fraction, previous.lat + (next.lat - previous.lat) * fraction];
+              coordinates.push(coordinate); finish(); coordinates = [coordinate]; band++;
+            }
+            if (boundary !== next.t) coordinates.push([next.lon, next.lat]);
+            previous = next;
+            if (j === b - 1) break;
+          }
+          finish();
+        }
+        selection.routes = collection(features);
+      }
       routes = selection.routes; drawn = routes.features.length;
     } else {
       const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));

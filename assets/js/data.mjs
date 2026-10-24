@@ -337,9 +337,9 @@ export function createHistoryQuery(points) {
       for (const b of bins) {
         const v = value(b);
         if (!v) continue;
-        const properties = {value: v, count: b.count, days: b.days, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
+        const properties = {...(mode === 'hex' ? {cell: `hex:${b.q}:${b.r}:${size}`} : {}), value: v, count: b.count, days: b.days, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
         const coordinates = mode === 'hex' ? [Array.from({length: 7}, (_, i) => unproject(b.x + size * Math.cos(rad * (60 * (i % 6) - 30)), b.y + size * Math.sin(rad * (60 * (i % 6) - 30))))] : unproject(b.x, b.y);
-        features.push({type: 'Feature', ...(mode === 'hex' ? {id: `hex:${b.q}:${b.r}:${size}`} : {}), properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
+        features.push({type: 'Feature', properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
       }
       density = collection(features); drawn = features.length;
     }
@@ -350,7 +350,7 @@ export function createHistoryQuery(points) {
   // their spatial candidates. Only the latest 30 visits leave the worker.
   query.place = (feature, options = {}) => {
     const geometry = placePolygon(feature?.geometry?.coordinates?.[0]);
-    const nextKey = JSON.stringify([feature.id, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.exclude]);
+    const nextKey = JSON.stringify([feature.properties?.cell, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.exclude]);
     if (nextKey === placeKey) return placeResult;
     ensureFilter(options);
     const {start = -Infinity, end = Infinity, hourEnd = 24} = options;
@@ -358,8 +358,9 @@ export function createHistoryQuery(points) {
     const xs = ring.map(c => c[0]), ys = ring.map(c => c[1]);
     const viewport = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], center = (viewport[0] + viewport[2]) / 2;
     let hex = null;
-    if (typeof feature.id === 'string' && feature.id.startsWith('hex:')) {
-      hex = feature.id.slice(4).split(':').map(Number);
+    const cell = feature.properties?.cell;
+    if (typeof cell === 'string' && cell.startsWith('hex:')) {
+      hex = cell.slice(4).split(':').map(Number);
       if (hex.length !== 3 || !hex.every(Number.isFinite) || !Number.isInteger(hex[0]) || !Number.isInteger(hex[1]) || hex[2] <= 0 || hex[2] > 1) throw new Error('Invalid hexagon.');
     }
     const contains = i => {

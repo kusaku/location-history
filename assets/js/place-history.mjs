@@ -1,11 +1,14 @@
-import {DAY, placePolygon} from './data.mjs?v=7';
+import {DAY, placePolygon} from './data.mjs?v=8';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
 const number = new Intl.NumberFormat('en');
 const timestamp = new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC'});
 const time = value => value === null ? '—' : timestamp.format(value);
-const duration = minutes => minutes === 0 ? '0 min' : minutes < 1 ? '<1 min' : minutes < 60 ? `${Math.round(minutes)} min` : `${Math.floor(minutes / 60)} h ${Math.round(minutes % 60)} min`;
+const duration = minutes => {
+  const rounded = Math.round(minutes);
+  return minutes === 0 ? '0 min' : minutes < 1 ? '<1 min' : rounded < 60 ? `${rounded} min` : `${number.format(Math.floor(rounded / 60))} h ${rounded % 60} min`;
+};
 
 // Drawing and the optional panel share one source. Personal selections stay in
 // memory; only their aggregate statistics cross back from the data worker.

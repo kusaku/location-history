@@ -51,7 +51,7 @@ for (const [name, options] of cases) {
     times.push(performance.now() - begin);
   }
   const geometry = options.mode === 'route' ? result.routes : options.mode === 'points' ? result.dots : result.density;
-  const digest = createHash('sha256').update(JSON.stringify({...geometry, features: geometry.features.map(({id, ...feature}) => feature)})).digest('hex').slice(0, 16);
+  const digest = createHash('sha256').update(JSON.stringify({...geometry, features: geometry.features.map(({id, properties, ...feature}) => { const {cell, ...values} = properties; return {type: feature.type, properties: values, geometry: feature.geometry}; })})).digest('hex').slice(0, 16);
   const median = times.slice(1).sort((a, b) => a - b)[1];
   console.log(JSON.stringify({case: name, firstQueryMs: +times[0].toFixed(2), medianPanMs: +median.toFixed(2), count: result.count, visible: result.visible, days: result.days, km: result.km, features: geometry.features.length, digest, peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
 }

@@ -169,10 +169,10 @@ test('incremental control changes match a full paint with fewer map style update
     setLayoutProperty(id, key, value) { this.calls++; this.properties.set(`${id}:${key}`, value); },
     setPaintProperty(id, key, value) { this.calls++; this.properties.set(`${id}:${key}`, value); },
   });
-  const state = {mode: 'heat', palette: 'ember', radius: 24, intensity: 1, opacity: .85}, map = makeMap();
+  const state = {mode: 'heat', palette: 'ember', radius: 24, intensity: 1, lineWidth: 1.5, opacity: .85}, map = makeMap();
   paintHistory(map, state);
   assert.equal(map.calls, 16);
-  for (const [key, value, calls] of [['opacity', .65, 4], ['radius', 38, 2], ['intensity', 1.7, 4], ['palette', 'ocean', 4], ['mode', 'hex', 4], ['metric', 'days', 0]]) {
+  for (const [key, value, calls] of [['opacity', .65, 4], ['radius', 38, 2], ['intensity', 1.7, 3], ['lineWidth', 4.5, 1], ['palette', 'ocean', 4], ['mode', 'hex', 4], ['metric', 'days', 0]]) {
     state[key] = value; map.calls = 0;
     paintHistory(map, state, key);
     assert.equal(map.calls, calls, key);

@@ -1,9 +1,10 @@
-import {DAY, placePolygon} from './data.mjs?v=11';
+import {DAY, placePolygon} from './data.mjs?v=12';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
 const number = new Intl.NumberFormat('en');
 const timestamp = new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC'});
+const date = new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
 const time = value => value === null ? '—' : timestamp.format(value);
 const duration = minutes => {
   const rounded = Math.round(minutes);
@@ -41,14 +42,15 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
   function clear() {
     stopDrawing(); area = null; requestId++; pending = dirty = false; lastKey = null;
     panel.hidden = true; panel.setAttribute('aria-busy', 'false');
-    $('place-results').hidden = true; $('place-visits').replaceChildren();
+    $('place-results').hidden = true;
+    for (const id of ['place-visits', 'place-daily']) $(id).replaceChildren();
     paintArea();
   }
   function refresh() {
     const history = report();
     if (!area || !history || drawing) return;
     const current = options();
-    const filters = {start: allDates ? Math.floor(history.min / DAY) * DAY : current.start, end: allDates ? Math.floor(history.max / DAY) * DAY + DAY - 1 : current.end, hourStart: current.hourStart, hourEnd: current.hourEnd, accuracy: current.accuracy, exclude: current.exclude};
+    const filters = {start: allDates ? Math.floor(history.min / DAY) * DAY : current.start, end: allDates ? Math.floor(history.max / DAY) * DAY + DAY - 1 : current.end, hourStart: current.hourStart, hourEnd: current.hourEnd, accuracy: current.accuracy, excludeJumps: current.excludeJumps};
     const key = JSON.stringify([area, filters]);
     if (key === lastKey) return;
     if (pending) { dirty = true; return; }
@@ -95,21 +97,29 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     $('place-results').hidden = !result.count;
     if (!result.count) return;
     for (const [id, value] of Object.entries({'place-records': number.format(result.count), 'place-days': number.format(result.days), 'place-total-visits': number.format(result.visits), 'place-time': duration(result.minutes), 'place-first': time(result.first), 'place-last': time(result.last)})) $(id).textContent = value;
-    $('place-visits-label').textContent = `Recent visits · ${Math.min(30, result.visits)} of ${number.format(result.visits)}`;
-    const rows = result.recent.map(visit => {
-      const item = document.createElement('li'), button = document.createElement('button'), dates = document.createElement('span'), detail = document.createElement('small');
-      button.type = 'button'; button.title = 'Select the dates of this visit';
-      dates.textContent = `${time(visit.start)} → ${time(visit.end)}`;
-      detail.textContent = `${number.format(visit.count)} locations · ${duration(visit.minutes)}`;
-      button.append(dates, detail); item.append(button);
+    $('place-visits-label').textContent = `Recorded stays · ${result.recent.length} of ${number.format(result.visits)}`;
+    $('place-daily-label').textContent = `By day · ${result.daily.length} of ${number.format(result.days)}`;
+    function row(values, start, end, label) {
+      const item = document.createElement('tr'), button = document.createElement('button');
+      button.type = 'button'; button.title = label; button.textContent = values[0];
+      const first = document.createElement('td'); first.append(button); item.append(first);
+      for (const value of values.slice(1)) { const cell = document.createElement('td'); cell.textContent = value; item.append(cell); }
       button.onclick = () => {
         allDates = false; syncScope();
-        selectDates(Math.floor(visit.start / DAY) * DAY, Math.floor(Math.max(visit.start, visit.end - 1) / DAY) * DAY + DAY - 1);
+        selectDates(start, end);
         refresh();
       };
       return item;
-    });
-    $('place-visits').replaceChildren(...rows);
+    }
+    $('place-visits').replaceChildren(...result.recent.map(visit => row(
+      [time(visit.start), time(visit.end), duration(visit.minutes)],
+      Math.floor(visit.start / DAY) * DAY, Math.floor(Math.max(visit.start, visit.end - 1) / DAY) * DAY + DAY - 1,
+      'Select the dates of this stay'
+    )));
+    $('place-daily').replaceChildren(...result.daily.map(day => row(
+      [date.format(day.start), number.format(day.count), duration(day.minutes)], day.start, day.start + DAY - 1,
+      'Select this recorded day'
+    )));
   }
   function syncScope() {
     for (const button of $('place-scope').children) button.setAttribute('aria-pressed', String((button.dataset.scope === 'all') === allDates));

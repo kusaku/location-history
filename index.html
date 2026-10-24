@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=20">
-    <script type="module" src="assets/js/app.mjs?v=26">
+    <link rel="stylesheet" href="assets/css/styles.css?v=21">
+    <script type="module" src="assets/js/app.mjs?v=27">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -233,6 +233,13 @@
             </div>
             <input id="intensity" type="range" min="0.2" max="3" value="1" step="0.1">
           </div>
+          <div id="line-width-field" class="slider-field" hidden>
+            <div class="label-row">
+              <label for="lineWidth">Line thickness</label>
+              <output id="line-width-value" for="lineWidth">1.5 px</output>
+            </div>
+            <input id="lineWidth" type="range" min="0.5" max="10" value="1.5" step="0.5">
+          </div>
           <div class="slider-field">
             <div class="label-row">
               <label for="opacity">
@@ -377,8 +384,21 @@
                 <div><dt>First seen · UTC</dt><dd id="place-first"></dd></div>
                 <div><dt>Last seen · UTC</dt><dd id="place-last"></dd></div>
               </dl>
-              <details class="place-visit-list"><summary id="place-visits-label">Recent visits</summary><ol id="place-visits"></ol></details>
-              <p class="hint">Current hour, accuracy and quality filters apply. Visits split after 30 minutes without a recording. Time is an estimate.</p>
+              <details class="place-table-section">
+                <summary id="place-visits-label">Recorded stays</summary>
+                <table class="place-table" aria-label="Recorded stays in UTC">
+                  <thead><tr><th scope="col">From · UTC</th><th scope="col">To · UTC</th><th scope="col">Est. stay</th></tr></thead>
+                  <tbody id="place-visits"></tbody>
+                </table>
+              </details>
+              <details class="place-table-section">
+                <summary id="place-daily-label">By day</summary>
+                <table class="place-table" aria-label="Daily place history in UTC">
+                  <thead><tr><th scope="col">Day · UTC</th><th scope="col">Locations</th><th scope="col">Est. stay</th></tr></thead>
+                  <tbody id="place-daily"></tbody>
+                </table>
+              </details>
+              <p class="hint">Tables show the latest 30 stays and recorded days. Select a date to filter the map. Current hour, accuracy and jump filters apply. Visits split after 30 minutes without a recording. Time is an estimate.</p>
             </div>
           </aside>
           <section class="timeline" aria-labelledby="timeline-title">
@@ -392,31 +412,6 @@
                 </p>
               </div>
               <div class="timeline-controls">
-                <div class="presets" role="group" aria-label="Window size">
-                  <button type="button" data-period="1" aria-pressed="false" title="Resize the current window to one day" disabled>
-                    Day
-                  </button>
-                  <button type="button" data-period="30" aria-pressed="false" title="Resize the current window to one calendar month" disabled>
-                    Month
-                  </button>
-                  <button type="button" data-period="365" aria-pressed="false" title="Resize the current window to one calendar year" disabled>
-                    Year
-                  </button>
-                  <button type="button" data-period="all" aria-pressed="true" disabled>
-                    All time
-                  </button>
-                </div>
-                <div class="period-navigation" role="group" aria-label="Period navigation">
-                  <button id="period-back" type="button" aria-label="Move window backward" title="Move window backward" disabled>
-                    ←
-                  </button>
-                  <button id="play" type="button" aria-label="Play timeline" aria-pressed="false" title="Play or pause window steps" disabled>
-                    ▶
-                  </button>
-                  <button id="period-forward" type="button" aria-label="Move window forward" title="Move window forward" disabled>
-                    →
-                  </button>
-                </div>
                 <div class="window-filters" role="group" aria-label="Hour and accuracy filters">
                   <label for="hour-start">From
                     <select id="hour-start" aria-label="From hour UTC" title="From hour · UTC"></select>
@@ -432,13 +427,35 @@
                       <option value="1000">≤ 1 km</option>
                     </select>
                   </label>
-                  <div class="quality-filters" role="group" aria-label="Exclude recording issues">
-                    <span>Exclude</span>
-                    <label class="quality-toggle" title="Exclude both observations bordering a recording gap longer than six hours"><input type="checkbox" class="sr-only" data-quality="1" aria-label="Exclude recording gaps"><span>Gaps</span></label>
-                    <label class="quality-toggle" title="Exclude both observations of a jump over 1,000 km/h within six hours, including different locations at the same time"><input type="checkbox" class="sr-only" data-quality="2" aria-label="Exclude suspicious jumps"><span>Jumps</span></label>
-                    <label class="quality-toggle" title="Exclude known accuracy worse than 100 metres; unknown accuracy stays included"><input type="checkbox" class="sr-only" data-quality="4"><span>Poor accuracy</span></label>
-                    <label class="quality-toggle" title="Exclude observations where sampling intervals change at least tenfold, with the larger interval between five minutes and six hours"><input type="checkbox" class="sr-only" data-quality="8"><span>Uneven sampling</span></label>
-                  </div>
+                  <button id="exclude-jumps" class="filter-toggle" type="button" aria-pressed="false" title="Exclude both observations of a jump over 1,000 km/h within six hours, including different locations at the same time">Exclude jumps</button>
+                </div>
+                <div class="presets" role="group" aria-label="Window size">
+                  <button type="button" data-period="1" aria-pressed="false" title="Resize the current window to one day" disabled>
+                    Day
+                  </button>
+                  <button type="button" data-period="30" aria-pressed="false" title="Resize the current window to one calendar month" disabled>
+                    Month
+                  </button>
+                  <button type="button" data-period="90" aria-pressed="false" title="Resize the current window to three calendar months" disabled>
+                    Quarter
+                  </button>
+                  <button type="button" data-period="365" aria-pressed="false" title="Resize the current window to one calendar year" disabled>
+                    Year
+                  </button>
+                  <button type="button" data-period="all" aria-pressed="true" disabled>
+                    All time
+                  </button>
+                </div>
+                <div class="period-navigation" role="group" aria-label="Period navigation">
+                  <button id="play" type="button" aria-label="Play timeline" aria-pressed="false" title="Play or pause window steps" disabled>
+                    ▶
+                  </button>
+                  <button id="period-back" type="button" aria-label="Move window backward" title="Move window backward" disabled>
+                    ←
+                  </button>
+                  <button id="period-forward" type="button" aria-label="Move window forward" title="Move window forward" disabled>
+                    →
+                  </button>
                 </div>
               </div>
             </div>
@@ -560,9 +577,10 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Place totals use the current date window or <b>All dates</b>, plus the active hour, accuracy and quality filters. Recorded visits are consecutive in-area observations, separated by exits, excluded records or a gap over 30 minutes. First/last seen are observation times. Estimated time uses short stationary intervals and recorded visit durations, clipped to the window, UTC day, end hour and observed exits; overlapping intervals count once. Missing recordings are not proof that you left or stayed. The 30 latest visit details are shown; totals include every matching observation. Choose a visit to select its dates.</p>
-      <h3>Recording quality filters</h3>
-      <p>The <b>Exclude</b> checkboxes remove the union of selected issues: <b>Recording gaps</b> removes both endpoints of intervals over six hours; <b>Suspicious jumps</b> removes both endpoints exceeding 1,000 km/h within a continuous recording interval of at most six hours, including conflicting locations at the same timestamp; <b>Poor accuracy</b> removes known accuracy worse than 100 m; <b>Uneven sampling</b> removes observations at a tenfold interval change when the larger interval is between five minutes and six hours. These are heuristics, not corrections to your files. Unknown accuracy remains included. Flags are computed once per import, before other filters; exclusions never connect tracks across removed records.</p>
+      <p>Place totals use the current date window or <b>All dates</b>, plus the active hour, accuracy and jump filters. Recorded visits are consecutive in-area observations, separated by exits, excluded records or a gap over 30 minutes. First/last seen are observation times. Estimated time uses short stationary intervals and recorded visit durations, clipped to the window, UTC day, end hour and observed exits; overlapping intervals count once. Missing recordings are not proof that you left or stayed. Expand <b>Recorded stays</b> for arrival/departure dates and estimated durations, or <b>By day</b> for daily totals. Each table shows the latest 30 rows; summary totals include every matching observation. Choose a stay or day to select its dates.</p>
+      <h3>Filters and date windows</h3>
+      <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
+      <p><b>Day</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Play, backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Dates and hours use UTC.</p>
       <h3>
         Visualization modes
       </h3>

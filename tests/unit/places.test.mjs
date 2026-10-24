@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHistoryQuery, placePolygon, DAY, QUALITY} from '../../assets/js/data.mjs';
+import {createHistoryQuery, placePolygon, DAY} from '../../assets/js/data.mjs';
 const minute = 60_000;
 const point = (t, lon = 13, lat = 52, duration = 0, accuracy = null) => ({t, lon, lat, duration, accuracy});
 const area = coordinates => ({type: 'Feature', properties: {}, geometry: placePolygon(coordinates)});
@@ -20,13 +20,13 @@ test('place time clips to exits, hours, date windows and the union of overlappin
   const exit = createHistoryQuery([point(0, 13, 52, 60 * minute), point(10 * minute, 15)]);
   assert.equal(exit.place(box).minutes, 10);
 });
-test('place queries honor accuracy and quality exclusions and retain empty results', () => {
-  const query = createHistoryQuery([point(0, 13, 52, 0, 500), point(DAY)]);
+test('place queries share accuracy and jump filters, retaining empty results', () => {
+  const query = createHistoryQuery([point(0, 13, 52, 0, 500), point(DAY), point(DAY + 1000, 30)]);
   assert.equal(query.place(box, {accuracy: 100}).count, 1);
-  assert.equal(query.place(box, {exclude: QUALITY.accuracy}).count, 1);
-  assert.equal(query.place(box, {exclude: QUALITY.gaps}).count, 0);
+  assert.equal(query.place(box, {excludeJumps: true}).count, 1);
+  assert.equal(query.place(box, {excludeJumps: true, accuracy: 100}).count, 0);
   const empty = query.place(box, {start: DAY * 2});
-  assert.deepEqual(empty, {count: 0, days: 0, first: null, last: null, minutes: 0, visits: 0, recent: []});
+  assert.deepEqual(empty, {count: 0, days: 0, first: null, last: null, minutes: 0, visits: 0, recent: [], daily: []});
 });
 test('indexed place membership agrees with a chronological scan, including dateline wrapping', () => {
   const points = Array.from({length: 1000}, (_, i) => point(i, i % 2 ? 0 : 13, i % 2 ? 0 : 52));
@@ -63,6 +63,22 @@ test('visit details are bounded while totals remain exact', () => {
   const result = createHistoryQuery(Array.from({length: 100}, (_, i) => point(i * 60 * minute))).place(box);
   assert.equal(result.visits, 100); assert.equal(result.count, 100); assert.equal(result.recent.length, 30);
   assert.equal(result.recent[0].start, 99 * 60 * minute);
+});
+
+test('daily table totals clip overlapping stays at midnight and honor the selected window', () => {
+  const query = createHistoryQuery([point(DAY - 10 * minute, 13, 52, 60 * minute), point(DAY, 13, 52, 20 * minute), point(DAY + 10 * minute, 13, 52, 20 * minute)]);
+  const result = query.place(box);
+  assert.equal(result.visits, 1); assert.equal(result.minutes, 40);
+  assert.deepEqual(result.daily, [{start: DAY, count: 2, minutes: 30}, {start: 0, count: 1, minutes: 10}]);
+  const clipped = query.place(box, {end: DAY + 15 * minute - 1});
+  assert.equal(clipped.minutes, 25); assert.equal(clipped.daily[0].minutes, 15);
+});
+
+test('daily rows remain bounded on long histories without changing full-selection totals', () => {
+  const result = createHistoryQuery(Array.from({length: 100}, (_, i) => point(i * DAY, 13, 52, minute))).place(box);
+  assert.equal(result.days, 100); assert.equal(result.minutes, 100); assert.equal(result.daily.length, 30);
+  assert.deepEqual(result.daily[0], {start: 99 * DAY, count: 1, minutes: 1});
+  assert.equal(result.daily.at(-1).start, 70 * DAY);
 });
 test('invalid, self-crossing, degenerate and oversized areas fail explicitly', () => {
   for (const ring of [[], [[0, 0], [1, 1]], [[0, 0], [1, 0], [2, 0]], [[0, 0], [2, 2], [0, 2], [2, 0]], [[0, 91], [1, 0], [0, 1]], Array.from({length: 66}, (_, i) => [i, 0])]) assert.throws(() => placePolygon(ring));

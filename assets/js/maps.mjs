@@ -225,10 +225,8 @@ export function paintHistory(map, state, changed) {
     map.setPaintProperty('history-route', 'line-color', PALETTES[state.palette].colors[3]);
   }
   if (colour || strength) map.setPaintProperty('history-hex', 'fill-color', colourExpression(state.palette, ['min', 1, ['*', ['get', 'weight'], state.intensity]]));
-  if (strength) {
-    map.setPaintProperty('history-heat', 'heatmap-intensity', state.intensity);
-    map.setPaintProperty('history-route', 'line-width', state.intensity * 1.5);
-  }
+  if (strength) map.setPaintProperty('history-heat', 'heatmap-intensity', state.intensity);
+  if (all || changed === 'lineWidth') map.setPaintProperty('history-route', 'line-width', state.lineWidth ?? 1.5);
   if (strength || opacity) map.setPaintProperty('history-dots', 'circle-opacity', Math.min(1, state.opacity * state.intensity));
   if (opacity) for (const [id, property] of [['history-heat', 'heatmap-opacity'], ['history-hex', 'fill-opacity'], ['history-route', 'line-opacity']]) map.setPaintProperty(id, property, state.opacity);
   if (radius) {

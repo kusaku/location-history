@@ -1,10 +1,10 @@
-import {DAY, shiftPeriod} from './data.mjs?v=11';
+import {DAY, shiftPeriod} from './data.mjs?v=12';
 
-// Preset IDs stay compatible with saved preferences. Months and years use UTC
+// Preset IDs stay compatible with saved preferences. Calendar windows use UTC
 // calendar arithmetic; a preferred day avoids drifting after February or April.
 function offset(start, period, amount, day = new Date(start).getUTCDate()) {
   if (period === '1') return start + amount * DAY;
-  const date = new Date(start), months = amount * (period === '365' ? 12 : 1);
+  const date = new Date(start), months = amount * (period === '365' ? 12 : period === '90' ? 3 : 1);
   const month = new Date(start);
   month.setUTCDate(1); month.setUTCMonth(date.getUTCMonth() + months);
   const last = new Date(month);
@@ -22,7 +22,7 @@ export function resizeWindow(start, period, min, max, day) {
 }
 
 export function shiftWindow(start, end, min, max, direction, period, day) {
-  if (period !== '30' && period !== '365') return shiftPeriod(start, end, min, max, direction);
+  if (!['30', '90', '365'].includes(period)) return shiftPeriod(start, end, min, max, direction);
   if ((direction < 0 && start <= min) || (direction > 0 && end >= max)) return {start, end};
   const nextStart = offset(start, period, direction, day);
   const nextEnd = offset(start, period, direction + 1, day) - 1;

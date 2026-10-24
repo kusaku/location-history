@@ -1,9 +1,9 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=9';
-import {createPlaceHistory} from './place-history.mjs?v=5';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=10';
+import {createPlaceHistory} from './place-history.mjs?v=6';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS} from './data.mjs?v=11';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=8';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=10';
+import {DAY, HISTOGRAM_BINS} from './data.mjs?v=12';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=9';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=11';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -61,7 +61,7 @@ function currentOptions() {
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
   const {start, end, mode} = state, {metric, radius} = state.views[mode];
-  return {start, end, mode, metric, radius, exclude: state.exclude, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  return {start, end, mode, metric, radius, excludeJumps: state.excludeJumps, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -91,7 +91,7 @@ function paintSources(changes = state.result) {
 function paint(changed) {
   const view = state.views[state.mode], palette = PALETTES[view.palette];
   $('radius').min = RADIUS_MIN[state.mode];
-  for (const [id, value] of Object.entries({metric: view.metric, radius: view.radius, intensity: view.intensity, opacity: view.opacity * 100})) $(id).value = value;
+  for (const [id, value] of Object.entries({metric: view.metric, radius: view.radius, intensity: view.intensity, lineWidth: view.lineWidth ?? 1.5, opacity: view.opacity * 100})) $(id).value = value;
   document.querySelectorAll('[data-palette]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.palette === view.palette)));
   $('legend-ramp').style.background = `linear-gradient(90deg,${palette.colors.join(',')})`;
   $('palette-name').textContent = palette.name;
@@ -99,9 +99,11 @@ function paint(changed) {
   $('density-controls').hidden = !['heat', 'hex'].includes(state.mode);
   $('intensity-field').hidden = !['heat', 'hex'].includes(state.mode);
   $('radius-field').hidden = state.mode === 'route';
+  $('line-width-field').hidden = state.mode !== 'route';
   $('radius-label').textContent = state.mode === 'hex' ? 'Cell size' : state.mode === 'points' ? 'Point size' : 'Spread';
   $('radius-value').textContent = state.mode === 'points' ? `${(view.radius / 8).toFixed(1)} px` : `${view.radius} px`;
   $('intensity-value').textContent = `${view.intensity.toFixed(1)}×`;
+  $('line-width-value').textContent = `${view.lineWidth ?? 1.5} px`;
   $('opacity-value').textContent = `${Math.round(view.opacity * 100)}%`;
   $('mode-description').textContent = descriptions[state.mode];
   $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[view.metric];
@@ -247,7 +249,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=11', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=12', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -344,14 +346,16 @@ function bindControls() {
   $('hour-start').onchange = () => { stopPlayback(); if (+$('hour-start').value >= +$('hour-end').value) $('hour-end').value = String(+$('hour-start').value + 1); rememberSettings(); refresh(); };
   $('hour-end').onchange = () => { stopPlayback(); if (+$('hour-end').value <= +$('hour-start').value) $('hour-start').value = String(+$('hour-end').value - 1); rememberSettings(); refresh(); };
   $('accuracy').onchange = () => { stopPlayback(); rememberSettings(); refresh(); };
-  document.querySelectorAll('[data-quality]').forEach(input => {
-    const bit = Number(input.dataset.quality); input.checked = Boolean(state.exclude & bit);
-    input.onchange = () => { stopPlayback(); state.exclude = input.checked ? state.exclude | bit : state.exclude & ~bit; rememberSettings(); refresh(); };
-  });
+  $('exclude-jumps').setAttribute('aria-pressed', String(state.excludeJumps));
+  $('exclude-jumps').onclick = () => {
+    stopPlayback(); state.excludeJumps = !state.excludeJumps;
+    $('exclude-jumps').setAttribute('aria-pressed', String(state.excludeJumps));
+    rememberSettings(); refresh();
+  };
   $('metric').onchange = event => { state.views[state.mode].metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };
   document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
   document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.views[state.mode].palette = button.dataset.palette; rememberSettings(); paint('palette'); }; });
-  for (const id of ['radius', 'intensity', 'opacity']) {
+  for (const id of ['radius', 'intensity', 'lineWidth', 'opacity']) {
     $(id).oninput = event => { state.views[state.mode][id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(id); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
     $(id).onchange = rememberSettings;
   }
@@ -379,7 +383,7 @@ function bindControls() {
     const period = button.dataset.period;
     const day = period === state.period ? state.periodDay ?? undefined : undefined;
     const next = resizeWindow(state.start, period, min, max, day);
-    setDates(next.start, next.end, period, ['30', '365'].includes(period) ? day ?? new Date(next.start).getUTCDate() : null); rememberSettings();
+    setDates(next.start, next.end, period, ['30', '90', '365'].includes(period) ? day ?? new Date(next.start).getUTCDate() : null); rememberSettings();
   }; });
   for (const [id, direction] of [['period-back', -1], ['period-forward', 1]]) $(id).onclick = () => {
     stopPlayback(); moveWindow(direction);

@@ -101,7 +101,7 @@ test('worker place queries share filters and are replaced transactionally with t
   try {
     await request('import', {files: [json({locations: [record(0), record(60000, 134000000, 500)]})]});
     assert.equal((await request('place', {area})).result.count, 2);
-    assert.equal((await request('place', {area, options: {exclude: 4}})).result.count, 1);
+    assert.equal((await request('place', {area, options: {accuracy: 100}})).result.count, 1);
     assert.equal((await request('place', {area: null})).type, 'error');
     assert.equal((await request('query')).result.count, 2);
     await request('import', {files: [json({locations: [record(100000)]})]});

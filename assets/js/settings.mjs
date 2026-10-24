@@ -1,15 +1,16 @@
-import {DAY} from './data.mjs?v=11';
-import {resizeWindow} from './timeline.mjs?v=8';
+import {DAY} from './data.mjs?v=12';
+import {resizeWindow} from './timeline.mjs?v=9';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
 const VIEW_DEFAULTS = Object.freeze({metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85});
-const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, exclude: 0, period: 'all', periodDay: null, dateRange: null});
+const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, excludeJumps: false, period: 'all', periodDay: null, dateRange: null});
 
 function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes('google') ? 'google' : availableMaps.includes('dark') ? 'dark' : availableMaps[0]};
+  settings.views.route.lineWidth = 1.5;
   if (!input || typeof input !== 'object' || Array.isArray(input)) return settings;
-  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 100, 500, 1000], period: ['all', '1', '30', '365', null]})) {
+  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 100, 500, 1000], period: ['all', '1', '30', '90', '365', null]})) {
     if (values.includes(input[key])) settings[key] = input[key];
   }
   for (const [mode, view] of Object.entries(settings.views)) {
@@ -17,7 +18,9 @@ function validatedSettings(input, availableMaps) {
     const source = input.views && typeof input.views === 'object' && !Array.isArray(input.views) ? input.views[mode] : input;
     if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
     for (const [key, values] of Object.entries({metric: ['records', 'days', 'time'], palette: ['ember', 'ocean', 'spectral']})) if (values.includes(source[key])) view[key] = source[key];
-    for (const [key, min, max, step] of [['radius', RADIUS_MIN[mode], 60, 1], ['intensity', .2, 3, .1], ['opacity', .1, 1, .05]]) {
+    const sliders = [['radius', RADIUS_MIN[mode], 60, 1], ['intensity', .2, 3, .1], ['opacity', .1, 1, .05]];
+    if (mode === 'route') sliders.push(['lineWidth', .5, 10, .5]);
+    for (const [key, min, max, step] of sliders) {
       const value = source[key];
       if (Number.isFinite(value) && value >= min && value <= max && Math.abs((value - min) / step - Math.round((value - min) / step)) < 1e-8) view[key] = value;
     }
@@ -28,12 +31,13 @@ function validatedSettings(input, availableMaps) {
     const steps = (value - min) / step;
     if (Math.abs(steps - Math.round(steps)) < 1e-8) settings[key] = value;
   }
-  if (Number.isInteger(input.exclude) && input.exclude >= 0 && input.exclude <= 15) settings.exclude = input.exclude;
+  // Keep only the old jump preference; removed exclusions must never stay active.
+  settings.excludeJumps = typeof input.excludeJumps === 'boolean' ? input.excludeJumps : Number.isInteger(input.exclude) && input.exclude >= 0 && input.exclude <= 15 && Boolean(input.exclude & 2);
   if (settings.hourStart >= settings.hourEnd) { settings.hourStart = 0; settings.hourEnd = 24; }
   const range = input.dateRange;
   if (settings.period !== 'all' && Array.isArray(range) && range.length === 2 && range.every(value => Number.isInteger(value) && Math.abs(value) < 8.64e15) && range[0] <= range[1] && range[0] % DAY === 0 && (range[1] + 1) % DAY === 0) settings.dateRange = [...range];
   if (settings.period === null && !settings.dateRange) settings.period = 'all';
-  if (['30', '365'].includes(settings.period) && Number.isInteger(input.periodDay) && input.periodDay >= 1 && input.periodDay <= 31) settings.periodDay = input.periodDay;
+  if (['30', '90', '365'].includes(settings.period) && Number.isInteger(input.periodDay) && input.periodDay >= 1 && input.periodDay <= 31) settings.periodDay = input.periodDay;
   return settings;
 }
 

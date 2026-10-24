@@ -47,7 +47,7 @@ test('invalid and obsolete values fall back independently without losing valid p
 test('legacy shared preferences migrate to independent mode settings', () => {
   const legacy = {metric: 'days', palette: 'ocean', radius: 39, intensity: 1.7, opacity: .65};
   const settings = loadSettings(maps, memoryStorage(JSON.stringify(legacy)));
-  for (const view of Object.values(settings.views)) assert.deepEqual(view, legacy);
+  for (const [mode, view] of Object.entries(settings.views)) assert.deepEqual(view, {...legacy, ...(mode === 'route' ? {lineWidth: 1.5} : {})});
   settings.views.heat.radius = 50;
   assert.equal(settings.views.hex.radius, 39);
   assert.equal(settings.views.points.radius, 39);
@@ -111,10 +111,31 @@ test('calendar navigation retains its preferred day across reloads and validates
   assert.equal(saveSettings({...settings, period: 'all'}, maps, storage).periodDay, null);
 });
 
-test('quality exclusions round-trip without storing selected places or malformed masks', () => {
+test('jump preference migrates old masks without retaining removed exclusions', () => {
   const storage = memoryStorage();
-  const saved = saveSettings({exclude: 15, area: {coordinates: [[13, 52]]}, place: {first: 123}}, maps, storage);
-  assert.equal(loadSettings(maps, storage).exclude, 15);
-  assert.equal('area' in saved, false); assert.equal('place' in saved, false);
-  for (const exclude of [-1, 16, 1.5, '3', null]) assert.equal(saveSettings({exclude}, maps, storage).exclude, 0);
+  for (let exclude = 0; exclude < 16; exclude++) {
+    const saved = saveSettings({exclude, area: {coordinates: [[13, 52]]}, place: {first: 123}}, maps, storage);
+    assert.equal(loadSettings(maps, storage).excludeJumps, Boolean(exclude & 2));
+    assert.equal('exclude' in saved, false);
+    assert.equal('area' in saved, false); assert.equal('place' in saved, false);
+  }
+  for (const exclude of [-1, 16, 1.5, '3', null]) assert.equal(saveSettings({exclude}, maps, storage).excludeJumps, false);
+  for (const excludeJumps of [true, false]) assert.equal(saveSettings({exclude: 15, excludeJumps}, maps, storage).excludeJumps, excludeJumps);
+  for (const excludeJumps of ['true', 1, null]) assert.equal(saveSettings({excludeJumps}, maps, storage).excludeJumps, false);
+});
+
+test('journey thickness is independent, bounded and persisted with quarter windows', () => {
+  const storage = memoryStorage();
+  const settings = loadSettings(maps, storage);
+  settings.views.route.lineWidth = 4.5;
+  settings.views.heat.intensity = 2;
+  Object.assign(settings, {period: '90', periodDay: 31, excludeJumps: true});
+  saveSettings(settings, maps, storage);
+  assert.deepEqual(loadSettings(maps, storage), settings);
+  assert.equal(settings.views.hex.intensity, 1);
+  for (const lineWidth of [0, 10.5, 1.1, '3', null, Infinity]) {
+    assert.equal(saveSettings({views: {route: {lineWidth}}}, maps, storage).views.route.lineWidth, 1.5);
+  }
+  assert.equal(saveSettings({views: {route: {lineWidth: .5}}}, maps, storage).views.route.lineWidth, .5);
+  assert.equal(saveSettings({views: {route: {lineWidth: 10}}}, maps, storage).views.route.lineWidth, 10);
 });

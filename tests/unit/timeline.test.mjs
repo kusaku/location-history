@@ -11,6 +11,7 @@ test('size buttons resize from the current start instead of jumping to the newes
   const start = time('2024-02-10');
   assert.deepEqual(resizeWindow(start, '1', min, max), range('2024-02-10', '2024-02-10'));
   assert.deepEqual(resizeWindow(start, '30', min, max), range('2024-02-10', '2024-03-09'));
+  assert.deepEqual(resizeWindow(start, '90', min, max), range('2024-02-10', '2024-05-09'));
   assert.deepEqual(resizeWindow(start, '365', min, max), range('2024-02-10', '2025-02-09'));
   assert.deepEqual(resizeWindow(start, 'all', min, max), {start: min, end: max});
 });
@@ -47,7 +48,7 @@ test('resizing and stepping stay inside short histories and stop at the endpoint
   const min = time('2024-01-01'), max = time('2024-03-10') + DAY - 1;
   assert.deepEqual(resizeWindow(time('2024-03-10'), '30', min, max), range('2024-02-11', '2024-03-10'));
   assert.deepEqual(resizeWindow(min, '365', min, max), {start: min, end: max});
-  for (const period of ['1', '30', '365', null]) {
+  for (const period of ['1', '30', '90', '365', null]) {
     assert.deepEqual(shiftWindow(min, max, min, max, 1, period), {start: min, end: max});
     assert.deepEqual(shiftWindow(min, max, min, max, -1, period), {start: min, end: max});
   }
@@ -58,6 +59,18 @@ test('resizing and stepping stay inside short histories and stop at the endpoint
     assert.ok(window.start >= min && window.end <= max && window.start <= window.end);
   }
   assert.deepEqual(shiftWindow(window.start, window.end, min, max, 1, '30', 1), window);
+});
+
+test('quarters step three calendar months and preserve month-end anchors in both directions', () => {
+  const january = resizeWindow(time('2024-01-31'), '90', min, max);
+  assert.deepEqual(january, range('2024-01-31', '2024-04-29'));
+  const april = shiftWindow(january.start, january.end, min, max, 1, '90', 31);
+  assert.deepEqual(april, range('2024-04-30', '2024-07-30'));
+  assert.deepEqual(resizeWindow(april.start, '90', min, max, 31), april);
+  const july = shiftWindow(april.start, april.end, min, max, 1, '90', 31);
+  assert.deepEqual(july, range('2024-07-31', '2024-10-30'));
+  assert.deepEqual(shiftWindow(july.start, july.end, min, max, -1, '90', 31), april);
+  assert.deepEqual(shiftWindow(april.start, april.end, min, max, -1, '90', 31), january);
 });
 
 test('histogram windows partition UTC dates and exactly reproduce counts, including short histories', () => {

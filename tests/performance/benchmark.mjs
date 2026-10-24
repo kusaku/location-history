@@ -42,7 +42,7 @@ const cases = [
   ['points', {mode: 'points', zoom: 5, viewport: [-10, 40, 35, 65]}],
   ['journeys', {mode: 'route', zoom: 5, viewport: [-10, 40, 35, 65]}],
 ];
-if (data.QUALITY) cases.push(['quality_exclusions', {mode: 'heat', exclude: 15, zoom: 5, viewport: [-10, 40, 35, 65]}]);
+if (data.jumpFlags) cases.push(['exclude_jumps', {mode: 'heat', excludeJumps: true, zoom: 5, viewport: [-10, 40, 35, 65]}]);
 for (const [name, options] of cases) {
   const times = []; let result;
   for (let i = 0; i < 4; i++) {
@@ -62,6 +62,6 @@ if (query.place) {
     const area = {type: 'Feature', geometry: {type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]]}};
     const begin = performance.now(), result = query.place(area), elapsed = performance.now() - begin;
     const cached = performance.now(); query.place(area);
-    console.log(JSON.stringify({case: name, firstQueryMs: +elapsed.toFixed(2), cachedMs: +(performance.now() - cached).toFixed(2), count: result.count, days: result.days, visits: result.visits, minutes: Math.round(result.minutes), details: result.recent.length, peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
+    console.log(JSON.stringify({case: name, firstQueryMs: +elapsed.toFixed(2), cachedMs: +(performance.now() - cached).toFixed(2), count: result.count, days: result.days, visits: result.visits, minutes: Math.round(result.minutes), details: result.recent.length, dayRows: result.daily?.length, peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
   }
 }

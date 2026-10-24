@@ -152,23 +152,15 @@ function accepts(p, accuracy, hourStart, hourEnd) {
   return h >= hourStart && h < hourEnd;
 }
 
-// One byte per observation; classify once, independently of later filters.
-export const QUALITY = Object.freeze({gaps: 1, jumps: 2, accuracy: 4, sampling: 8});
-export function qualityFlags(points) {
+// One byte per observation; detect jumps once, independently of later filters.
+export function jumpFlags(points) {
   const flags = new Uint8Array(points.length);
-  let previousInterval = 0;
-  for (let i = 0; i < points.length; i++) {
+  for (let i = 1; i < points.length; i++) {
     const p = points[i];
-    if (p.accuracy !== null && p.accuracy > 100) flags[i] |= QUALITY.accuracy;
-    if (!i) continue;
     const dt = p.t - points[i - 1].t;
-    if (dt > 6 * 3_600_000) { flags[i - 1] |= QUALITY.gaps; flags[i] |= QUALITY.gaps; }
     if (dt >= 0 && dt <= 6 * 3_600_000 && distance(points[i - 1], p) > dt / 3_600_000 * 1000) {
-      flags[i - 1] |= QUALITY.jumps; flags[i] |= QUALITY.jumps;
+      flags[i - 1] = flags[i] = 1;
     }
-    // A tenfold cadence change, at least five minutes, outside recording gaps.
-    if (dt > 0 && previousInterval > 0 && Math.max(dt, previousInterval) <= 6 * 3_600_000 && Math.max(dt, previousInterval) >= 300_000 && Math.max(dt, previousInterval) >= Math.min(dt, previousInterval) * 10) flags[i] |= QUALITY.sampling;
-    previousInterval = dt;
   }
   return flags;
 }
@@ -215,13 +207,13 @@ export function createHistoryQuery(points) {
   const min = points[0]?.t ?? 0, max = points.at(-1)?.t ?? 0;
   const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
-  const flags = qualityFlags(points);
+  const jumps = jumpFlags(points);
 
-  function ensureFilter({accuracy = 0, hourStart = 0, hourEnd = 24, exclude = 0}) {
-    const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}:${exclude}`;
+  function ensureFilter({accuracy = 0, hourStart = 0, hourEnd = 24, excludeJumps = false}) {
+    const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}:${excludeJumps}`;
     if (filterKey !== nextFilterKey) {
       const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0);
-      for (let i = 0; i < points.length; i++) if (!(flags[i] & exclude) && accepts(points[i], accuracy, hourStart, hourEnd)) {
+      for (let i = 0; i < points.length; i++) if ((!excludeJumps || !jumps[i]) && accepts(points[i], accuracy, hourStart, hourEnd)) {
         mask[i] = 1;
         histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) / historyDays * HISTOGRAM_BINS)]++;
       }
@@ -347,10 +339,10 @@ export function createHistoryQuery(points) {
   };
   // Reuse the dataset index and filter mask, without replacing the map's current
   // date/route cache. Large areas stream chronologically; small areas sort only
-  // their spatial candidates. Only the latest 30 visits leave the worker.
+  // their spatial candidates. Only the latest 30 visits/days leave the worker.
   query.place = (feature, options = {}) => {
     const geometry = placePolygon(feature?.geometry?.coordinates?.[0]);
-    const nextKey = JSON.stringify([feature.properties?.cell, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.exclude]);
+    const nextKey = JSON.stringify([feature.properties?.cell, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.excludeJumps]);
     if (nextKey === placeKey) return placeResult;
     ensureFilter(options);
     const {start = -Infinity, end = Infinity, hourEnd = 24} = options;
@@ -386,10 +378,15 @@ export function createHistoryQuery(points) {
     };
     const from = lowerBound(points, start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
     let count = 0, days = 0, lastDay, first = null, last = null, previous = -2, visitCount = 0, minutes = 0, coveredUntil = -Infinity, visit;
-    const recent = [];
+    const recent = [], daily = [];
     const keep = () => { if (visit) { recent.push(visit); if (recent.length > 30) recent.shift(); } };
     const add = i => {
       const p = points[i], day = Math.floor(p.t / DAY);
+      if (day !== lastDay) {
+        days++; lastDay = day;
+        daily.push({start: day * DAY, count: 0, minutes: 0});
+        if (daily.length > 30) daily.shift();
+      }
       if (i !== previous + 1 || p.t - points[previous].t > 30 * 60_000) {
         keep(); visit = {start: p.t, end: p.t, count: 0, minutes: 0}; visitCount++;
       }
@@ -397,9 +394,9 @@ export function createHistoryQuery(points) {
       const until = Math.max(p.t, Math.min(p.t + p.duration, end + 1, day * DAY + hourEnd * 3_600_000, next && (!filter.mask[i + 1] || !contains(i + 1)) ? next.t : Infinity));
       const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
       coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
+      daily.at(-1).count++; daily.at(-1).minutes += duration;
       visit.count++; visit.end = Math.max(visit.end, until); count++; previous = i;
       if (first === null) first = p.t; last = p.t;
-      if (day !== lastDay) { days++; lastDay = day; }
     };
     if (candidates < (to - from) / 2) {
       const matches = new Uint32Array(candidates); let length = 0;
@@ -410,7 +407,7 @@ export function createHistoryQuery(points) {
     } else for (let i = from; i < to; i++) if (filter.mask[i] && contains(i)) add(i);
     keep();
     placeKey = nextKey;
-    return placeResult = {count, days, first, last, minutes, visits: visitCount, recent: recent.reverse()};
+    return placeResult = {count, days, first, last, minutes, visits: visitCount, recent: recent.reverse(), daily: daily.reverse()};
   };
   return query;
 }

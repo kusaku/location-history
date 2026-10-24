@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=27">
-    <script type="module" src="js/app.mjs?v=35">
+    <link rel="stylesheet" href="css/styles.css?v=28">
+    <script type="module" src="js/app.mjs?v=36">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -382,8 +382,36 @@
                 <div><dt>First seen · UTC</dt><dd id="place-first"></dd></div>
                 <div><dt>Last seen · UTC</dt><dd id="place-last"></dd></div>
               </dl>
-              <details class="place-table-section">
-                <summary id="place-visits-label">Recorded stays</summary>
+              <div id="place-views" class="place-views" role="tablist" aria-label="Place history view">
+                <button id="place-tab-calendar" type="button" role="tab" data-view="calendar" aria-controls="place-view-calendar" aria-selected="true">Calendar</button>
+                <button id="place-visits-label" type="button" role="tab" data-view="visits" aria-controls="place-view-visits" aria-selected="false" tabindex="-1">Recorded stays</button>
+                <button id="place-daily-label" type="button" role="tab" data-view="daily" aria-controls="place-view-daily" aria-selected="false" tabindex="-1">By day</button>
+              </div>
+              <section id="place-view-calendar" class="place-view" role="tabpanel" aria-labelledby="place-tab-calendar">
+                <div class="place-calendar-toolbar">
+                  <div class="place-calendar-years">
+                    <button id="place-calendar-previous" type="button" aria-label="Previous calendar year">←</button>
+                    <input id="place-calendar-year" type="number" step="1" aria-label="Calendar year">
+                    <button id="place-calendar-next" type="button" aria-label="Next calendar year">→</button>
+                  </div>
+                  <label>Shade by <select id="place-calendar-metric"><option value="count">Locations</option><option value="minutes">Time in area</option></select></label>
+                </div>
+                <div class="place-calendar-scroll">
+                  <div id="place-calendar-chart" class="place-calendar-chart">
+                    <div id="place-calendar-months" class="place-calendar-months" aria-hidden="true"></div>
+                    <div class="place-calendar-body">
+                      <div class="place-calendar-weekdays" aria-hidden="true"><span>Mon</span><span>Wed</span><span>Fri</span></div>
+                      <div id="place-calendar-days" class="place-calendar-days" role="group" aria-label="Daily place activity in UTC"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="place-calendar-footer">
+                  <span id="place-calendar-summary"></span>
+                  <span id="place-calendar-scale" class="place-calendar-scale">Less <i data-level="0"></i><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i> More</span>
+                </div>
+                <p id="place-calendar-detail" class="hint">Select a square to filter the map to that UTC day. Arrow keys move between recorded days.</p>
+              </section>
+              <section id="place-view-visits" class="place-view" role="tabpanel" aria-labelledby="place-visits-label" hidden>
                 <div id="place-visits-pagination" class="place-pagination" hidden>
                   <button id="place-visits-previous" type="button" aria-label="Previous stays">Previous</button>
                   <span id="place-visits-page" role="status"></span>
@@ -393,9 +421,8 @@
                   <thead><tr id="place-visits-head"></tr></thead>
                   <tbody id="place-visits"></tbody>
                 </table>
-              </details>
-              <details class="place-table-section">
-                <summary id="place-daily-label">By day</summary>
+              </section>
+              <section id="place-view-daily" class="place-view" role="tabpanel" aria-labelledby="place-daily-label" hidden>
                 <div id="place-daily-pagination" class="place-pagination" hidden>
                   <button id="place-daily-previous" type="button" aria-label="Previous days">Previous</button>
                   <span id="place-daily-page" role="status"></span>
@@ -405,7 +432,7 @@
                   <thead><tr id="place-daily-head"></tr></thead>
                   <tbody id="place-daily"></tbody>
                 </table>
-              </details>
+              </section>
               <p class="hint">Gaps under 15 minutes form one stay. Times are estimated; current filters apply. Select a date to filter the map.</p>
             </div>
           </aside>
@@ -590,7 +617,7 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time. Expand <b>Recorded stays</b> or <b>By day</b>, sort by a column heading, and use Previous/Next for longer tables. Every matching stay and day is available. Select a date to filter the map.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. The <b>Calendar</b> shows one square per UTC day, shaded by locations or time in the area. Change years with the arrows or year field; hover or focus a day for its totals and select a recorded day to filter the map. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
       <h3>Filters and date windows</h3>
       <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>

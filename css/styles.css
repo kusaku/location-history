@@ -1059,10 +1059,12 @@ select {
 }
 
 .place-panel {
-  width: 480px;
+  width: 780px;
   max-width: 100%;
-  max-height: min(260px,28svh);
-  overflow: auto;
+  max-height: min(540px,max(230px,calc(100svh - 340px)));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   scrollbar-width: thin;
   margin: 0 0 8px auto;
   padding: 12px;
@@ -1074,9 +1076,7 @@ select {
 }
 
 .place-heading {
-  position: sticky;
-  top: -12px;
-  z-index: 1;
+  flex-shrink: 0;
   background: #141d17;
   margin: -12px -12px 0;
   padding: 12px 12px 6px;
@@ -1103,6 +1103,161 @@ select {
 
 .place-panel .presets {
   gap: 4px;
+  flex-shrink: 0;
+}
+
+#place-results {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.place-views {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.place-views button {
+  padding: 9px;
+  min-height: 36px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.place-views button[aria-selected=true] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.place-view {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  padding-top: 10px;
+}
+
+.place-calendar-toolbar,
+.place-calendar-years,
+.place-calendar-toolbar label,
+.place-calendar-footer,
+.place-calendar-scale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.place-calendar-toolbar,
+.place-calendar-footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.place-calendar-toolbar {
+  margin-bottom: 10px;
+}
+
+.place-calendar-years button {
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 30px;
+  min-height: 30px;
+}
+
+.place-calendar-toolbar input,
+.place-calendar-toolbar select {
+  color: var(--ink);
+  background: #20291f;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.place-calendar-years input {
+  width: 76px;
+}
+
+.place-calendar-scroll {
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.place-calendar-chart {
+  --weeks: 53;
+  min-width: calc(var(--weeks) * 13px + 23px);
+}
+
+.place-calendar-months,
+.place-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(var(--weeks),minmax(10px,1fr));
+  gap: 3px;
+}
+
+.place-calendar-months {
+  margin: 0 0 6px 26px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.place-calendar-body {
+  display: grid;
+  grid-template-columns: 23px minmax(0,1fr);
+  gap: 3px;
+}
+
+.place-calendar-days,
+.place-calendar-weekdays {
+  grid-template-rows: repeat(7,11px);
+}
+
+.place-calendar-weekdays {
+  display: grid;
+  row-gap: 3px;
+  font-size: 8px;
+  color: var(--muted);
+  align-items: center;
+}
+
+.place-calendar-weekdays span:nth-child(1) { grid-row: 2; }
+.place-calendar-weekdays span:nth-child(2) { grid-row: 4; }
+.place-calendar-weekdays span:nth-child(3) { grid-row: 6; }
+
+.place-calendar-days button,
+.place-calendar-scale i {
+  padding: 0;
+  border: 1px solid #ffffff05;
+  border-radius: 2px;
+  background: #28312b;
+}
+
+.place-calendar-days button:disabled {
+  opacity: .6;
+}
+
+.place-calendar-days button:focus-visible {
+  outline-offset: 1px;
+}
+
+.place-calendar-days [data-level="1"],
+.place-calendar-scale [data-level="1"] { background: #244d2d; }
+.place-calendar-days [data-level="2"],
+.place-calendar-scale [data-level="2"] { background: #397d3f; }
+.place-calendar-days [data-level="3"],
+.place-calendar-scale [data-level="3"] { background: #65ad51; }
+.place-calendar-days [data-level="4"],
+.place-calendar-scale [data-level="4"] { background: #b0da70; }
+
+.place-calendar-scale i {
+  width: 10px;
+  height: 10px;
 }
 
 #place-finish:not(:disabled) {
@@ -1112,7 +1267,8 @@ select {
 
 .place-stats {
   display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  flex-shrink: 0;
   gap: 10px;
   margin: 10px 0;
 }
@@ -1133,11 +1289,21 @@ select {
   line-height: 1.4;
 }
 
-.place-table-section summary {
-  cursor: pointer;
-  font-size: 10px;
-  color: var(--accent);
-  padding: 7px 0;
+.place-stats>div:nth-child(n+5) {
+  grid-column: span 2;
+}
+
+@media(max-width:550px) {
+  .place-stats {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  .place-stats>div:nth-child(n+5) {
+    grid-column: auto;
+  }
+  .place-views button {
+    padding: 8px 6px;
+    font-size: 10px;
+  }
 }
 
 .place-table {

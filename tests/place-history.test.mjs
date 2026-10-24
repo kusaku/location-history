@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlaceHistory, createPlaceTable} from '../js/place-history.mjs';
+import {createPlaceHistory, createPlaceTable, createPlaceCalendar} from '../js/place-history.mjs';
 const area = {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]]}};
 class Element {
-  hidden = false; disabled = false; textContent = ''; style = {}; children = []; dataset = {}; attributes = {};
+  hidden = false; disabled = false; textContent = ''; style = {setProperty(key, value) { this[key] = String(value); }}; children = []; dataset = {}; attributes = {};
   setAttribute(key, value) { this.attributes[key] = value; }
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = children; }
-  focus() { this.focused = true; }
+  focus() { this.focused = true; this.onfocus?.(); }
+  click() { this.onclick?.(); }
   addEventListener(key, callback) { this[key] = callback; }
 }
 function fixture() {
@@ -15,6 +16,7 @@ function fixture() {
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   globalThis.document = {getElementById: get, createElement: () => new Element(), addEventListener: (name, fn) => handlers.set(`document:${name}`, fn)};
   get('place-scope').children = ['window', 'all'].map(scope => { const button = new Element(); button.dataset.scope = scope; return button; });
+  get('place-views').children = ['calendar', 'visits', 'daily'].map((view, i) => { const button = get(['place-tab-calendar', 'place-visits-label', 'place-daily-label'][i]); button.dataset.view = view; return button; });
   const canvas = new Element(); let zoom = true;
   const map = {
     getSource: key => sources.get(key),
@@ -141,5 +143,76 @@ test('large table results format and render only the visible page', () => {
     assert.equal(f.get('large-page').textContent, '101–200 of 10,000');
     table.setRows([]); assert.equal(f.get('large').children.length, 0);
     assert.equal(f.get('large-pagination').hidden, true);
+  } finally { f.cleanup(); }
+});
+
+test('place calendar lays out leap days and 54-week years in UTC, preserving exact daily totals', () => {
+  const f = fixture(), selected = [], day = 86_400_000;
+  try {
+    const calendar = createPlaceCalendar(entry => selected.push(entry));
+    const leap = Date.UTC(2024, 1, 29);
+    const rows = [{start: Date.UTC(2023, 11, 31), count: 2, minutes: 30}, {start: leap, count: 4, minutes: .5}, {start: Date.UTC(2024, 2, 1), count: 1, minutes: 10}];
+    calendar.setRows(rows, {start: Date.UTC(2023, 0, 1), end: Date.UTC(2024, 11, 31)});
+    assert.equal(f.get('place-calendar-year').value, 2024);
+    const cells = f.get('place-calendar-days').children;
+    assert.equal(cells.length, 366);
+    const february = cells.find(cell => cell.dataset.date === '2024-02-29');
+    assert.equal(february.style.gridRow, 5); assert.equal(february.dataset.level, 4);
+    assert.match(february.title, /Thu, Feb 29, 2024 · 4 locations · <1 min/);
+    february.onclick(); assert.deepEqual(selected, [{start: leap, end: leap + day}]);
+    assert.equal(cells[0].disabled, true);
+    assert.match(f.get('place-calendar-summary').textContent, /2 recorded days · 11 min/);
+    f.get('place-calendar-previous').onclick();
+    assert.equal(f.get('place-calendar-days').children.length, 365);
+    assert.equal(f.get('place-calendar-year').value, 2023);
+    assert.equal(f.get('place-calendar-previous').disabled, true);
+    calendar.setRows([{start: Date.UTC(2000, 0, 1), count: 1, minutes: 1}], {start: Date.UTC(2000, 0, 1), end: Date.UTC(2000, 11, 31)});
+    assert.equal(f.get('place-calendar-chart').style['--weeks'], '54');
+    assert.equal(f.get('place-calendar-months').children.length, 12);
+    assert.equal(f.get('place-calendar-next').disabled, true);
+    assert.deepEqual(rows.map(row => row.count), [2, 4, 1]);
+  } finally { f.cleanup(); }
+});
+
+test('calendar metric, year and keyboard navigation stay bounded and never request point queries', () => {
+  const f = fixture(), day = 86_400_000;
+  try {
+    const calendar = createPlaceCalendar(() => {});
+    const rows = Array.from({length: 10000}, (_, i) => ({start: Date.UTC(2000, 0, 1) + i * day, count: i % 4 + 1, minutes: i % 8}));
+    calendar.setRows(rows, {start: rows[0].start, end: rows.at(-1).start});
+    assert.ok(f.get('place-calendar-days').children.length <= 366);
+    f.get('place-calendar-year').value = '2000'; f.get('place-calendar-year').onchange();
+    const cells = f.get('place-calendar-days').children;
+    cells[0].onkeydown({key: 'ArrowRight', preventDefault() {}});
+    assert.equal(cells[7].focused, true); assert.equal(cells[7].tabIndex, 0); assert.equal(cells[0].tabIndex, -1);
+    f.get('place-calendar-metric').value = 'minutes'; f.get('place-calendar-metric').onchange();
+    assert.equal(f.get('place-calendar-days').children[0].dataset.level, 0);
+    assert.match(f.get('place-calendar-scale').title, /7 min/);
+    f.get('place-calendar-year').value = '9999'; f.get('place-calendar-year').onchange();
+    assert.equal(f.get('place-calendar-year').value, new Date(rows.at(-1).start).getUTCFullYear());
+    assert.equal(f.get('place-calendar-next').disabled, true);
+    calendar.setRows(rows.slice(0, 3), {start: rows[1].start, end: rows[2].start});
+    assert.equal(f.get('place-calendar-days').children[0].disabled, true);
+    assert.match(f.get('place-calendar-days').children[0].title, /outside selected dates/);
+    calendar.clear(); assert.equal(f.get('place-calendar-days').children.length, 0);
+    assert.equal(f.sent.length, 0);
+  } finally { f.cleanup(); }
+});
+
+test('place views switch with tabs and keyboard without recomputing the selection', () => {
+  const f = fixture();
+  try {
+    f.controller.select(area, 'Drawn area');
+    const tabs = f.get('place-views').children;
+    tabs[1].onclick();
+    assert.equal(f.get('place-view-calendar').hidden, true);
+    assert.equal(f.get('place-view-visits').hidden, false);
+    assert.equal(tabs[1].attributes['aria-selected'], 'true'); assert.equal(tabs[1].tabIndex, 0);
+    tabs[1].onkeydown({key: 'ArrowRight', preventDefault() {}});
+    assert.equal(f.get('place-view-visits').hidden, true); assert.equal(f.get('place-view-daily').hidden, false);
+    assert.equal(tabs[2].focused, true);
+    tabs[2].onkeydown({key: 'Home', preventDefault() {}});
+    assert.equal(f.get('place-view-calendar').hidden, false);
+    assert.equal(f.sent.length, 1);
   } finally { f.cleanup(); }
 });

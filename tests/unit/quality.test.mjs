@@ -27,3 +27,7 @@ test('excluding accuracy never joins tracks across a removed observation and pan
   const pan = query({exclude: QUALITY.accuracy, mode: 'route', viewport: [-1, -1, 1, 1]});
   assert.equal(pan.histogram, result.histogram); assert.equal(pan.bounds, result.bounds); assert.equal(pan.routes, result.routes);
 });
+
+test('unobserved travel across a recording gap is classified as a gap, not a jump', () => {
+  assert.deepEqual([...qualityFlags([point(0, 0), point(7 * 3_600_000, 150)])], [QUALITY.gaps, QUALITY.gaps]);
+});

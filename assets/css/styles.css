@@ -1067,6 +1067,10 @@ select {
 }
 
 .place-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #141d17;
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -1649,6 +1653,16 @@ dialog p {
   }
   .timeline-inputs input[type=date] {
     width: 102px;
+  }
+}
+
+@media(max-width:360px) {
+  .window-filters {
+    display: contents;
+  }
+  .timeline-controls {
+    justify-content: flex-start;
+    gap: 4px;
   }
 }
 

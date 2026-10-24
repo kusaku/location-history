@@ -377,14 +377,14 @@ export function createHistoryQuery(points) {
       return inside;
     };
     const from = lowerBound(points, start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
-    let count = 0, days = 0, lastDay, first = null, last = null, previous = -2, visitCount = 0, minutes = 0, coveredUntil = -Infinity, visit;
+    let count = 0, days = 0, lastDay, first = null, last = null, previous = -2, visitCount = 0, minutes = 0, coveredUntil = -Infinity, visit, dayTotal;
     const recent = [], daily = [];
     const keep = () => { if (visit) { recent.push(visit); if (recent.length > 30) recent.shift(); } };
     const add = i => {
       const p = points[i], day = Math.floor(p.t / DAY);
       if (day !== lastDay) {
         days++; lastDay = day;
-        daily.push({start: day * DAY, count: 0, minutes: 0});
+        dayTotal = {start: day * DAY, count: 0, minutes: 0}; daily.push(dayTotal);
         if (daily.length > 30) daily.shift();
       }
       if (i !== previous + 1 || p.t - points[previous].t > 30 * 60_000) {
@@ -394,7 +394,7 @@ export function createHistoryQuery(points) {
       const until = Math.max(p.t, Math.min(p.t + p.duration, end + 1, day * DAY + hourEnd * 3_600_000, next && (!filter.mask[i + 1] || !contains(i + 1)) ? next.t : Infinity));
       const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
       coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
-      daily.at(-1).count++; daily.at(-1).minutes += duration;
+      dayTotal.count++; dayTotal.minutes += duration;
       visit.count++; visit.end = Math.max(visit.end, until); count++; previous = i;
       if (first === null) first = p.t; last = p.t;
     };

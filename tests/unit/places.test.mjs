@@ -45,7 +45,10 @@ test('a clicked hexagon uses its original bin, even at minimum size and high zoo
   const query = createHistoryQuery(points);
   for (const zoom of [10, 18, 20]) {
     const result = query({mode: 'hex', zoom, radius: 2});
-    for (const feature of result.density.features) assert.equal(query.place(feature).count, feature.properties.count);
+    for (const feature of result.density.features) {
+      assert.match(feature.properties.cell, /^hex:/);
+      assert.equal(query.place(JSON.parse(JSON.stringify(feature))).count, feature.properties.count);
+    }
   }
 });
 test('all-date place queries and repeat clicks preserve cached map statistics and routes', () => {

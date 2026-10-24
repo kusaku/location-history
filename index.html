@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=18">
+    <link rel="stylesheet" href="assets/css/styles.css?v=19">
     <script type="module" src="assets/js/app.mjs?v=23">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
@@ -434,8 +434,8 @@
                   </label>
                   <div class="quality-filters" role="group" aria-label="Exclude recording issues">
                     <span>Exclude</span>
-                    <label class="quality-toggle" title="Exclude both observations bordering a recording gap longer than six hours"><input type="checkbox" class="sr-only" data-quality="1"><span>Recording gaps</span></label>
-                    <label class="quality-toggle" title="Exclude both observations of a jump over 1,000 km/h, including different locations at the same time"><input type="checkbox" class="sr-only" data-quality="2"><span>Suspicious jumps</span></label>
+                    <label class="quality-toggle" title="Exclude both observations bordering a recording gap longer than six hours"><input type="checkbox" class="sr-only" data-quality="1" aria-label="Exclude recording gaps"><span>Gaps</span></label>
+                    <label class="quality-toggle" title="Exclude both observations of a jump over 1,000 km/h, including different locations at the same time"><input type="checkbox" class="sr-only" data-quality="2" aria-label="Exclude suspicious jumps"><span>Jumps</span></label>
                     <label class="quality-toggle" title="Exclude known accuracy worse than 100 metres; unknown accuracy stays included"><input type="checkbox" class="sr-only" data-quality="4"><span>Poor accuracy</span></label>
                     <label class="quality-toggle" title="Exclude observations where sampling intervals change at least tenfold, with the larger interval between five minutes and six hours"><input type="checkbox" class="sr-only" data-quality="8"><span>Uneven sampling</span></label>
                   </div>

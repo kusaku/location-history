@@ -1089,6 +1089,10 @@ select {
 
 .place-heading>div:first-child {
   flex: 1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 10px;
 }
 
 .place-heading h2 {
@@ -1098,7 +1102,7 @@ select {
 }
 
 .place-heading .hint {
-  margin: 3px 0 6px;
+  margin: 0;
 }
 
 .place-heading .quiet-button {
@@ -1125,8 +1129,8 @@ select {
 }
 
 .place-views button {
-  padding: 9px;
-  min-height: 36px;
+  padding: 7px 9px;
+  min-height: 32px;
   border-bottom: 2px solid transparent;
   color: var(--muted);
   font-size: 11px;
@@ -1158,7 +1162,7 @@ select {
 }
 
 #place-calendar-detail {
-  min-height: 32px;
+  min-height: 16px;
   margin-top: 6px;
 }
 
@@ -1185,7 +1189,7 @@ select {
 }
 
 .place-calendar-toolbar {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .place-calendar-toolbar label {
@@ -1225,7 +1229,7 @@ select {
 }
 
 .place-calendar-caption {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 11px;
   color: var(--ink);
 }
@@ -1416,8 +1420,8 @@ select {
   display: grid;
   grid-template-columns: repeat(4,minmax(0,1fr));
   flex-shrink: 0;
-  gap: 10px;
-  margin: 10px 0;
+  gap: 7px 10px;
+  margin: 8px 0;
 }
 
 .place-stats dt {
@@ -1467,6 +1471,10 @@ select {
   .place-views button {
     padding: 8px 6px;
     font-size: 10px;
+    min-height: 36px;
+  }
+  #place-calendar-detail {
+    min-height: 32px;
   }
 }
 

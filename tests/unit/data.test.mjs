@@ -164,7 +164,7 @@ test('spatial index agrees with a chronological viewport scan across wrapping, p
   const query = createHistoryQuery(points);
   for (const viewport of [[13, 52, 14, 53], [178, -90, 182, 90], [-182, -90, -178, 90], [530, -90, 550, 90], [-720, -90, 720, 90], [-180, -90, 180, 90], [0, 89, 180, 90]]) {
     for (const accuracy of [0, 100]) for (const hourStart of [0, 8]) {
-      const selected = points.filter(p => p.t >= -DAY && p.t <= 9 * DAY && (!accuracy || p.accuracy <= accuracy) && new Date(p.t).getUTCHours() >= hourStart);
+      const selected = points.filter(p => p.t >= -DAY && p.t <= 9 * DAY && (!accuracy || p.accuracy < accuracy) && new Date(p.t).getUTCHours() >= hourStart);
       const center = (viewport[0] + viewport[2]) / 2;
       const visible = selected.filter(p => { const lon = p.lon + 360 * Math.round((center - p.lon) / 360); return lon >= viewport[0] && lon <= viewport[2] && p.lat >= viewport[1] && p.lat <= viewport[3]; });
       const result = query({mode: 'points', viewport, accuracy, hourStart, start: -DAY, end: 9 * DAY});
@@ -199,4 +199,12 @@ test('route simplification preserves both endpoints without allocating every coo
 
 test('date range queries preserve inclusive fractional timestamp boundaries', () => {
   assert.equal(queryHistory([point(.1), point(.5), point(.9)], {start: .1, end: .5}).count, 2);
+});
+
+test('accuracy limits are strict for all five thresholds and retain unknown metadata', () => {
+  const values = [null, 0, 9, 10, 49, 50, 99, 100, 499, 500, 999, 1000];
+  const query = createHistoryQuery(values.map((accuracy, i) => point(i * 60_000, 13, 52, accuracy)));
+  for (const [accuracy, count] of [[0, 12], [10, 3], [50, 5], [100, 7], [500, 9], [1000, 11]]) {
+    assert.equal(query({accuracy}).count, count);
+  }
 });

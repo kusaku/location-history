@@ -8,10 +8,10 @@ const box = area([[12, 51], [14, 51], [14, 53], [12, 53]]);
 test('place history counts recorded visits, observations, days and conservative time', () => {
   const query = createHistoryQuery([point(0, 13, 52, 10 * minute), point(10 * minute, 13, 52, 10 * minute), point(20 * minute, 15), point(25 * minute, 13, 52, 10 * minute), point(65 * minute)]);
   const result = query.place(box);
-  assert.equal(result.count, 4); assert.equal(result.visits, 3); assert.equal(result.days, 1);
+  assert.equal(result.count, 4); assert.equal(result.visits, 2); assert.equal(result.days, 1);
   assert.equal(result.first, 0); assert.equal(result.last, 65 * minute); assert.equal(result.minutes, 30);
-  assert.deepEqual(result.recent.map(v => v.start), [65 * minute, 25 * minute, 0]);
-  assert.equal(result.recent[2].count, 2);
+  assert.deepEqual(result.stays.map(v => v.start), [65 * minute, 0]);
+  assert.equal(result.stays[1].count, 3);
 });
 test('place time clips to exits, hours, date windows and the union of overlapping intervals', () => {
   const query = createHistoryQuery([point(8 * 60 * minute, 13, 52, 60 * minute), point(8 * 60 * minute + 10 * minute, 13, 52, 60 * minute)]);
@@ -26,7 +26,7 @@ test('place queries share accuracy and jump filters, retaining empty results', (
   assert.equal(query.place(box, {excludeJumps: true}).count, 1);
   assert.equal(query.place(box, {excludeJumps: true, accuracy: 100}).count, 0);
   const empty = query.place(box, {start: DAY * 2});
-  assert.deepEqual(empty, {count: 0, days: 0, first: null, last: null, minutes: 0, visits: 0, recent: [], daily: []});
+  assert.deepEqual(empty, {count: 0, days: 0, first: null, last: null, minutes: 0, visits: 0, stays: [], daily: []});
 });
 test('indexed place membership agrees with a chronological scan, including dateline wrapping', () => {
   const points = Array.from({length: 1000}, (_, i) => point(i, i % 2 ? 0 : 13, i % 2 ? 0 : 52));
@@ -59,10 +59,10 @@ test('all-date place queries and repeat clicks preserve cached map statistics an
   const after = query({start: DAY, mode: 'route'});
   assert.equal(after.routes, map.routes); assert.equal(after.histogram, map.histogram); assert.equal(after.bounds, map.bounds);
 });
-test('visit details are bounded while totals remain exact', () => {
+test('every stay is returned, newest first, without the old 30-row limit', () => {
   const result = createHistoryQuery(Array.from({length: 100}, (_, i) => point(i * 60 * minute))).place(box);
-  assert.equal(result.visits, 100); assert.equal(result.count, 100); assert.equal(result.recent.length, 30);
-  assert.equal(result.recent[0].start, 99 * 60 * minute);
+  assert.equal(result.visits, 100); assert.equal(result.count, 100); assert.equal(result.stays.length, 100);
+  assert.equal(result.stays[0].start, 99 * 60 * minute);
 });
 
 test('daily table totals clip overlapping stays at midnight and honor the selected window', () => {
@@ -74,11 +74,11 @@ test('daily table totals clip overlapping stays at midnight and honor the select
   assert.equal(clipped.minutes, 25); assert.equal(clipped.daily[0].minutes, 15);
 });
 
-test('daily rows remain bounded on long histories without changing full-selection totals', () => {
+test('every recorded day is returned, newest first', () => {
   const result = createHistoryQuery(Array.from({length: 100}, (_, i) => point(i * DAY, 13, 52, minute))).place(box);
-  assert.equal(result.days, 100); assert.equal(result.minutes, 100); assert.equal(result.daily.length, 30);
+  assert.equal(result.days, 100); assert.equal(result.minutes, 100); assert.equal(result.daily.length, 100);
   assert.deepEqual(result.daily[0], {start: 99 * DAY, count: 1, minutes: 1});
-  assert.equal(result.daily.at(-1).start, 70 * DAY);
+  assert.equal(result.daily.at(-1).start, 0);
 });
 test('invalid, self-crossing, degenerate and oversized areas fail explicitly', () => {
   for (const ring of [[], [[0, 0], [1, 1]], [[0, 0], [1, 0], [2, 0]], [[0, 0], [2, 2], [0, 2], [2, 0]], [[0, 91], [1, 0], [0, 1]], Array.from({length: 66}, (_, i) => [i, 0])]) assert.throws(() => placePolygon(ring));
@@ -99,4 +99,26 @@ test('hexagon selection retains dateline duplicates and clamped polar observatio
   const points = [[-180, 0], [180, 0], [0, 90], [0, -90], [179.9, 50], [-179.9, 50]].map(([lon, lat], t) => point(t, lon, lat));
   const query = createHistoryQuery(points);
   for (const zoom of [2, 10, 20]) for (const feature of query({mode: 'hex', zoom, radius: 2}).density.features) assert.equal(query.place(feature).count, feature.properties.count);
+});
+
+test('stays merge gaps below 15 minutes across exits and filtered observations, but split at 15', () => {
+  const query = createHistoryQuery([
+    point(0, 13, 52, 5 * minute), point(5 * minute, 15),
+    point(19 * minute, 13, 52, minute), point(20 * minute, 13, 52, 0, 500),
+    point(34 * minute, 13, 52, minute), point(50 * minute, 13, 52, minute),
+  ]);
+  const result = query.place(box, {accuracy: 100});
+  assert.equal(result.count, 4); assert.equal(result.visits, 2);
+  assert.deepEqual(result.stays.map(({start, end, count, minutes}) => ({start, end, count, minutes})), [
+    {start: 50 * minute, end: 51 * minute, count: 1, minutes: 1},
+    {start: 0, end: 35 * minute, count: 3, minutes: 7},
+  ]);
+  assert.equal(result.minutes, 8); // The short gaps are not counted as recorded time.
+});
+
+test('stay gaps are measured from the estimated end, including long explicit visits', () => {
+  const result = createHistoryQuery([point(0, 13, 52, 60 * minute), point(74 * minute, 13, 52, minute), point(90 * minute)]).place(box);
+  assert.equal(result.visits, 2);
+  assert.equal(result.stays[1].count, 2); assert.equal(result.stays[1].end, 75 * minute);
+  assert.equal(result.stays[1].minutes, 61);
 });

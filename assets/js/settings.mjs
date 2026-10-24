@@ -1,5 +1,5 @@
-import {DAY} from './data.mjs?v=13';
-import {resizeWindow} from './timeline.mjs?v=10';
+import {DAY} from './data.mjs?v=14';
+import {resizeWindow} from './timeline.mjs?v=11';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
@@ -10,7 +10,7 @@ function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes('google') ? 'google' : availableMaps.includes('dark') ? 'dark' : availableMaps[0]};
   settings.views.route.lineWidth = 1.5;
   if (!input || typeof input !== 'object' || Array.isArray(input)) return settings;
-  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 100, 500, 1000], period: ['all', '1', '30', '90', '365', null]})) {
+  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 10, 50, 100, 500, 1000], period: ['all', '1', '7', '30', '90', '365', null]})) {
     if (values.includes(input[key])) settings[key] = input[key];
   }
   for (const [mode, view] of Object.entries(settings.views)) {

@@ -48,7 +48,7 @@ test('resizing and stepping stay inside short histories and stop at the endpoint
   const min = time('2024-01-01'), max = time('2024-03-10') + DAY - 1;
   assert.deepEqual(resizeWindow(time('2024-03-10'), '30', min, max), range('2024-02-11', '2024-03-10'));
   assert.deepEqual(resizeWindow(min, '365', min, max), {start: min, end: max});
-  for (const period of ['1', '30', '90', '365', null]) {
+  for (const period of ['1', '7', '30', '90', '365', null]) {
     assert.deepEqual(shiftWindow(min, max, min, max, 1, period), {start: min, end: max});
     assert.deepEqual(shiftWindow(min, max, min, max, -1, period), {start: min, end: max});
   }
@@ -94,4 +94,13 @@ test('histogram windows partition UTC dates and exactly reproduce counts, includ
       assert.equal(previousEnd, Math.floor(max / DAY) * DAY + DAY - 1);
     }
   }
+});
+
+test('Week resizes the current window to seven UTC days and steps by the whole week', () => {
+  const week = resizeWindow(time('2024-02-26'), '7', min, max);
+  assert.deepEqual(week, range('2024-02-26', '2024-03-03'));
+  const next = shiftWindow(week.start, week.end, min, max, 1, '7');
+  assert.deepEqual(next, range('2024-03-04', '2024-03-10'));
+  assert.deepEqual(shiftWindow(next.start, next.end, min, max, -1, '7'), week);
+  assert.deepEqual(resizeWindow(time('2024-03-10'), '7', time('2024-03-01'), time('2024-03-10') + DAY - 1), range('2024-03-04', '2024-03-10'));
 });

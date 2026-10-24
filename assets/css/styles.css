@@ -616,20 +616,17 @@ select {
 }
 
 .sidebar-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   text-align: center;
-  gap: 6px;
   border-top: 1px solid var(--border);
   padding: 14px 0;
   color: #b9c5b9;
 }
 
 .sidebar-footer .icon {
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
+  width: 12px;
+  height: 12px;
+  vertical-align: -2px;
+  margin-right: 4px;
   color: var(--accent);
 }
 
@@ -1062,7 +1059,7 @@ select {
 }
 
 .place-panel {
-  width: 420px;
+  width: 480px;
   max-width: 100%;
   max-height: min(260px,28svh);
   overflow: auto;
@@ -1168,15 +1165,48 @@ select {
 
 .place-table th:last-child,
 .place-table td:last-child {
-  width: 24%;
+  width: 22%;
   text-align: right;
 }
+
+.place-table:has(#place-visits) th:nth-child(3) {
+  width: 16%;
+}
+
+.place-table th[aria-sort=ascending] button::after { content: ' ↑'; }
+.place-table th[aria-sort=descending] button::after { content: ' ↓'; }
 
 .place-table button {
   color: var(--accent);
   font: inherit;
   text-align: left;
   padding: 0;
+}
+
+.place-table th button {
+  width: 100%;
+  min-height: 28px;
+  text-align: inherit;
+  color: var(--muted);
+}
+
+.place-table th[aria-sort]:not([aria-sort=none]) button {
+  color: var(--accent);
+}
+
+.place-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  padding-top: 6px;
+}
+
+.place-pagination button {
+  min-height: 30px;
+  padding: 4px 6px;
+  color: var(--accent);
 }
 
 .utc-tag {
@@ -1457,7 +1487,30 @@ dialog p {
   .window-filters select {
     font-size: 9px;
   }
-  .utc-tag {
+  .place-table th button {
+  color: var(--muted);
+}
+
+.place-table th[aria-sort]:not([aria-sort=none]) button {
+  color: var(--accent);
+}
+
+.place-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  padding-top: 6px;
+}
+
+.place-pagination button {
+  min-height: 30px;
+  padding: 4px 6px;
+  color: var(--accent);
+}
+
+.utc-tag {
     display: none;
   }
   .legend #legend-unit {
@@ -1663,8 +1716,9 @@ dialog p {
   }
 }
 
-@media(max-width:360px) {
-  .window-filters {
+@media(max-width:400px) {
+  .window-filters,
+  .timeline-controls>.presets {
     display: contents;
   }
   .timeline-controls {

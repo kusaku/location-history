@@ -1,9 +1,9 @@
-import {DAY, shiftPeriod} from './data.mjs?v=13';
+import {DAY, shiftPeriod} from './data.mjs?v=14';
 
 // Preset IDs stay compatible with saved preferences. Calendar windows use UTC
 // calendar arithmetic; a preferred day avoids drifting after February or April.
 function offset(start, period, amount, day = new Date(start).getUTCDate()) {
-  if (period === '1') return start + amount * DAY;
+  if (period === '1' || period === '7') return start + amount * Number(period) * DAY;
   const date = new Date(start), months = amount * (period === '365' ? 12 : period === '90' ? 3 : 1);
   const month = new Date(start);
   month.setUTCDate(1); month.setUTCMonth(date.getUTCMonth() + months);

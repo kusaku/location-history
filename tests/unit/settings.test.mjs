@@ -139,3 +139,13 @@ test('journey thickness is independent, bounded and persisted with quarter windo
   assert.equal(saveSettings({views: {route: {lineWidth: .5}}}, maps, storage).views.route.lineWidth, .5);
   assert.equal(saveSettings({views: {route: {lineWidth: 10}}}, maps, storage).views.route.lineWidth, 10);
 });
+
+test('all six accuracy choices and Week windows survive reloads', () => {
+  const storage = memoryStorage();
+  for (const accuracy of [0, 10, 50, 100, 500, 1000]) {
+    saveSettings({accuracy, period: '7', dateRange: [DAY, 8 * DAY - 1]}, maps, storage);
+    const saved = loadSettings(maps, storage);
+    assert.equal(saved.accuracy, accuracy); assert.equal(saved.period, '7');
+    assert.deepEqual(saved.dateRange, [DAY, 8 * DAY - 1]);
+  }
+});

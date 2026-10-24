@@ -146,7 +146,7 @@ const collection = features => ({type: 'FeatureCollection', features});
 const EMPTY = collection([]);
 const hour = t => Math.floor(((t % DAY) + DAY) % DAY / 3_600_000);
 function accepts(p, accuracy, hourStart, hourEnd) {
-  if (accuracy && p.accuracy !== null && !(p.accuracy <= accuracy)) return false;
+  if (accuracy && p.accuracy !== null && !(p.accuracy < accuracy)) return false;
   if (hourStart === 0 && hourEnd === 24) return true;
   const h = hour(p.t);
   return h >= hourStart && h < hourEnd;
@@ -339,7 +339,7 @@ export function createHistoryQuery(points) {
   };
   // Reuse the dataset index and filter mask, without replacing the map's current
   // date/route cache. Large areas stream chronologically; small areas sort only
-  // their spatial candidates. Only the latest 30 visits/days leave the worker.
+  // their spatial candidates. Return every stay and day; the UI pages the rows.
   query.place = (feature, options = {}) => {
     const geometry = placePolygon(feature?.geometry?.coordinates?.[0]);
     const nextKey = JSON.stringify([feature.properties?.cell, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.excludeJumps]);
@@ -377,25 +377,23 @@ export function createHistoryQuery(points) {
       return inside;
     };
     const from = lowerBound(points, start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
-    let count = 0, days = 0, lastDay, first = null, last = null, previous = -2, visitCount = 0, minutes = 0, coveredUntil = -Infinity, visit, dayTotal;
-    const recent = [], daily = [];
-    const keep = () => { if (visit) { recent.push(visit); if (recent.length > 30) recent.shift(); } };
+    let count = 0, days = 0, lastDay, first = null, last = null, minutes = 0, coveredUntil = -Infinity, visit, dayTotal;
+    const stays = [], daily = [];
     const add = i => {
       const p = points[i], day = Math.floor(p.t / DAY);
       if (day !== lastDay) {
         days++; lastDay = day;
         dayTotal = {start: day * DAY, count: 0, minutes: 0}; daily.push(dayTotal);
-        if (daily.length > 30) daily.shift();
-      }
-      if (i !== previous + 1 || p.t - points[previous].t > 30 * 60_000) {
-        keep(); visit = {start: p.t, end: p.t, count: 0, minutes: 0}; visitCount++;
       }
       const next = points[i + 1];
       const until = Math.max(p.t, Math.min(p.t + p.duration, end + 1, day * DAY + hourEnd * 3_600_000, next && (!filter.mask[i + 1] || !contains(i + 1)) ? next.t : Infinity));
+      if (!visit || p.t - visit.end >= 15 * 60_000) {
+        visit = {start: p.t, end: p.t, count: 0, minutes: 0}; stays.push(visit);
+      }
       const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
       coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
       dayTotal.count++; dayTotal.minutes += duration;
-      visit.count++; visit.end = Math.max(visit.end, until); count++; previous = i;
+      visit.count++; visit.end = Math.max(visit.end, until); count++;
       if (first === null) first = p.t; last = p.t;
     };
     if (candidates < (to - from) / 2) {
@@ -405,9 +403,8 @@ export function createHistoryQuery(points) {
       }
       for (const i of matches.subarray(0, length).sort()) add(i);
     } else for (let i = from; i < to; i++) if (filter.mask[i] && contains(i)) add(i);
-    keep();
     placeKey = nextKey;
-    return placeResult = {count, days, first, last, minutes, visits: visitCount, recent: recent.reverse(), daily: daily.reverse()};
+    return placeResult = {count, days, first, last, minutes, visits: stays.length, stays: stays.reverse(), daily: daily.reverse()};
   };
   return query;
 }

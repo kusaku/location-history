@@ -62,6 +62,6 @@ if (query.place) {
     const area = {type: 'Feature', geometry: {type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]]}};
     const begin = performance.now(), result = query.place(area), elapsed = performance.now() - begin;
     const cached = performance.now(); query.place(area);
-    console.log(JSON.stringify({case: name, firstQueryMs: +elapsed.toFixed(2), cachedMs: +(performance.now() - cached).toFixed(2), count: result.count, days: result.days, visits: result.visits, minutes: Math.round(result.minutes), details: result.recent.length, dayRows: result.daily?.length, peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
+    console.log(JSON.stringify({case: name, firstQueryMs: +elapsed.toFixed(2), cachedMs: +(performance.now() - cached).toFixed(2), count: result.count, days: result.days, visits: result.visits, minutes: Math.round(result.minutes), details: (result.stays ?? result.recent).length, dayRows: result.daily?.length, peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
   }
 }

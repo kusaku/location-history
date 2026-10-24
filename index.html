@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=24">
-    <script type="module" src="assets/js/app.mjs?v=29">
+    <link rel="stylesheet" href="assets/css/styles.css?v=25">
+    <script type="module" src="assets/js/app.mjs?v=30">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -286,10 +286,8 @@
           </div>
         </section>
         <footer class="sidebar-footer">
-          <svg class="icon">
-            <use href="#i-lock"/>
-          </svg>
           <p>
+            <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
             Your files stay in this browser.
             <br>
             <span>
@@ -386,19 +384,29 @@
               </dl>
               <details class="place-table-section">
                 <summary id="place-visits-label">Recorded stays</summary>
+                <div id="place-visits-pagination" class="place-pagination" hidden>
+                  <button id="place-visits-previous" type="button" aria-label="Previous stays">Previous</button>
+                  <span id="place-visits-page" role="status"></span>
+                  <button id="place-visits-next" type="button" aria-label="Next stays">Next</button>
+                </div>
                 <table class="place-table" aria-label="Recorded stays in UTC">
-                  <thead><tr><th scope="col">From · UTC</th><th scope="col">To · UTC</th><th scope="col">Est. stay</th></tr></thead>
+                  <thead><tr id="place-visits-head"></tr></thead>
                   <tbody id="place-visits"></tbody>
                 </table>
               </details>
               <details class="place-table-section">
                 <summary id="place-daily-label">By day</summary>
+                <div id="place-daily-pagination" class="place-pagination" hidden>
+                  <button id="place-daily-previous" type="button" aria-label="Previous days">Previous</button>
+                  <span id="place-daily-page" role="status"></span>
+                  <button id="place-daily-next" type="button" aria-label="Next days">Next</button>
+                </div>
                 <table class="place-table" aria-label="Daily place history in UTC">
-                  <thead><tr><th scope="col">Day · UTC</th><th scope="col">Locations</th><th scope="col">Est. stay</th></tr></thead>
+                  <thead><tr id="place-daily-head"></tr></thead>
                   <tbody id="place-daily"></tbody>
                 </table>
               </details>
-              <p class="hint">Tables show the latest 30 stays and recorded days. Select a date to filter the map. Current hour, accuracy and jump filters apply. Visits split after 30 minutes without a recording. Time is an estimate.</p>
+              <p class="hint">Gaps under 15 minutes form one stay. Times are estimated; current filters apply. Select a date to filter the map.</p>
             </div>
           </aside>
           <section class="timeline" aria-labelledby="timeline-title">
@@ -422,9 +430,11 @@
                   <label for="accuracy">Accuracy
                     <select id="accuracy" title="Locations without accuracy information stay included">
                       <option value="0">All</option>
-                      <option value="100">≤ 100 m</option>
-                      <option value="500">≤ 500 m</option>
-                      <option value="1000">≤ 1 km</option>
+                      <option value="10">&lt;10 m</option>
+                      <option value="50">&lt;50 m</option>
+                      <option value="100">&lt;100 m</option>
+                      <option value="500">&lt;500 m</option>
+                      <option value="1000">&lt;1 km</option>
                     </select>
                   </label>
                   <button id="exclude-jumps" class="filter-toggle" type="button" aria-pressed="false" title="Exclude both observations of a jump over 1,000 km/h within six hours, including different locations at the same time">Exclude jumps</button>
@@ -432,6 +442,9 @@
                 <div class="presets" role="group" aria-label="Window size">
                   <button type="button" data-period="1" aria-pressed="false" title="Resize the current window to one day" disabled>
                     Day
+                  </button>
+                  <button type="button" data-period="7" aria-pressed="false" title="Resize the current window to one week" disabled>
+                    Week
                   </button>
                   <button type="button" data-period="30" aria-pressed="false" title="Resize the current window to one calendar month" disabled>
                     Month
@@ -577,10 +590,10 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Place totals use the current date window or <b>All dates</b>, plus the active hour, accuracy and jump filters. Recorded visits are consecutive in-area observations, separated by exits, excluded records or a gap over 30 minutes. First/last seen are observation times. Estimated time uses short stationary intervals and recorded visit durations, clipped to the window, UTC day, end hour and observed exits; overlapping intervals count once. Missing recordings are not proof that you left or stayed. Expand <b>Recorded stays</b> for arrival/departure dates and estimated durations, or <b>By day</b> for daily totals. Each table shows the latest 30 rows; summary totals include every matching observation. Choose a stay or day to select its dates.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Gaps under 15 minutes form one stay; durations estimate recorded time. Expand <b>Recorded stays</b> or <b>By day</b>, sort by a column heading, and use Previous/Next for longer tables. Every matching stay and day is available. Select a date to filter the map.</p>
       <h3>Filters and date windows</h3>
       <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
-      <p><b>Day</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Play, backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Dates and hours use UTC.</p>
+      <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Play, backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Dates and hours use UTC.</p>
       <h3>
         Visualization modes
       </h3>

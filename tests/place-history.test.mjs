@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlaceHistory, createPlaceTable, createPlaceCalendar} from '../js/place-history.mjs';
+import {createPlaceHistory, createPlaceTable, createPlaceCalendar, placeCalendarPeriod, placeCalendarView} from '../js/place-history.mjs';
 const area = {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]]}};
 class Element {
   hidden = false; disabled = false; textContent = ''; style = {setProperty(key, value) { this[key] = String(value); }}; children = []; dataset = {}; attributes = {};
@@ -214,5 +214,73 @@ test('place views switch with tabs and keyboard without recomputing the selectio
     tabs[2].onkeydown({key: 'Home', preventDefault() {}});
     assert.equal(f.get('place-view-calendar').hidden, false);
     assert.equal(f.sent.length, 1);
+  } finally { f.cleanup(); }
+});
+
+test('calendar periods and automatic view follow UTC days, weeks, months and calendar presets', () => {
+  const day = 86_400_000, anchor = Date.UTC(2024, 1, 29, 18);
+  assert.deepEqual(placeCalendarPeriod(anchor, 'month'), {start: Date.UTC(2024, 1, 1), end: Date.UTC(2024, 2, 1) - 1});
+  assert.deepEqual(placeCalendarPeriod(anchor, 'week'), {start: Date.UTC(2024, 1, 26), end: Date.UTC(2024, 2, 4) - 1});
+  assert.deepEqual(placeCalendarPeriod(anchor, 'day'), {start: Date.UTC(2024, 1, 29), end: Date.UTC(2024, 2, 1) - 1});
+  for (const [period, view] of [['1', 'day'], ['7', 'week'], ['30', 'month'], ['90', 'year'], ['365', 'year'], ['all', 'year']]) {
+    assert.equal(placeCalendarView({start: 0, end: day - 1, period}), view);
+  }
+  assert.equal(placeCalendarView({start: 0, end: 4 * day - 1}), 'week');
+  assert.equal(placeCalendarView({start: 0, end: day - 1, allDates: true}), 'year');
+});
+
+test('hourly calendar coalesces requests, ignores stale replies, and selects a UTC hour', () => {
+  const f = fixture(), requests = [], selected = [], day = 86_400_000;
+  try {
+    f.get('place-calendar-view').value = 'auto';
+    const calendar = createPlaceCalendar(entry => selected.push(entry), request => requests.push(request));
+    calendar.setRows([{start: 0, count: 1, minutes: 10}], {start: 0, end: day - 1, period: '1'});
+    assert.equal(requests.length, 1); assert.equal(requests[0].end, day - 1);
+    calendar.setRows([{start: day, count: 2, minutes: 20}], {start: day, end: 2 * day - 1, period: '1'});
+    calendar.receive({id: requests[0].id, hours: [{start: 0, count: 1, minutes: 10}]});
+    assert.equal(requests.length, 2); assert.equal(requests[1].start, day);
+    calendar.receive({id: requests[0].id, hours: [{start: 0, count: 99, minutes: 999}]});
+    calendar.receive({id: requests[1].id, hours: [{start: day + 9 * day / 24, count: 2, minutes: 20}]});
+    const cell = f.get('place-calendar-hours').children.find(element => element.dataset.hour === 9);
+    assert.match(cell.title, /09:00–10:00 UTC · 2 locations · 20 min/);
+    cell.onclick(); assert.deepEqual(selected, [{start: day, end: 2 * day, hour: 9}]);
+    f.get('place-calendar-metric').value = 'minutes'; f.get('place-calendar-metric').onchange();
+    assert.equal(requests.length, 2);
+    f.get('place-calendar-view').value = 'month'; f.get('place-calendar-view').onchange();
+    assert.match(f.get('place-calendar-chart').className, /is-month/);
+    assert.equal(f.get('place-calendar-months').children.length, 7);
+    assert.equal(f.get('place-calendar-days').children.length, 31);
+    calendar.clear(); calendar.receive({id: requests[1].id, hours: []});
+    assert.equal(f.get('place-calendar-hours').children.length, 0);
+  } finally { f.cleanup(); }
+});
+
+test('following Date window preserves its exact week/month and navigation uses the map window', () => {
+  const f = fixture(), requests = [], moves = [], day = 86_400_000;
+  try {
+    f.get('place-calendar-view').value = 'auto';
+    const calendar = createPlaceCalendar(() => {}, request => requests.push(request), direction => moves.push(direction));
+    const start = Date.UTC(2024, 5, 21), end = start + 7 * day - 1;
+    calendar.setRows([{start, count: 1, minutes: 1}], {start, end, period: '7', historyStart: start - day, historyEnd: end + day});
+    assert.equal(requests[0].start, start); assert.equal(requests[0].end, end);
+    assert.equal(f.get('place-calendar-previous').disabled, false); assert.equal(f.get('place-calendar-next').disabled, false);
+    f.get('place-calendar-previous').onclick(); f.get('place-calendar-next').onclick();
+    assert.deepEqual(moves, [-1, 1]); assert.equal(f.get('place-calendar-view').value, 'auto');
+    calendar.setRows([], {start, end: start + 30 * day - 1, period: '30'});
+    const cells = f.get('place-calendar-days').children;
+    assert.equal(cells.length, 30); assert.equal(cells[0].dataset.date, '2024-06-21'); assert.equal(cells.at(-1).dataset.date, '2024-07-20');
+    assert.ok(cells.every(cell => cell.disabled));
+  } finally { f.cleanup(); }
+});
+
+test('empty place results retain calendar and navigation instead of trapping the user', () => {
+  const f = fixture();
+  try {
+    f.controller.select(area, 'Drawn area');
+    f.controller.receive({type: 'place', id: f.sent[0].id, result: {count: 0, visits: 0, days: 0, first: null, last: null, minutes: 0, stays: [], daily: []}});
+    assert.equal(f.get('place-results').hidden, false);
+    assert.equal(f.get('place-first').textContent, '—'); assert.equal(f.get('place-records').textContent, '0');
+    assert.equal(f.get('place-visits').children.length, 0);
+    assert.match(f.get('place-message').textContent, /No locations/);
   } finally { f.cleanup(); }
 });

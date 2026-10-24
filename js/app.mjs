@@ -1,9 +1,9 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=12';
-import {createPlaceHistory} from './place-history.mjs?v=12';
+import {createPlaceHistory} from './place-history.mjs?v=13';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS} from './data.mjs?v=16';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=13';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=16';
+import {DAY, HISTOGRAM_BINS} from './data.mjs?v=17';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=14';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=17';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -60,8 +60,8 @@ function currentOptions() {
   // Pad the viewport so heat kernels and cells remain complete at its edges.
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
-  const {start, end, mode} = state, {metric, radius} = state.views[mode];
-  return {start, end, mode, metric, radius, excludeJumps: state.excludeJumps, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  const {start, end, mode, period} = state, {metric, radius} = state.views[mode];
+  return {start, end, mode, period, metric, radius, excludeJumps: state.excludeJumps, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -251,15 +251,15 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=16', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=17', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
-      if (data.operation === 'place') { placeHistory?.receive(data); return; }
+      if (data.operation === 'place' || data.operation === 'place-hours') { placeHistory?.receive(data); return; }
       if (data.operation === 'import') setBusy(false);
       if (data.operation === 'query') { querying = false; queryDirty = false; }
       status(data.message, true);
-    } else if (data.type === 'place') {
+    } else if (data.type === 'place' || data.type === 'place-hours') {
       placeHistory?.receive(data);
     } else if (data.type === 'imported') {
       placeHistory?.clear();
@@ -417,7 +417,7 @@ async function init() {
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
-    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end) => { stopPlayback(); setDates(start, end); rememberSettings(); }});
+    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, navigateWindow: direction => { stopPlayback(); moveWindow(direction); }, selectDates: (start, end, hour) => { stopPlayback(); if (hour !== undefined) { $('hour-start').value = hour; $('hour-end').value = hour + 1; } setDates(start, end); rememberSettings(); }});
     map.addControl(new maplibre.NavigationControl({visualizePitch: true}), 'top-right');
     const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
     compass.setAttribute('aria-label', 'Reset rotation and tilt'); compass.title = 'Reset rotation and tilt';

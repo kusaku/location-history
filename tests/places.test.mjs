@@ -37,6 +37,36 @@ test('moving time splits across midnight and clips to selected hours', () => {
   const hour = createHistoryQuery([point(8 * 60 * minute + 55 * minute, 12.8), point(9 * 60 * minute + 5 * minute, 13)]);
   assert.equal(hour.place(box, {hourStart: 8, hourEnd: 9}).minutes, 0);
 });
+
+test('hourly place totals split intervals at hours and preserve midnight carry in a selected day', () => {
+  const hour = DAY / 24;
+  const query = createHistoryQuery([point(8 * hour + 55 * minute, 12.8), point(9 * hour + 5 * minute, 13)]);
+  const normal = query.place(box, {start: 0, end: DAY - 1});
+  assert.equal(normal.hours, undefined);
+  const hourly = query.place(box, {start: 0, end: DAY - 1, hourly: true});
+  assert.equal(hourly.hours.length, 24);
+  assert.equal(hourly.hours[8].minutes, 5); assert.equal(hourly.hours[9].minutes, 5);
+  assert.equal(hourly.hours[8].count, 1); assert.equal(hourly.hours[9].count, 1);
+  assert.equal(hourly.hours.reduce((n, row) => n + row.minutes, 0), hourly.minutes);
+  assert.equal(query.place(box, {start: 0, end: DAY - 1, hourly: true, hourStart: 9, hourEnd: 10}).hours[8].count, 0);
+  assert.throws(() => query.place(box, {hourly: true}), /at most seven days/);
+  assert.throws(() => query.place(box, {hourly: true, start: 0, end: 8 * DAY - 1}), /at most seven days/);
+  assert.equal(query.place(box, {hourly: true, start: 0, end: 7 * DAY - 1}).hours.length, 168);
+  const midnight = createHistoryQuery([point(DAY - 5 * minute, 12.8), point(DAY + 5 * minute, 13), point(DAY + 10 * minute, 13.2)]);
+  const overview = midnight.place(box), day = midnight.place(box, {start: DAY, end: 2 * DAY - 1, hourly: true});
+  assert.equal(day.minutes, overview.daily[0].minutes);
+  assert.equal(day.minutes, 10); assert.equal(day.hours[0].minutes, 10);
+  assert.equal(day.stays[0].start, DAY);
+});
+
+test('hourly area totals never add time across exits, excluded observations or recording gaps', () => {
+  const query = createHistoryQuery([point(0), point(minute, 15), point(2 * minute), point(3 * minute, 13, 52, 0, 500), point(4 * minute), point(19 * minute), point(20 * minute)]);
+  for (const accuracy of [0, 100]) {
+    const result = query.place(box, {start: 0, end: DAY - 1, accuracy, hourly: true});
+    assert.equal(result.hours.reduce((n, row) => n + row.minutes, 0), accuracy ? 1 : 3);
+    assert.equal(result.hours.reduce((n, row) => n + row.count, 0), result.count);
+  }
+});
 test('place history counts recorded visits, observations, days and conservative time', () => {
   const query = createHistoryQuery([point(0, 13, 52, 10 * minute), point(10 * minute, 13, 52, 10 * minute), point(20 * minute, 15), point(25 * minute, 13, 52, 10 * minute), point(65 * minute)]);
   const result = query.place(box);

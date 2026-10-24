@@ -1,4 +1,4 @@
-import {DAY, placePolygon} from './data.mjs?v=16';
+import {DAY, placePolygon} from './data.mjs?v=17';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -15,82 +15,199 @@ const calendarDate = new Intl.DateTimeFormat('en', {weekday: 'short', day: 'nume
 const monthName = new Intl.DateTimeFormat('en', {month: 'short', timeZone: 'UTC'});
 const yearStart = year => { const date = new Date(0); date.setUTCFullYear(year, 0, 1); return date.getTime(); };
 
-// Index the worker's daily totals once. A year or metric change only draws one
-// year (at most 366 buttons), without querying the observations again.
-export function createPlaceCalendar(select) {
-  let days = new Map(), year = null, firstYear = 0, lastYear = 0, start = 0, end = 0;
-  function render() {
-    const metric = $('place-calendar-metric').value === 'minutes' ? 'minutes' : 'count';
-    const first = yearStart(year), offset = new Date(first).getUTCDay();
-    $('place-calendar-detail').textContent = 'Select a square to filter the map to that UTC day. Arrow keys move between recorded days.';
-    const dates = [];
-    for (let at = first; new Date(at).getUTCFullYear() === year; at += DAY) dates.push(at);
-    const weeks = Math.ceil((offset + dates.length) / 7);
-    $('place-calendar-chart').style.setProperty('--weeks', weeks);
-    $('place-calendar-year').value = year;
-    $('place-calendar-previous').disabled = year <= firstYear;
-    $('place-calendar-next').disabled = year >= lastYear;
-    const months = [];
-    for (let i = 0; i < dates.length; i++) if (new Date(dates[i]).getUTCDate() === 1) {
-      const label = document.createElement('span'); label.textContent = monthName.format(dates[i]);
-      label.style.gridColumn = `${Math.floor((offset + i) / 7) + 1} / span 3`; months.push(label);
-    }
-    $('place-calendar-months').replaceChildren(...months);
-    let peak = 0, recorded = 0, minutes = 0;
-    for (const at of dates) {
-      const entry = days.get(at);
-      if (entry) { peak = Math.max(peak, entry[metric]); recorded++; minutes += entry.minutes; }
-    }
-    let focused = -1;
-    const cells = dates.map((at, i) => {
-      const entry = days.get(at), count = entry?.count ?? 0, value = entry?.[metric] ?? 0;
-      const button = document.createElement('button'); button.type = 'button'; button.dataset.date = utcDate(at);
-      button.dataset.level = value > 0 ? Math.ceil(Math.sqrt(value / peak) * 4) : 0;
-      button.style.gridColumn = Math.floor((offset + i) / 7) + 1; button.style.gridRow = (offset + i) % 7 + 1;
-      button.disabled = !count || at < start || at > end; button.tabIndex = -1;
-      button.title = `${calendarDate.format(at)} · ${number.format(count)} locations · ${duration(entry?.minutes ?? 0)}${at < start || at > end ? ' · outside selected dates' : ''}`;
-      button.setAttribute('aria-label', button.title);
-      button.onclick = () => select({start: at, end: at + DAY});
-      button.onpointerenter = () => { $('place-calendar-detail').textContent = button.title; };
+// Calendar arithmetic stays in UTC, including leap years and Monday-first weeks.
+export function placeCalendarPeriod(anchor, view) {
+  const date = new Date(anchor); date.setUTCHours(0, 0, 0, 0);
+  if (view === 'year') date.setUTCMonth(0, 1);
+  if (view === 'month') date.setUTCDate(1);
+  if (view === 'week') date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  const start = +date;
+  if (view === 'year') date.setUTCFullYear(date.getUTCFullYear() + 1);
+  else if (view === 'month') date.setUTCMonth(date.getUTCMonth() + 1);
+  else date.setUTCDate(date.getUTCDate() + (view === 'week' ? 7 : 1));
+  return {start, end: +date - 1};
+}
+export function placeCalendarView(scope) {
+  if (scope.allDates) return 'year';
+  const preset = {'1': 'day', '7': 'week', '30': 'month', '90': 'year', '365': 'year', all: 'year'}[scope.period];
+  const days = (scope.end - scope.start + 1) / DAY;
+  return preset ?? (days <= 1 ? 'day' : days <= 7 ? 'week' : days <= 31 ? 'month' : 'year');
+}
+
+// Daily views reuse aggregate totals. Hourly views ask the indexed worker for
+// only the visible day/week, with one pending request and stale-result checks.
+export function createPlaceCalendar(select, requestHours = () => {}, navigateWindow) {
+  let days = new Map(), scope = null, anchor = null, active = true, revision = 0;
+  let hourId = 0, hourPending = null, hourWanted = null, hourKey = null, hours = [], hourError = '';
+  const kind = () => $('place-calendar-view').value === 'auto' ? placeCalendarView(scope) : $('place-calendar-view').value || 'year';
+  const clamp = value => Math.max(scope.start, Math.min(scope.end, value));
+  const latest = () => { let at = scope.start; for (const day of days.keys()) at = Math.max(at, day); return at; };
+  function navigate(direction) {
+    if ($('place-calendar-view').value === 'auto' && !scope.allDates && navigateWindow) { navigateWindow(direction); return; }
+    const view = kind(), date = new Date(placeCalendarPeriod(anchor, view).start);
+    if (view === 'year') date.setUTCFullYear(date.getUTCFullYear() + direction);
+    else if (view === 'month') date.setUTCMonth(date.getUTCMonth() + direction);
+    else date.setUTCDate(date.getUTCDate() + direction * (view === 'week' ? 7 : 1));
+    anchor = clamp(direction < 0 ? +new Date(placeCalendarPeriod(+date, view).end) : +date);
+    $('place-calendar-view').value = view; render();
+  }
+  function keyboard(cells, right, down = 1) {
+    let focused = cells.findIndex(cell => !cell.disabled);
+    if (focused >= 0) cells[focused].tabIndex = 0;
+    cells.forEach((button, i) => {
       button.onfocus = () => {
         if (focused >= 0) cells[focused].tabIndex = -1;
         focused = i; button.tabIndex = 0; $('place-calendar-detail').textContent = button.title;
       };
       button.onkeydown = event => {
-        const step = {ArrowLeft: -7, ArrowRight: 7, ArrowUp: -1, ArrowDown: 1}[event.key];
+        const step = {ArrowLeft: -right, ArrowRight: right, ArrowUp: -down, ArrowDown: down}[event.key];
         let next = event.key === 'Home' ? 0 : event.key === 'End' ? cells.length - 1 : i + (step ?? 0);
         if (step === undefined && event.key !== 'Home' && event.key !== 'End') return;
         event.preventDefault();
-        const direction = step ?? (event.key === 'Home' ? 1 : -1);
-        while (cells[next]?.disabled) next += direction;
+        while (cells[next]?.disabled) next += step ?? (event.key === 'Home' ? 1 : -1);
         cells[next]?.focus();
       };
+    });
+  }
+  function cell(at, entry, peak, metric, hourly = false) {
+    const button = document.createElement('button'), count = entry?.count ?? 0, value = entry?.[metric] ?? 0;
+    const day = Math.floor(at / DAY) * DAY, hour = new Date(at).getUTCHours();
+    button.type = 'button'; button.dataset.date = utcDate(at);
+    if (hourly) button.dataset.hour = hour;
+    button.dataset.level = value > 0 ? Math.ceil(Math.sqrt(value / peak) * 4) : 0;
+    button.style.setProperty('--activity', value > 0 ? `${Math.max(3, Math.sqrt(value / peak) * 100)}%` : '0%');
+    button.disabled = !count || day < scope.start || day > scope.end; button.tabIndex = -1;
+    const clock = value => `${String(value).padStart(2, '0')}:00`;
+    button.title = `${calendarDate.format(at)}${hourly ? ` · ${clock(hour)}–${clock(hour + 1)} UTC` : ''} · ${number.format(count)} locations · ${duration(entry?.minutes ?? 0)}${day < scope.start || day > scope.end ? ' · outside selected dates' : ''}`;
+    button.setAttribute('aria-label', button.title);
+    button.onclick = () => select({start: day, end: day + DAY, ...(hourly ? {hour} : {})});
+    button.onpointerenter = () => { $('place-calendar-detail').textContent = button.title; };
+    return button;
+  }
+  function summary(rows, metric) {
+    const recorded = rows.filter(row => row.count).length, minutes = rows.reduce((sum, row) => sum + row.minutes, 0);
+    $('place-calendar-summary').textContent = `${number.format(recorded)} recorded ${kind() === 'day' || kind() === 'week' ? recorded === 1 ? 'hour' : 'hours' : recorded === 1 ? 'day' : 'days'} · ${duration(minutes)}`;
+    const peak = rows.reduce((max, row) => Math.max(max, row[metric]), 0);
+    $('place-calendar-scale').title = `Maximum per ${kind() === 'day' || kind() === 'week' ? 'hour' : 'day'}: ${metric === 'minutes' ? duration(peak) : `${number.format(peak)} locations`}`;
+    return peak;
+  }
+  function renderDaily(view, period, metric) {
+    const dates = [];
+    for (let at = period.start; at <= period.end; at += DAY) dates.push(at);
+    const offset = (new Date(period.start).getUTCDay() + (view === 'month' ? 6 : 0)) % 7;
+    const weeks = Math.ceil((offset + dates.length) / 7), labels = [];
+    $('place-calendar-chart').className = `place-calendar-chart is-${view}`;
+    $('place-calendar-chart').style.setProperty('--weeks', weeks);
+    if (view === 'year') {
+      for (let i = 0; i < dates.length; i++) if (i === 0 || new Date(dates[i]).getUTCDate() === 1) {
+        const label = document.createElement('span'); label.textContent = monthName.format(dates[i]);
+        const column = Math.floor((offset + i) / 7), next = new Date(dates[i]); next.setUTCDate(1); next.setUTCMonth(next.getUTCMonth() + 1);
+        const nextColumn = Math.min(weeks, Math.floor((offset + (+next - period.start) / DAY) / 7));
+        label.style.gridColumn = `${column + 1} / span ${Math.max(1, Math.min(3, nextColumn - column))}`;
+        label.style.gridRow = 1; labels.push(label);
+      }
+    } else for (const name of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+      const label = document.createElement('span'); label.textContent = name; labels.push(label);
+    }
+    $('place-calendar-months').replaceChildren(...labels);
+    const peak = summary(dates.map(at => days.get(at)).filter(Boolean), metric);
+    const cells = dates.map((at, i) => {
+      const entry = days.get(at), button = cell(at, entry, peak, metric);
+      button.style.gridColumn = view === 'year' ? Math.floor((offset + i) / 7) + 1 : (offset + i) % 7 + 1;
+      button.style.gridRow = view === 'year' ? (offset + i) % 7 + 1 : Math.floor((offset + i) / 7) + 1;
+      if (view === 'month') {
+        button.textContent = new Date(at).getUTCDate();
+        if (entry) { const total = document.createElement('small'); total.textContent = metric === 'count' ? number.format(entry.count) : entry.minutes >= 60 ? `${Math.floor(entry.minutes / 60)} h` : duration(entry.minutes); button.append(total); }
+      }
       return button;
     });
-    focused = cells.findIndex(cell => !cell.disabled);
-    if (focused >= 0) cells[focused].tabIndex = 0;
-    $('place-calendar-days').replaceChildren(...cells);
-    $('place-calendar-summary').textContent = `${number.format(recorded)} recorded ${recorded === 1 ? 'day' : 'days'} · ${duration(minutes)}`;
-    $('place-calendar-scale').title = `Maximum per day: ${metric === 'minutes' ? duration(peak) : `${number.format(peak)} locations`}`;
+    keyboard(cells, view === 'year' ? 7 : 1, view === 'month' ? 7 : 1); $('place-calendar-days').replaceChildren(...cells);
   }
-  $('place-calendar-previous').onclick = () => { if (year > firstYear) { year--; render(); } };
-  $('place-calendar-next').onclick = () => { if (year < lastYear) { year++; render(); } };
-  $('place-calendar-year').onchange = () => {
+  function renderHourly(view, period, metric) {
+    const range = {start: Math.max(period.start, scope.start), end: Math.min(period.end, scope.end + DAY - 1)};
+    const key = JSON.stringify([revision, range.start, range.end]);
+    hourWanted = {key, ...range};
+    if (hourKey !== key && !hourPending) {
+      hourPending = {key, id: ++hourId}; hourError = '';
+      requestHours({id: hourId, ...range});
+    }
+    const data = new Map((hourKey === key ? hours : []).map(row => [row.start, row]));
+    const peak = summary([...data.values()], metric), nodes = [], cells = [];
+    $('place-calendar-hours').className = `place-calendar-hours is-${view}`;
+    $('place-calendar-hours').setAttribute('aria-busy', String(hourKey !== key));
+    const headerDate = new Intl.DateTimeFormat('en', {weekday: 'short', day: 'numeric', timeZone: 'UTC'});
+    if (view === 'week') for (let d = 0; d < 7; d++) {
+      const at = period.start + d * DAY, button = document.createElement('button'); button.type = 'button';
+      button.className = 'place-calendar-day-heading'; button.textContent = headerDate.format(at);
+      button.style.gridColumn = d + 2; button.style.gridRow = 1; button.disabled = at < scope.start || at > scope.end;
+      button.title = `Select ${calendarDate.format(at)}`; button.onclick = () => select({start: at, end: at + DAY}); nodes.push(button);
+    }
+    const count = view === 'week' ? 168 : 24;
+    for (let i = 0; i < count; i++) {
+      const at = period.start + i * DAY / 24, row = data.get(at), button = cell(at, row, peak, metric, true);
+      button.style.gridColumn = view === 'week' ? Math.floor(i / 24) + 2 : i + 1;
+      button.style.gridRow = view === 'week' ? i % 24 + 2 : 1;
+      if (view === 'week') button.textContent = row?.count ? number.format(row.count) : '';
+      cells.push(button);
+      if (i % 3 === 0 && (view === 'day' || i < 24)) {
+        const label = document.createElement('span'); label.textContent = `${String(i % 24).padStart(2, '0')}${view === 'week' ? ':00' : ''}`;
+        label.style.gridColumn = view === 'week' ? 1 : i + 1; label.style.gridRow = view === 'week' ? i + 2 : 2; nodes.push(label);
+      }
+    }
+    keyboard(cells, view === 'week' ? 24 : 1);
+    $('place-calendar-hours').replaceChildren(...nodes, ...cells);
+    if (hourKey !== key || hourError) $('place-calendar-detail').textContent = hourError || 'Calculating hourly activity…';
+  }
+  function render() {
+    if (!scope || !active) return;
+    const view = kind(), year = new Date(anchor).getUTCFullYear();
+    const followsRange = $('place-calendar-view').value === 'auto' && !scope.allDates && (view === 'week' || view === 'month' || scope.period === '365');
+    const period = followsRange ? {start: scope.start, end: scope.end + DAY - 1} : placeCalendarPeriod(anchor, view);
+    const metric = $('place-calendar-metric').value === 'minutes' ? 'minutes' : 'count', hourly = view === 'day' || view === 'week';
+    $('place-calendar-detail').textContent = 'Select a day or hour to filter the map. Times are estimated; arrow keys move between recorded intervals.';
+    $('place-calendar-year').hidden = view !== 'year'; $('place-calendar-anchor').hidden = view === 'year';
+    $('place-calendar-year').value = year; $('place-calendar-year').min = new Date(scope.start).getUTCFullYear(); $('place-calendar-year').max = new Date(scope.end).getUTCFullYear();
+    $('place-calendar-anchor').value = utcDate(anchor); $('place-calendar-anchor').min = utcDate(scope.start); $('place-calendar-anchor').max = utcDate(scope.end);
+    const sync = $('place-calendar-view').value === 'auto' && !scope.allDates && navigateWindow;
+    $('place-calendar-previous').disabled = sync ? scope.start <= Math.floor(scope.historyStart / DAY) * DAY : period.start <= scope.start;
+    $('place-calendar-next').disabled = sync ? scope.end >= Math.floor(scope.historyEnd / DAY) * DAY : period.end >= scope.end;
+    $('place-calendar-previous').setAttribute('aria-label', sync ? 'Previous date window' : `Previous calendar ${view}`);
+    $('place-calendar-next').setAttribute('aria-label', sync ? 'Next date window' : `Next calendar ${view}`);
+    $('place-calendar-caption').textContent = followsRange || view === 'week' ? `${calendarDate.format(period.start)} — ${calendarDate.format(period.end)}` : view === 'year' ? String(year) : view === 'month' ? `${monthName.format(anchor)} ${year}` : calendarDate.format(anchor);
+    $('place-calendar-chart').hidden = hourly; $('place-calendar-hours').hidden = !hourly;
+    if (hourly) renderHourly(view, period, metric); else { hourWanted = null; renderDaily(view, period, metric); }
+  }
+  $('place-calendar-previous').onclick = () => navigate(-1); $('place-calendar-next').onclick = () => navigate(1);
+  function enterYear(commit) {
+    if (!scope) return;
     const raw = $('place-calendar-year').value, value = Number(raw);
-    if (raw !== '' && Number.isInteger(value)) year = Math.max(firstYear, Math.min(lastYear, value));
-    render();
+    const min = new Date(scope.start).getUTCFullYear(), max = new Date(scope.end).getUTCFullYear();
+    if (raw !== '' && Number.isInteger(value) && (commit || value >= min && value <= max)) {
+      anchor = clamp(yearStart(Math.max(min, Math.min(max, value)))); $('place-calendar-view').value = 'year'; render();
+    } else if (commit) render();
+  }
+  $('place-calendar-year').oninput = () => enterYear(false); $('place-calendar-year').onchange = () => enterYear(true);
+  $('place-calendar-anchor').onchange = () => {
+    const at = Date.parse($('place-calendar-anchor').value);
+    if (Number.isFinite(at)) { const view = kind(); anchor = clamp(at); $('place-calendar-view').value = view; } render();
   };
+  $('place-calendar-view').onchange = () => { if (scope && $('place-calendar-view').value === 'auto') anchor = scope.allDates ? latest() : scope.start; render(); };
   $('place-calendar-metric').onchange = render;
   return {
-    setRows(rows, scope) {
+    setRows(rows, value) {
       days = new Map(rows.map(entry => [entry.start, entry]));
-      start = Math.floor(scope.start / DAY) * DAY; end = Math.floor(scope.end / DAY) * DAY;
-      firstYear = new Date(start).getUTCFullYear(); lastYear = new Date(end).getUTCFullYear();
-      $('place-calendar-year').min = firstYear; $('place-calendar-year').max = lastYear;
-      if (year === null || year < firstYear || year > lastYear) year = rows.reduce((latest, entry) => Math.max(latest, new Date(entry.start).getUTCFullYear()), firstYear);
+      scope = {...value, start: Math.floor(value.start / DAY) * DAY, end: Math.floor(value.end / DAY) * DAY}; revision++;
+      if (anchor === null || $('place-calendar-view').value === 'auto') anchor = scope.allDates ? latest() : $('place-calendar-view').value === 'auto' ? scope.start : latest();
+      anchor = clamp(anchor); render();
+    },
+    setActive(value) { active = value; render(); },
+    receive(message) {
+      if (!hourPending || message.id !== hourPending.id) return;
+      const pending = hourPending; hourPending = null;
+      if (hourWanted?.key === pending.key) { hourKey = pending.key; hours = message.hours ?? []; hourError = message.type === 'error' ? message.message : ''; }
       render();
     },
-    clear() { days.clear(); year = null; $('place-calendar-days').replaceChildren(); $('place-calendar-months').replaceChildren(); }
+    clear() { days.clear(); scope = null; anchor = null; hourId++; hourPending = hourWanted = hourKey = null; hours = []; $('place-calendar-days').replaceChildren(); $('place-calendar-months').replaceChildren(); $('place-calendar-hours').replaceChildren(); }
   };
 }
 
@@ -136,16 +253,17 @@ export function createPlaceTable(id, columns, select) {
 
 // Drawing and the optional panel share one source. Personal selections stay in
 // memory; only their aggregate statistics cross back from the data worker.
-export function createPlaceHistory({map, report, options, send, selectDates, status}) {
+export function createPlaceHistory({map, report, options, send, selectDates, status, navigateWindow}) {
   let area = null, corners = [], drawing = false, allDates = false, zoomEnabled = false;
   let requestId = 0, pending = false, dirty = false, lastKey = null, ignoreClickUntil = 0;
   const panel = $('place-history');
   const selectRow = entry => {
     allDates = false; syncScope();
-    selectDates(Math.floor(entry.start / DAY) * DAY, Math.floor(Math.max(entry.start, (entry.end ?? entry.start + DAY) - 1) / DAY) * DAY + DAY - 1);
+    $('place-calendar-view').value = 'auto';
+    selectDates(Math.floor(entry.start / DAY) * DAY, Math.floor(Math.max(entry.start, (entry.end ?? entry.start + DAY) - 1) / DAY) * DAY + DAY - 1, entry.hour);
     refresh();
   };
-  const calendar = createPlaceCalendar(selectRow);
+  const calendar = createPlaceCalendar(selectRow, ({id, start, end}) => send({type: 'place-hours', id, area, options: {...options(), start, end}}), navigateWindow);
   const stays = createPlaceTable('place-visits', [
     {key: 'start', label: 'From (UTC)', format: utcTime}, {key: 'end', label: 'To (UTC)', format: utcTime},
     {key: 'count', label: 'Locations', format: value => number.format(value)}, {key: 'minutes', label: 'Duration', format: duration},
@@ -224,6 +342,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     paintArea(); map.getCanvas().focus();
   }
   function receive(message) {
+    if (message.type === 'place-hours' || message.operation === 'place-hours') { calendar.receive(message); return; }
     if (message.id !== requestId || !pending) return;
     pending = false;
     if (dirty) { lastKey = null; refresh(); return; }
@@ -231,13 +350,12 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     if (message.type === 'error') { $('place-message').textContent = message.message; return; }
     const result = message.result;
     $('place-message').textContent = result.count ? '' : 'No locations in this area match the current filters.';
-    $('place-results').hidden = !result.count;
-    if (!result.count) { stays.setRows([]); daily.setRows([]); calendar.clear(); return; }
+    $('place-results').hidden = false;
     for (const [id, value] of Object.entries({'place-records': number.format(result.count), 'place-days': number.format(result.days), 'place-total-visits': number.format(result.visits), 'place-time': duration(result.minutes), 'place-first': time(result.first), 'place-last': time(result.last)})) $(id).textContent = value;
     $('place-visits-label').textContent = `Recorded stays · ${number.format(result.visits)}`;
     $('place-daily-label').textContent = `By day · ${number.format(result.days)}`;
     const history = report(), current = options();
-    calendar.setRows(result.daily, allDates ? {start: history.min, end: history.max} : current);
+    calendar.setRows(result.daily, allDates ? {start: history.min, end: history.max, allDates: true} : {...current, historyStart: history.min, historyEnd: history.max});
     stays.setRows(result.stays); daily.setRows(result.daily);
   }
   function syncScope() {
@@ -254,6 +372,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
       tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
       $(`place-view-${tab.dataset.view}`).hidden = !selected;
     }
+    calendar.setActive(id === 'calendar');
   }
   for (const tab of $('place-views').children) {
     tab.onclick = () => showView(tab.dataset.view);

@@ -1202,13 +1202,23 @@ select {
   width: 76px;
 }
 
+.place-calendar-years input[type=date] {
+  width: 126px;
+}
+
+.place-calendar-caption {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--ink);
+}
+
 .place-calendar-scroll {
   overflow-x: auto;
   padding: 4px 2px 8px;
   scrollbar-width: thin;
 }
 
-.place-calendar-chart {
+.place-calendar-chart.is-year {
   --weeks: 53;
   min-width: calc(var(--weeks) * 13px + 23px);
 }
@@ -1224,6 +1234,11 @@ select {
   margin: 0 0 6px 26px;
   font-size: 9px;
   color: var(--muted);
+}
+
+.place-calendar-months span {
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .place-calendar-body {
@@ -1250,11 +1265,12 @@ select {
 .place-calendar-weekdays span:nth-child(3) { grid-row: 6; }
 
 .place-calendar-days button,
-.place-calendar-scale i {
+.place-calendar-scale i,
+.place-calendar-hours button[data-level] {
   padding: 0;
   border: 1px solid #ffffff05;
   border-radius: 2px;
-  background: #28312b;
+  background: var(--activity-color,#28312b);
 }
 
 .place-calendar-days button:disabled {
@@ -1265,18 +1281,107 @@ select {
   outline-offset: 1px;
 }
 
-.place-calendar-days [data-level="1"],
-.place-calendar-scale [data-level="1"] { background: #244d2d; }
-.place-calendar-days [data-level="2"],
-.place-calendar-scale [data-level="2"] { background: #397d3f; }
-.place-calendar-days [data-level="3"],
-.place-calendar-scale [data-level="3"] { background: #65ad51; }
-.place-calendar-days [data-level="4"],
-.place-calendar-scale [data-level="4"] { background: #b0da70; }
+.place-view [data-level="1"] { --activity-color: #244d2d; }
+.place-view [data-level="2"] { --activity-color: #397d3f; }
+.place-view [data-level="3"] { --activity-color: #65ad51; }
+.place-view [data-level="4"] { --activity-color: #b0da70; }
 
 .place-calendar-scale i {
   width: 10px;
   height: 10px;
+}
+
+.is-month .place-calendar-body {
+  display: block;
+}
+
+.is-month .place-calendar-weekdays {
+  display: none;
+}
+
+.is-month .place-calendar-months,
+.is-month .place-calendar-days {
+  grid-template-columns: repeat(7,minmax(0,1fr));
+  margin-left: 0;
+}
+
+.is-month .place-calendar-days {
+  grid-template-rows: none;
+  grid-auto-rows: 44px;
+}
+
+.is-month .place-calendar-days button {
+  text-align: left;
+  padding: 4px;
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.is-month .place-calendar-days small {
+  display: block;
+  font-size: 8px;
+}
+
+.is-month .place-calendar-days [data-level="3"],
+.is-month .place-calendar-days [data-level="4"],
+.place-calendar-hours.is-week [data-level="3"],
+.place-calendar-hours.is-week [data-level="4"] {
+  color: #142018;
+}
+
+.place-calendar-scroll:has(.place-calendar-hours:not([hidden])) {
+  overflow: visible;
+}
+
+.place-calendar-hours {
+  display: grid;
+  gap: 3px;
+  font-size: 8px;
+  color: var(--muted);
+  align-items: center;
+}
+
+.place-calendar-hours.is-week {
+  grid-template-columns: 32px repeat(7,minmax(0,1fr));
+  grid-template-rows: 28px repeat(24,16px);
+}
+
+.place-calendar-hours.is-week .place-calendar-day-heading {
+  position: sticky;
+  top: -10px;
+  z-index: 1;
+  height: 28px;
+  padding: 0;
+  background: #141d17;
+  color: var(--accent);
+  font-size: 9px;
+}
+
+.place-calendar-hours button[data-level] {
+  height: 100%;
+  font-size: 8px;
+}
+
+.place-calendar-hours.is-day {
+  grid-template-columns: repeat(24,minmax(0,1fr));
+  grid-template-rows: 100px 14px;
+}
+
+.place-calendar-hours.is-day button {
+  background: none;
+  border: 0;
+  position: relative;
+}
+
+.place-calendar-hours.is-day button::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--activity,0%);
+  border-radius: 2px;
+  background: var(--activity-color,#28312b);
 }
 
 #place-finish:not(:disabled) {
@@ -1320,6 +1425,15 @@ select {
   #place-scope {
     order: 1;
     flex-basis: 100%;
+  }
+  .place-calendar-toolbar label {
+    font-size: 0;
+    gap: 0;
+  }
+  .place-calendar-years {
+    order: 1;
+    flex-basis: 100%;
+    justify-content: center;
   }
   .place-stats {
     grid-template-columns: repeat(2,minmax(0,1fr));

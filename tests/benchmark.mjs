@@ -64,4 +64,12 @@ if (query.place) {
     const cached = performance.now(); query.place(area);
     console.log(JSON.stringify({case: name, firstQueryMs: +elapsed.toFixed(2), cachedMs: +(performance.now() - cached).toFixed(2), count: result.count, days: result.days, visits: result.visits, minutes: Math.round(result.minutes), details: (result.stays ?? result.recent).length, dayRows: result.daily?.length, peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
   }
+  const area = {type: 'Feature', geometry: {type: 'Polygon', coordinates: [[[13.2, 52.3], [13.7, 52.3], [13.7, 52.7], [13.2, 52.7], [13.2, 52.3]]]}};
+  for (const days of [1, 7]) {
+    const options = {start: lastDay - (days - 1) * data.DAY, end: lastDay + data.DAY - 1, hourly: true};
+    const begin = performance.now(), result = query.place(area, options), elapsed = performance.now() - begin;
+    if (!result.hours) continue; // Revisions before hourly calendars have no hourly totals.
+    const cached = performance.now(); query.place(area, options);
+    console.log(JSON.stringify({case: `place_${days === 1 ? 'day' : 'week'}_hours`, firstQueryMs: +elapsed.toFixed(2), cachedMs: +(performance.now() - cached).toFixed(2), bins: result.hours.length, count: result.count, minutes: Math.round(result.minutes), peakRssMiB: Math.round(process.resourceUsage().maxRSS / 1024)}));
+  }
 }

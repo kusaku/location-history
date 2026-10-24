@@ -101,6 +101,10 @@ test('worker place queries share filters and are replaced transactionally with t
   try {
     await request('import', {files: [json({locations: [record(0), record(60000, 134000000, 500)]})]});
     assert.equal((await request('place', {area})).result.count, 2);
+    const hourly = await request('place-hours', {area, options: {start: 0, end: 86_400_000 - 1}});
+    assert.equal(hourly.type, 'place-hours'); assert.equal(hourly.hours.length, 24); assert.equal(hourly.hours[0].count, 2);
+    const tooLarge = await request('place-hours', {area, options: {start: 0, end: 8 * 86_400_000 - 1}});
+    assert.equal(tooLarge.type, 'error'); assert.equal(tooLarge.operation, 'place-hours');
     assert.equal((await request('place', {area, options: {accuracy: 100}})).result.count, 1);
     assert.equal((await request('place', {area: null})).type, 'error');
     assert.equal((await request('query')).result.count, 2);

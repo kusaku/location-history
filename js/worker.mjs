@@ -1,5 +1,5 @@
-import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=16';
-import {readHistory} from './import.mjs?v=15';
+import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=17';
+import {readHistory} from './import.mjs?v=16';
 let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;
@@ -38,6 +38,9 @@ self.onmessage = async ({data}) => {
       self.postMessage({type: 'result', id, result: {...result, versions}});
     } else if (type === 'place') {
       self.postMessage({type: 'place', id, result: query.place(data.area, data.options)});
+    } else if (type === 'place-hours') {
+      const {hours} = query.place(data.area, {...data.options, hourly: true});
+      self.postMessage({type: 'place-hours', id, hours});
     } else if (type === 'clear') {
       points = []; query = createHistoryQuery(points); geometry = {};
       self.postMessage({type: 'cleared', id});

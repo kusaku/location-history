@@ -354,10 +354,20 @@ export function createHistoryQuery(points) {
   // their spatial candidates. Return every stay and day; the UI pages the rows.
   query.place = (feature, options = {}) => {
     const geometry = placePolygon(feature?.geometry?.coordinates?.[0]);
-    const nextKey = JSON.stringify([feature.properties?.cell, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.excludeJumps]);
+    const nextKey = JSON.stringify([feature.properties?.cell, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.excludeJumps, options.hourly]);
     if (nextKey === placeKey) return placeResult;
     ensureFilter(options);
     const {start = -Infinity, end = Infinity, hourEnd = 24} = options;
+    const hour = DAY / 24, firstHour = Math.floor(start / hour), hourCount = Math.floor(end / hour) - firstHour + 1;
+    if (options.hourly && (!Number.isFinite(hourCount) || hourCount < 1 || hourCount > 168)) throw new Error('Hourly place history requires a range of at most seven days.');
+    const hours = options.hourly ? Array.from({length: hourCount}, (_, i) => ({start: (firstHour + i) * hour, count: 0, minutes: 0})) : null;
+    const addHours = (from, until) => {
+      for (let at = from; at < until;) {
+        const index = Math.floor(at / hour), next = Math.min(until, (index + 1) * hour);
+        if (hours[index - firstHour]) hours[index - firstHour].minutes += (next - at) / 60_000;
+        at = next;
+      }
+    };
     const ring = geometry.coordinates[0], xy = ring.map(c => project(...c));
     const xs = ring.map(c => c[0]), ys = ring.map(c => c[1]);
     const viewport = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], center = (viewport[0] + viewport[2]) / 2;
@@ -393,6 +403,7 @@ export function createHistoryQuery(points) {
     const stays = [], daily = [];
     const add = i => {
       const p = points[i], day = Math.floor(p.t / DAY);
+      if (hours) hours[Math.floor(p.t / hour) - firstHour].count++;
       if (day !== lastDay) {
         days++; lastDay = day;
         dayTotal = {start: day * DAY, count: 0, minutes: 0}; daily.push(dayTotal);
@@ -407,12 +418,17 @@ export function createHistoryQuery(points) {
       }
       // The preceding observation's interval was clipped at midnight. Credit
       // its remainder to this recorded day, without counting overlaps twice.
-      if (i > 0 && previous === i - 1 && points[previous].t < day * DAY && p.t - points[previous].t < 15 * 60_000) {
-        const carry = Math.max(0, p.t - Math.max(day * DAY, coveredUntil)) / 60_000;
+      const before = points[i - 1];
+      const connected = previous === i - 1 || previous === -1 && before && before.t < start && filter.mask[i - 1] && contains(i - 1);
+      if (before && connected && before.t < day * DAY && p.t - before.t < 15 * 60_000) {
+        const carryStart = Math.max(day * DAY, start, coveredUntil), carry = Math.max(0, p.t - carryStart) / 60_000;
+        if (hours) addHours(carryStart, p.t);
+        if (carry) visit.start = Math.min(visit.start, carryStart);
         minutes += carry; visit.minutes += carry; dayTotal.minutes += carry;
         coveredUntil = Math.max(coveredUntil, p.t);
       }
       const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
+      if (hours) addHours(Math.max(p.t, coveredUntil), until);
       coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
       dayTotal.count++; dayTotal.minutes += duration;
       visit.count++; visit.end = Math.max(visit.end, until); count++;
@@ -427,7 +443,7 @@ export function createHistoryQuery(points) {
       for (const i of matches.subarray(0, length).sort()) add(i);
     } else for (let i = from; i < to; i++) if (filter.mask[i] && contains(i)) add(i);
     placeKey = nextKey;
-    return placeResult = {count, days, first, last, minutes, visits: stays.length, stays: stays.reverse(), daily: daily.reverse()};
+    return placeResult = {count, days, first, last, minutes, visits: stays.length, stays: stays.reverse(), daily: daily.reverse(), ...(hours ? {hours} : {})};
   };
   return query;
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from '../../assets/js/settings.mjs';
-import {DAY} from '../../assets/js/data.mjs';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from '../js/settings.mjs';
+import {DAY} from '../js/data.mjs';
 
 const maps = ['google', 'dark', 'yandex', 'google-satellite'];
 function memoryStorage(value = null) {

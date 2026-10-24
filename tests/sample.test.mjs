@@ -4,8 +4,8 @@ import {mkdtemp, readFile, writeFile, rm, readdir, symlink} from 'node:fs/promis
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {gunzipSync} from 'node:zlib';
-import {createSample, encodeHistory, endOfDay} from '../../scripts/create-sample.mjs';
-import {parseHistory, preparePoints, createHistoryQuery, DAY} from '../../assets/js/data.mjs';
+import {createSample, encodeHistory, endOfDay} from '../scripts/create-sample.mjs';
+import {parseHistory, preparePoints, createHistoryQuery, DAY} from '../js/data.mjs';
 const record = (timestamp, accuracy = 20, latitudeE7 = 525000000, longitudeE7 = 134000000) => ({timestamp, accuracy, latitudeE7, longitudeE7});
 const encode = points => encodeHistory(points).encoded;
 

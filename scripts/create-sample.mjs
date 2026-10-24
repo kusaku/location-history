@@ -6,8 +6,8 @@ import {pathToFileURL} from 'node:url';
 import {parseArgs} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import {gzipSync} from 'node:zlib';
-import {readHistory} from '../assets/js/import.mjs';
-import {preparePoints, MAX_POINTS, DAY} from '../assets/js/data.mjs';
+import {readHistory} from '../js/import.mjs';
+import {preparePoints, MAX_POINTS, DAY} from '../js/data.mjs';
 
 export function endOfDay(date) {
   const t = Date.parse(`${date}T00:00:00Z`);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resizeWindow, shiftWindow, histogramWindow} from '../../assets/js/timeline.mjs';
-import {DAY, preparePoints, createHistoryQuery} from '../../assets/js/data.mjs';
+import {resizeWindow, shiftWindow, histogramWindow} from '../js/timeline.mjs';
+import {DAY, preparePoints, createHistoryQuery} from '../js/data.mjs';
 
 const time = date => Date.parse(`${date}T00:00:00Z`);
 const range = (start, end) => ({start: time(start), end: time(end) + DAY - 1});

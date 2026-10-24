@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {jumpFlags, createHistoryQuery, DAY} from '../../assets/js/data.mjs';
+import {jumpFlags, createHistoryQuery, DAY} from '../js/data.mjs';
 const point = (t, lon = 0, accuracy = null) => ({t, lon, lat: 0, accuracy, duration: 0});
 
 test('suspicious jumps flag both endpoints without classifying gaps, accuracy or cadence', () => {

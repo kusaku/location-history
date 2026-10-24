@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
-import {parseHistory, preparePoints, queryHistory, createHistoryQuery, wrappedBounds, project, timestamp, shiftPeriod, DAY} from '../../assets/js/data.mjs';
+import {parseHistory, preparePoints, queryHistory, createHistoryQuery, wrappedBounds, project, timestamp, shiftPeriod, DAY} from '../js/data.mjs';
 const point = (t, lon = 13.4, lat = 52.5, accuracy = null) => ({t, lon, lat, accuracy, duration: 0});
 const records = locations => parseHistory({locations}).points;
 const legacy = (time, lat = 525000000, lon = 134000000) => ({timestampMs: String(time), latitudeE7: lat, longitudeE7: lon});
@@ -145,7 +145,7 @@ test('point mode caps rendered observations, while counts stay exact', () => {
   assert.equal(result.count, 21000); assert.ok(result.dots.features.length <= 20000);
 });
 test('bundled sample preserves every trimmed observation and its accuracy metadata', () => {
-  const data = JSON.parse(gunzipSync(readFileSync(new URL('../../data/sample-location-history.json.gz', import.meta.url))));
+  const data = JSON.parse(gunzipSync(readFileSync(new URL('../data/sample-location-history.json.gz', import.meta.url))));
   const prepared = preparePoints(parseHistory(data).points);
   assert.equal(data.version, 2); assert.equal(prepared.duplicates, 0);
   assert.equal(prepared.points.length, 910311); assert.equal(data.accuracy.length, 910311);

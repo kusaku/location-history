@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, paintHistory, fitHistoryBounds, MAPS, MAP_GROUPS, MAP_ORDER} from '../../assets/js/maps.mjs';
+import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, paintHistory, fitHistoryBounds, MAPS, MAP_GROUPS, MAP_ORDER} from '../js/maps.mjs';
 
 const bounds = (west = 13, east = 14, south = 52, north = 53) => ({getWest: () => west, getEast: () => east, getSouth: () => south, getNorth: () => north});
 const map = {getBounds: () => bounds(), getZoom: () => 10.5};
@@ -117,7 +117,7 @@ test('Google errors do not expose credentials or omit mandatory attribution', as
 });
 
 test('Yandex uses Web Mercator and preserves terms and map links', async () => {
-  const {createYandexProvider} = await import('../../assets/js/maps.mjs');
+  const {createYandexProvider} = await import('../js/maps.mjs');
   const provider = createYandexProvider('test-key');
   const style = await provider.style({getCenter: () => ({lng: 13.4, lat: 52.5}), getZoom: () => 10});
   assert.match(style.sources.basemap.tiles[0], /projection=web_mercator/);
@@ -128,7 +128,7 @@ test('Yandex uses Web Mercator and preserves terms and map links', async () => {
 });
 
 test('Yandex tile requests are paced, cancellable and return cache headers', async () => {
-  const {createYandexTileLoader} = await import('../../assets/js/maps.mjs');
+  const {createYandexTileLoader} = await import('../js/maps.mjs');
   const starts = [];
   const loader = createYandexTileLoader(async url => {
     starts.push(Date.now());

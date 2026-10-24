@@ -231,7 +231,7 @@ async function loadSample() {
   const request = ++sampleRequest;
   setBusy(true); status('Loading the bundled sample…', false, true);
   try {
-    const response = await fetch(new URL('../../data/sample-location-history.json.gz?v=2', import.meta.url), {signal: AbortSignal.timeout(30000)});
+    const response = await fetch(new URL('../data/sample-location-history.json.gz?v=2', import.meta.url), {signal: AbortSignal.timeout(30000)});
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     if (request !== sampleRequest) return;

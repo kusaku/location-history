@@ -37,9 +37,9 @@ OpenFreeMap Midnight is selected on the first visit. This browser remembers the 
 
 ### Performance verification
 
-Run `node tests/performance/benchmark.mjs` for the bundled sample, or append local JSON/gzip paths for larger histories. `--synthetic 1000000` exercises a generated million-record history. `--revision <commit>` compares against an earlier revision, including revisions before the folder reorganization. Files stay local; output contains aggregate statistics and geometry hashes.
+Run `node tests/benchmark.mjs` for the bundled sample, or append local JSON/gzip paths for larger histories. `--synthetic 1000000` exercises a generated million-record history. `--revision <commit>` compares against an earlier revision, including revisions before the folder reorganization. Files stay local; output contains aggregate statistics and geometry hashes.
 
-The 2026-10-23 optimization measurement used 3,306,412 observations: repeated world-heat computation fell from 524.53 to 225.33 ms, and sequential-run peak RSS from 1,604 to 1,179 MiB. All seven sample and large-history cases retained identical statistics and active-geometry hashes; a seeded 180-query comparison also matched. These measure local worker computation, not browser frame rate or network latency. Reproduce the previous baseline with `node tests/performance/benchmark.mjs --revision a0be2e5 [files...]`.
+The 2026-10-23 optimization measurement used 3,306,412 observations: repeated world-heat computation fell from 524.53 to 225.33 ms, and sequential-run peak RSS from 1,604 to 1,179 MiB. All seven sample and large-history cases retained identical statistics and active-geometry hashes; a seeded 180-query comparison also matched. These measure local worker computation, not browser frame rate or network latency. Reproduce the previous baseline with `node tests/benchmark.mjs --revision a0be2e5 [files...]`.
 
 The worker builds a compact spatial index and caches only the current jump/hour/accuracy filter and date selection. Panning reuses the histogram, date bounds, distance, and journey geometry. Points and Journeys skip density aggregation. Unchanged geometry is transferred only when the UI has not already acknowledged its version, so discarded queries cannot leave missing overlays. GPU style changes do not rerun filtering. Jump flags cost one byte per observation and are calculated once on import. Place queries reuse the spatial index and filter mask without invalidating map date/route caches; only the last aggregate result is cached. Small areas sort their spatial candidates; broad areas stream chronologically. Repeated panning does not rerun a selected place query.
 
@@ -74,7 +74,7 @@ Delta columns plus gzip remain compact and use only native browser APIs. For thi
 
 ## Maps and providers
 
-The selector uses Roads → Terrain → Satellite → Hybrid → Dark tabs, then compact provider choices in a consistent Google/Yandex/OpenStreetMap/Azure/Esri/OpenFreeMap order where available. Switching tabs only browses choices; selecting a provider changes the map. Provider names use the same readable size on mobile and desktop. The shared `assets/images/map-previews.svg` supplies decorative illustrations with distinct provider palettes; terrain has contours and hybrid includes roads and labels. It makes no map API requests and loads no SDK. Map IDs and saved preferences stay stable.
+The selector uses Roads → Terrain → Satellite → Hybrid → Dark tabs, then compact provider choices in a consistent Google/Yandex/OpenStreetMap/Azure/Esri/OpenFreeMap order where available. Switching tabs only browses choices; selecting a provider changes the map. Provider names use the same readable size on mobile and desktop. The shared `images/map-previews.svg` supplies decorative illustrations with distinct provider palettes; terrain has contours and hybrid includes roads and labels. It makes no map API requests and loads no SDK. Map IDs and saved preferences stay stable.
 
 The built-in choices require no credentials:
 
@@ -95,7 +95,7 @@ Google roads and terrain use the supported [Map Tiles API](https://developers.go
 
 The dedicated Cloud project is `location-history-512511`. Its browser key permits only `tile.googleapis.com` and the website `https://kusaku.su/*`. Restricting the whole origin is necessary because cross-origin browser requests send the origin as Referer. The 2D-tile quota is **3,000 requests/day**, at most 93,000 in a 31-day month, below the console's current 100,000/month free allowance. Street View and 3D-root daily quotas are zero. Google allowances are shared by billing account, so usage from other projects on the same account also counts. [Quota console](https://console.cloud.google.com/google/maps-apis/quotas?project=location-history-512511&api=tile.googleapis.com).
 
-Keys in `assets/js/map-config.mjs` are deliberately public, as required by a static browser app. Keep application/API restrictions and quotas in the provider console. Never add Apple signing keys, service-account credentials, server secrets, or session tokens to this file. The remaining maps continue working when a configured provider is unavailable.
+Keys in `js/map-config.mjs` are deliberately public, as required by a static browser app. Keep application/API restrictions and quotas in the provider console. Never add Apple signing keys, service-account credentials, server secrets, or session tokens to this file. The remaining maps continue working when a configured provider is unavailable.
 
 ### Satellite SDK integrations
 
@@ -135,7 +135,7 @@ OpenFreeMap replaces CARTO, whose current public basemap terms require a licence
 - **MapLibre GL JS 6.15.0**, pinned JS and CSS from jsDelivr; native WebGL heatmap, fill, circle, and line layers. ES modules are used as required by v6. No Leaflet, Leaflet.heat, runtime Tailwind, bundler, framework, or package manager.
 - **Library review, 2026-10-23:** retain MapLibre as the single overlay renderer; its [current release](https://github.com/maplibre/maplibre-gl-js/releases/tag/v6.15.0) already supplies all four visualization layers. The Google SDK remains on its documented [quarterly channel](https://developers.google.com/maps/documentation/javascript/versions). Yandex 2.1 loads only `Map` and `projection.sphericalMercator` through its [module loader](https://yandex.com/dev/jsapi-v2-1/doc/en/v2-1/dg/concepts/modules), with dependency resolution handled by the SDK. Both SDKs remain optional and reuse one map instance per provider. Azure, Esri, and OSM use tiles without additional SDKs. Native file streams, JSON parsing, gzip decompression, and workers cover the data flow without extra libraries.
 - **Native CSS** handles the responsive desktop workspace and mobile map/settings layout. DM Sans and Space Grotesk are optional variable fonts served by Google Fonts, with system fallbacks. Weight ranges avoid repeated font-face declarations without adding font files.
-Runtime modules live in `assets/js/`:
+Runtime modules live in `js/`:
 
 - `app.mjs`: UI, map rendering, provider switching, and debounced queries with backpressure.
 - `import.mjs`: incremental UTF-8/JSON decoding, gzip decompression, bounded record batches, schema validation, and read progress.
@@ -146,17 +146,16 @@ Runtime modules live in `assets/js/`:
 - `maps.mjs`: provider catalog, URLs, session lifecycle, attribution, rate limiting, palettes, and incremental history-layer paint updates. `map-config.mjs` contains only public browser keys.
 - `settings.mjs`: validated, allowlisted per-mode visualization and shared date/hour/accuracy/jump preferences in project-specific local storage. History and map camera state are excluded.
 - `timeline.mjs`: UTC calendar window resizing/navigation and histogram date intervals, with leap-year, month-end, boundary, and persistence checks.
-- `tests/unit/`: Node built-in tests for import formats and chunk boundaries, transactional failures, exact filtering, calendar windows, histogram counts, providers, SDK lifecycle, preferences, and incremental paint equivalence. Run with `node --test`; no test dependencies are required.
+- `tests/`: Node built-in tests for import formats and chunk boundaries, transactional failures, exact filtering, calendar windows, histogram counts, providers, SDK lifecycle, preferences, and incremental paint equivalence. Run with `node --test`; no test dependencies are required.
 
 ```text
-index.html                  Static entry point
-assets/js/                  Runtime modules and public browser map configuration
-assets/css/styles.css       Responsive layout and component styles
-assets/images/              Shared decorative map previews
-data/                       Public bundled sample, loaded only on request
-scripts/                    Reproducible sample generation
-tests/unit/                 Functional regression tests
-tests/performance/          Local benchmark with revision comparisons
+index.html       Static entry point
+js/              Runtime modules and public browser map configuration
+css/             Responsive styles
+images/          Shared decorative map previews
+data/            Public bundled sample, loaded only on request
+scripts/         Reproducible sample generation
+tests/           All functional tests and the performance benchmark
 ```
 
 Imported data remains in worker memory and only rendered geometry is sent to the map renderer. The app processes files locally without uploading them or saving them in browser storage. Selected providers receive map requests revealing the viewed area; jsDelivr and Google Fonts receive normal asset requests. The existing sample is already a public repository asset and only loads when explicitly requested. Optional Google/Yandex SDKs make their own provider requests and are governed by their providers’ privacy policies. No service worker is included.

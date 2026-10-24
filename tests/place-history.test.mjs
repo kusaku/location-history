@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlaceHistory, createPlaceTable} from '../../assets/js/place-history.mjs';
+import {createPlaceHistory, createPlaceTable} from '../js/place-history.mjs';
 const area = {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]]}};
 class Element {
   hidden = false; disabled = false; textContent = ''; style = {}; children = []; dataset = {}; attributes = {};

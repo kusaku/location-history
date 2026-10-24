@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHistoryQuery, preparePoints, placePolygon, DAY} from '../../assets/js/data.mjs';
+import {createHistoryQuery, preparePoints, placePolygon, DAY} from '../js/data.mjs';
 const minute = 60_000;
 const point = (t, lon = 13, lat = 52, duration = 0, accuracy = null) => ({t, lon, lat, duration, accuracy});
 const area = coordinates => ({type: 'Feature', properties: {}, geometry: placePolygon(coordinates)});

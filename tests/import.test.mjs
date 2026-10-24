@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gzipSync} from 'node:zlib';
-import {readHistory} from '../../assets/js/import.mjs';
-import {parseHistory} from '../../assets/js/data.mjs';
+import {readHistory} from '../js/import.mjs';
+import {parseHistory} from '../js/data.mjs';
 
 const record = (timestampMs = '0') => ({latitudeE7: 525000000, longitudeE7: 134000000, timestampMs});
 function chunked(input, size = 7, cancel = () => {}) {

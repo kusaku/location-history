@@ -8,9 +8,10 @@ function memoryStorage(value = null) {
   return {key: null, value, getItem(key) { this.key = key; return this.value; }, setItem(key, value) { this.key = key; this.value = value; }};
 }
 
-test('new visitors default to Google, with a configured-provider fallback', () => {
-  assert.equal(loadSettings(maps, memoryStorage()).basemap, 'google');
+test('new visitors default to OpenFreeMap Midnight, with an available-provider fallback', () => {
+  assert.equal(loadSettings(maps, memoryStorage()).basemap, 'dark');
   assert.equal(loadSettings(['dark', 'osm'], memoryStorage()).basemap, 'dark');
+  assert.equal(loadSettings(['google', 'osm'], memoryStorage()).basemap, 'google');
   assert.equal(loadSettings(['osm'], memoryStorage()).basemap, 'osm');
 });
 

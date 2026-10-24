@@ -337,7 +337,7 @@ export function createHistoryQuery(points) {
       for (const b of bins) {
         const v = value(b);
         if (!v) continue;
-        const properties = {...(mode === 'hex' ? {cell: `hex:${b.q}:${b.r}:${size}`} : {}), value: v, count: b.count, days: b.days, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
+        const properties = {...(mode === 'hex' ? {cell: `hex:${b.q}:${b.r}:${size}:${center}`} : {}), value: v, count: b.count, days: b.days, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
         const coordinates = mode === 'hex' ? [Array.from({length: 7}, (_, i) => unproject(b.x + size * Math.cos(rad * (60 * (i % 6) - 30)), b.y + size * Math.sin(rad * (60 * (i % 6) - 30))))] : unproject(b.x, b.y);
         features.push({type: 'Feature', properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
       }
@@ -361,7 +361,7 @@ export function createHistoryQuery(points) {
     const cell = feature.properties?.cell;
     if (typeof cell === 'string' && cell.startsWith('hex:')) {
       hex = cell.slice(4).split(':').map(Number);
-      if (hex.length !== 3 || !hex.every(Number.isFinite) || !Number.isInteger(hex[0]) || !Number.isInteger(hex[1]) || hex[2] <= 0 || hex[2] > 1) throw new Error('Invalid hexagon.');
+      if (hex.length !== 4 || !hex.every(Number.isFinite) || !Number.isInteger(hex[0]) || !Number.isInteger(hex[1]) || hex[2] <= 0 || hex[2] > 1) throw new Error('Invalid hexagon.');
       // Unprojection can round a bin-edge coordinate just outside its polygon.
       // Pad the candidate box only; exact hex rounding still decides membership.
       viewport[0] -= 1e-9; viewport[1] -= 1e-9; viewport[2] += 1e-9; viewport[3] += 1e-9;
@@ -372,7 +372,8 @@ export function createHistoryQuery(points) {
     const contains = i => {
       const p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
       if (lon < viewport[0] || lon > viewport[2] || p.lat < viewport[1] || p.lat > viewport[3]) return false;
-      const x = (lon + 180) / 360, y = projectedY[i];
+      const sourceLon = hex ? p.lon + 360 * Math.round((hex[3] - p.lon) / 360) : lon;
+      const x = (sourceLon + 180) / 360, y = projectedY[i];
       if (hex) { const [q, r] = hexRound((Math.sqrt(3) / 3 * x - y / 3) / hex[2], 2 / 3 * y / hex[2]); return q === hex[0] && r === hex[1]; }
       let inside = false;
       for (let j = 0; j < xy.length - 1; j++) {

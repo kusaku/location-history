@@ -164,7 +164,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
     const followsRange = $('place-calendar-view').value === 'auto' && !scope.allDates && (view === 'week' || view === 'month' || scope.period === '365');
     const period = followsRange ? {start: scope.start, end: scope.end + DAY - 1} : placeCalendarPeriod(anchor, view);
     const metric = $('place-calendar-metric').value === 'minutes' ? 'minutes' : 'count', hourly = view === 'day' || view === 'week';
-    $('place-calendar-detail').textContent = 'Select a day or hour to filter the map. Times are estimated; arrow keys move between recorded intervals.';
+    $('place-calendar-detail').textContent = 'Select a day/hour to filter the map · UTC. Arrow keys navigate.';
     $('place-calendar-year').hidden = view !== 'year'; $('place-calendar-anchor').hidden = view === 'year';
     $('place-calendar-year').value = year; $('place-calendar-year').min = new Date(scope.start).getUTCFullYear(); $('place-calendar-year').max = new Date(scope.end).getUTCFullYear();
     $('place-calendar-anchor').value = utcDate(anchor); $('place-calendar-anchor').min = utcDate(scope.start); $('place-calendar-anchor').max = utcDate(scope.end);
@@ -175,7 +175,10 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
     $('place-calendar-next').setAttribute('aria-label', sync ? 'Next date window' : `Next calendar ${view}`);
     $('place-calendar-caption').textContent = followsRange || view === 'week' ? `${calendarDate.format(period.start)} — ${calendarDate.format(period.end)}` : view === 'year' ? String(year) : view === 'month' ? `${monthName.format(anchor)} ${year}` : calendarDate.format(anchor);
     $('place-calendar-chart').hidden = hourly; $('place-calendar-hours').hidden = !hourly;
-    if (hourly) renderHourly(view, period, metric); else { hourWanted = null; renderDaily(view, period, metric); }
+    if (hourly) {
+      $('place-calendar-days').replaceChildren(); $('place-calendar-months').replaceChildren();
+      renderHourly(view, period, metric);
+    } else { hourWanted = null; $('place-calendar-hours').replaceChildren(); renderDaily(view, period, metric); }
   }
   $('place-calendar-previous').onclick = () => navigate(-1); $('place-calendar-next').onclick = () => navigate(1);
   function enterYear(commit) {

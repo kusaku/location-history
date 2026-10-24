@@ -1144,6 +1144,24 @@ select {
   padding-top: 10px;
 }
 
+#place-view-calendar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.place-calendar-toolbar,
+.place-calendar-caption,
+.place-calendar-footer,
+#place-calendar-detail {
+  flex-shrink: 0;
+}
+
+#place-calendar-detail {
+  min-height: 32px;
+  margin-top: 6px;
+}
+
 #place-results:has(#place-tab-calendar[aria-selected=true])>.hint {
   display: none;
 }
@@ -1213,7 +1231,8 @@ select {
 }
 
 .place-calendar-scroll {
-  overflow-x: auto;
+  min-height: 0;
+  overflow: auto;
   padding: 4px 2px 8px;
   scrollbar-width: thin;
 }
@@ -1305,6 +1324,14 @@ select {
   margin-left: 0;
 }
 
+.is-month .place-calendar-months {
+  position: sticky;
+  top: 0;
+  background: #141d17;
+  z-index: 1;
+  padding: 3px 0;
+}
+
 .is-month .place-calendar-days {
   grid-template-rows: none;
   grid-auto-rows: 44px;
@@ -1329,10 +1356,6 @@ select {
   color: #142018;
 }
 
-.place-calendar-scroll:has(.place-calendar-hours:not([hidden])) {
-  overflow: visible;
-}
-
 .place-calendar-hours {
   display: grid;
   gap: 3px;
@@ -1348,7 +1371,7 @@ select {
 
 .place-calendar-hours.is-week .place-calendar-day-heading {
   position: sticky;
-  top: -10px;
+  top: 0;
   z-index: 1;
   height: 28px;
   padding: 0;
@@ -1364,7 +1387,7 @@ select {
 
 .place-calendar-hours.is-day {
   grid-template-columns: repeat(24,minmax(0,1fr));
-  grid-template-rows: 100px 14px;
+  grid-template-rows: 82px 14px;
 }
 
 .place-calendar-hours.is-day button {

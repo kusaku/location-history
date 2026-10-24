@@ -1,10 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHistoryQuery, placePolygon, DAY} from '../../assets/js/data.mjs';
+import {createHistoryQuery, preparePoints, placePolygon, DAY} from '../../assets/js/data.mjs';
 const minute = 60_000;
 const point = (t, lon = 13, lat = 52, duration = 0, accuracy = null) => ({t, lon, lat, duration, accuracy});
 const area = coordinates => ({type: 'Feature', properties: {}, geometry: placePolygon(coordinates)});
 const box = area([[12, 51], [14, 51], [14, 53], [12, 53]]);
+test('a continuously recorded flight contributes area time without changing stationary density', () => {
+  const start = Date.UTC(2024, 9, 3, 16, 45);
+  const points = preparePoints(Array.from({length: 201}, (_, i) => point(start + i * 133 * minute / 200, 12.5 + i * .005, 51.5 + i * .005))).points;
+  assert.ok(points.every(p => p.duration === 0)); // Every interval moves over 200 m.
+  const query = createHistoryQuery(points), result = query.place(box);
+  assert.equal(result.count, 201); assert.equal(result.visits, 1);
+  assert.ok(Math.abs(result.minutes - 133) < 1e-9);
+  assert.equal(result.stays[0].minutes, result.minutes);
+  assert.equal(result.stays[0].end - result.stays[0].start, 133 * minute);
+  assert.deepEqual(result.daily, [{start: Math.floor(start / DAY) * DAY, count: 201, minutes: result.minutes}]);
+  assert.equal(query({metric: 'time'}).density.features.length, 0);
+  assert.ok(Math.abs(query.place(box, {end: start + 30 * minute - 1}).minutes - 30) < 1e-9);
+});
+test('area time never bridges an exit, an excluded observation, or a 15-minute recording gap', () => {
+  const query = createHistoryQuery([point(0), point(minute, 15), point(2 * minute), point(3 * minute, 13, 52, 0, 500), point(4 * minute), point(19 * minute), point(20 * minute)]);
+  assert.equal(query.place(box, {accuracy: 100}).minutes, 1);
+  assert.equal(query.place(box).minutes, 3);
+  const jumps = createHistoryQuery([point(0), point(minute, 13.9), point(2 * minute, 13.9)]);
+  assert.equal(jumps.place(box).minutes, 2);
+  assert.equal(jumps.place(box, {excludeJumps: true}).minutes, 0);
+});
+test('moving time splits across midnight and clips to selected hours', () => {
+  const query = createHistoryQuery([point(DAY - 5 * minute, 12.8), point(DAY + 5 * minute, 13), point(DAY + 10 * minute, 13.2)]);
+  const result = query.place(box);
+  assert.equal(result.minutes, 15); assert.equal(result.visits, 1);
+  assert.deepEqual(result.daily, [{start: DAY, count: 2, minutes: 10}, {start: 0, count: 1, minutes: 5}]);
+  assert.equal(query.place(box, {end: DAY - 1}).minutes, 5);
+  assert.equal(query.place(box, {hourStart: 0, hourEnd: 1}).minutes, 5);
+  assert.equal(query.place(box, {hourStart: 23, hourEnd: 24}).minutes, 0);
+  const hour = createHistoryQuery([point(8 * 60 * minute + 55 * minute, 12.8), point(9 * 60 * minute + 5 * minute, 13)]);
+  assert.equal(hour.place(box, {hourStart: 8, hourEnd: 9}).minutes, 0);
+});
 test('place history counts recorded visits, observations, days and conservative time', () => {
   const query = createHistoryQuery([point(0, 13, 52, 10 * minute), point(10 * minute, 13, 52, 10 * minute), point(20 * minute, 15), point(25 * minute, 13, 52, 10 * minute), point(65 * minute)]);
   const result = query.place(box);

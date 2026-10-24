@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="assets/css/styles.css?v=26">
-    <script type="module" src="assets/js/app.mjs?v=30">
+    <script type="module" src="assets/js/app.mjs?v=31">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -378,7 +378,7 @@
                 <div><dt>Recorded visits</dt><dd id="place-total-visits"></dd></div>
                 <div><dt>Locations</dt><dd id="place-records"></dd></div>
                 <div><dt>Recorded days</dt><dd id="place-days"></dd></div>
-                <div><dt>Estimated time</dt><dd id="place-time"></dd></div>
+                <div><dt>Estimated time in area</dt><dd id="place-time"></dd></div>
                 <div><dt>First seen · UTC</dt><dd id="place-first"></dd></div>
                 <div><dt>Last seen · UTC</dt><dd id="place-last"></dd></div>
               </dl>
@@ -590,7 +590,7 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Gaps under 15 minutes form one stay; durations estimate recorded time. Expand <b>Recorded stays</b> or <b>By day</b>, sort by a column heading, and use Previous/Next for longer tables. Every matching stay and day is available. Select a date to filter the map.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time. Expand <b>Recorded stays</b> or <b>By day</b>, sort by a column heading, and use Previous/Next for longer tables. Every matching stay and day is available. Select a date to filter the map.</p>
       <h3>Filters and date windows</h3>
       <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Play, backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Dates and hours use UTC.</p>

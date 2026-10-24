@@ -95,7 +95,7 @@ export function preparePoints(points) {
     unique[length++] = p;
   }
   unique.length = length;
-  // Infer only short, stationary intervals; gaps and travel are never counted as stays.
+  // Stationary density excludes travel. Place history estimates area time separately.
   for (let i = 0; i < unique.length - 1; i++) {
     const p = unique[i], next = unique[i + 1], dt = next.t - p.t;
     if (!p.duration && dt > 0 && dt <= 30 * 60_000 && distance(p, next) <= 0.2) p.duration = dt;
@@ -377,7 +377,7 @@ export function createHistoryQuery(points) {
       return inside;
     };
     const from = lowerBound(points, start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
-    let count = 0, days = 0, lastDay, first = null, last = null, minutes = 0, coveredUntil = -Infinity, visit, dayTotal;
+    let count = 0, days = 0, lastDay, first = null, last = null, minutes = 0, coveredUntil = -Infinity, previous = -1, visit, dayTotal;
     const stays = [], daily = [];
     const add = i => {
       const p = points[i], day = Math.floor(p.t / DAY);
@@ -385,16 +385,27 @@ export function createHistoryQuery(points) {
         days++; lastDay = day;
         dayTotal = {start: day * DAY, count: 0, minutes: 0}; daily.push(dayTotal);
       }
-      const next = points[i + 1];
-      const until = Math.max(p.t, Math.min(p.t + p.duration, end + 1, day * DAY + hourEnd * 3_600_000, next && (!filter.mask[i + 1] || !contains(i + 1)) ? next.t : Infinity));
+      const next = points[i + 1], nextInside = next && filter.mask[i + 1] && contains(i + 1);
+      // Consecutive accepted observations establish time in the area even while
+      // moving. Do not bridge an exit, excluded observation or a 15-minute gap.
+      const interval = nextInside && next.t > p.t && next.t - p.t < 15 * 60_000 ? next.t - p.t : 0;
+      const until = Math.max(p.t, Math.min(p.t + Math.max(p.duration, interval), end + 1, day * DAY + hourEnd * 3_600_000, next && !nextInside ? next.t : Infinity));
       if (!visit || p.t - visit.end >= 15 * 60_000) {
         visit = {start: p.t, end: p.t, count: 0, minutes: 0}; stays.push(visit);
+      }
+      // The preceding observation's interval was clipped at midnight. Credit
+      // its remainder to this recorded day, without counting overlaps twice.
+      if (i > 0 && previous === i - 1 && points[previous].t < day * DAY && p.t - points[previous].t < 15 * 60_000) {
+        const carry = Math.max(0, p.t - Math.max(day * DAY, coveredUntil)) / 60_000;
+        minutes += carry; visit.minutes += carry; dayTotal.minutes += carry;
+        coveredUntil = Math.max(coveredUntil, p.t);
       }
       const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
       coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
       dayTotal.count++; dayTotal.minutes += duration;
       visit.count++; visit.end = Math.max(visit.end, until); count++;
       if (first === null) first = p.t; last = p.t;
+      previous = i;
     };
     if (candidates < (to - from) / 2) {
       const matches = new Uint32Array(candidates); let length = 0;

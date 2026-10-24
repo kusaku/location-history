@@ -1488,30 +1488,7 @@ dialog p {
   .window-filters select {
     font-size: 9px;
   }
-  .place-table th button {
-  color: var(--muted);
-}
-
-.place-table th[aria-sort]:not([aria-sort=none]) button {
-  color: var(--accent);
-}
-
-.place-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 10px;
-  padding-top: 6px;
-}
-
-.place-pagination button {
-  min-height: 30px;
-  padding: 4px 6px;
-  color: var(--accent);
-}
-
-.utc-tag {
+  .utc-tag {
     display: none;
   }
   .legend #legend-unit {
@@ -1715,9 +1692,6 @@ dialog p {
   .timeline-inputs input[type=date] {
     width: 102px;
   }
-}
-
-@media(max-width:400px) {
   .window-filters,
   .timeline-controls>.presets {
     display: contents;

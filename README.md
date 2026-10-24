@@ -4,7 +4,7 @@ A responsive, static location-history explorer at **https://kusaku.su/location-h
 
 ## Run and verify
 
-No build, package installation, or backend is required. Six maps work without credentials; additional providers use public browser keys in `map-config.mjs`. Use a current browser with WebGL2, module workers, and Compression Streams for gzip files.
+No build, package installation, or backend is required. Six maps work without credentials; additional providers use public browser keys in `js/map-config.mjs`. Use a current browser with WebGL2, module workers, and Compression Streams for gzip files.
 
 ```sh
 python3 -m http.server 8080

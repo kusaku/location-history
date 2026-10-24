@@ -1,4 +1,4 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=11';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=12';
 import {createPlaceHistory} from './place-history.mjs?v=10';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, HISTOGRAM_BINS} from './data.mjs?v=16';
@@ -7,7 +7,7 @@ import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
-const fullDate = new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
+const fullDate = new Intl.DateTimeFormat('en', {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
 const formatDate = t => fullDate.format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);

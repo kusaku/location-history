@@ -8,12 +8,12 @@ const raster = (tiles, attribution, maxzoom = 19, tileSize = 256) => ({
   layers: [{id: 'background', type: 'background', paint: {'background-color': '#dce3e5'}}, {id: 'basemap', type: 'raster', source: 'basemap'}],
 });
 export const MAPS = {
-  dark: {name: 'Midnight', provider: 'OpenFreeMap', detail: 'OpenFreeMap · dark vector', style: 'https://tiles.openfreemap.org/styles/dark', tone: 'dark'},
-  light: {name: 'Paper', provider: 'OpenFreeMap', detail: 'OpenFreeMap · light vector', style: 'https://tiles.openfreemap.org/styles/positron', tone: 'light'},
-  streets: {name: 'Streets', provider: 'OpenFreeMap', detail: 'OpenFreeMap · Liberty', style: 'https://tiles.openfreemap.org/styles/liberty', tone: 'light'},
-  bright: {name: 'Bright', provider: 'OpenFreeMap', detail: 'OpenFreeMap · Bright', style: 'https://tiles.openfreemap.org/styles/bright', tone: 'light'},
-  satellite: {name: 'Esri satellite', provider: 'Esri', detail: 'Esri · World Imagery', tone: 'dark', style: raster('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9">Esri World Imagery</a> · Esri, Vantor, Earthstar Geographics, GIS User Community', 19)},
-  osm: {name: 'OpenStreetMap', provider: 'OpenStreetMap', detail: 'OpenStreetMap · standard', tone: 'light', style: raster('https://tile.openstreetmap.org/{z}/{x}/{y}.png', osm)},
+  dark: {name: 'Midnight', provider: 'OpenFreeMap', style: 'https://tiles.openfreemap.org/styles/dark'},
+  light: {name: 'Paper', provider: 'OpenFreeMap', style: 'https://tiles.openfreemap.org/styles/positron'},
+  streets: {name: 'Streets', provider: 'OpenFreeMap', style: 'https://tiles.openfreemap.org/styles/liberty'},
+  bright: {name: 'Bright', provider: 'OpenFreeMap', style: 'https://tiles.openfreemap.org/styles/bright'},
+  satellite: {name: 'Esri satellite', provider: 'Esri', style: raster('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9">Esri World Imagery</a> · Esri, Vantor, Earthstar Geographics, GIS User Community', 19)},
+  osm: {name: 'OpenStreetMap', provider: 'OpenStreetMap', style: raster('https://tile.openstreetmap.org/{z}/{x}/{y}.png', osm)},
 };
 
 const escapeHTML = text => String(text).replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
@@ -70,7 +70,6 @@ export function createGoogleProvider(apiKey, mapType = 'roadmap', fetcher = glob
   }
   return {
     name: mapType === 'terrain' ? 'Google terrain' : 'Google Maps', provider: 'Google',
-    detail: mapType === 'terrain' ? 'Google Maps · terrain' : 'Google Maps · roads', tone: 'light',
     attribution, tiles,
     async style(map) {
       const credit = await attribution(map);
@@ -95,7 +94,7 @@ export function createYandexProvider(apiKey) {
     const url = `https://yandex.com/maps/?ll=${encodeURIComponent(`${center.lng},${center.lat}`)}&z=${Math.max(0, Math.min(20, map.getZoom() + 1)).toFixed(2)}`;
     return `© Yandex · <a href="https://yandex.ru/legal/maps_termsofuse/">Terms of use</a> · <a href="${url}" target="_blank" rel="noopener">Open in Maps ↗</a>`;
   };
-  return {name: 'Yandex Maps', provider: 'Yandex', detail: 'Yandex · map tiles', tone: 'light', tiles, attribution,
+  return {name: 'Yandex Maps', provider: 'Yandex', tiles, attribution,
     async style(map) {
       const style = raster(tiles()[0], '', 20);
       style.metadata = {providerAttribution: await attribution(map)};
@@ -105,25 +104,25 @@ export function createYandexProvider(apiKey) {
 }
 if (MAP_CONFIG.yandexTilesApiKey) MAPS.yandex = createYandexProvider(MAP_CONFIG.yandexTilesApiKey);
 
-const nativeProvider = (sdk, apiKey, mapType, name, detail) => ({
-  name, detail, provider: sdk === 'google' ? 'Google' : 'Yandex', tone: 'dark',
+const nativeProvider = (sdk, apiKey, mapType, name) => ({
+  name, provider: sdk === 'google' ? 'Google' : 'Yandex',
   native: {sdk, apiKey, mapType}, style: {version: 8, sources: {}, layers: []},
 });
 if (MAP_CONFIG.googleMapsJavaScriptApiKey) {
-  MAPS['google-satellite'] = nativeProvider('google', MAP_CONFIG.googleMapsJavaScriptApiKey, 'satellite', 'Google satellite', 'Google Maps · satellite');
-  MAPS['google-hybrid'] = nativeProvider('google', MAP_CONFIG.googleMapsJavaScriptApiKey, 'hybrid', 'Google hybrid', 'Google Maps · satellite with labels');
+  MAPS['google-satellite'] = nativeProvider('google', MAP_CONFIG.googleMapsJavaScriptApiKey, 'satellite', 'Google satellite');
+  MAPS['google-hybrid'] = nativeProvider('google', MAP_CONFIG.googleMapsJavaScriptApiKey, 'hybrid', 'Google hybrid');
 }
 if (MAP_CONFIG.yandexJavaScriptApiKey) {
-  MAPS['yandex-satellite'] = nativeProvider('yandex', MAP_CONFIG.yandexJavaScriptApiKey, 'yandex#satellite', 'Yandex satellite', 'Yandex · satellite');
-  MAPS['yandex-hybrid'] = nativeProvider('yandex', MAP_CONFIG.yandexJavaScriptApiKey, 'yandex#hybrid', 'Yandex hybrid', 'Yandex · satellite with labels');
+  MAPS['yandex-satellite'] = nativeProvider('yandex', MAP_CONFIG.yandexJavaScriptApiKey, 'yandex#satellite', 'Yandex satellite');
+  MAPS['yandex-hybrid'] = nativeProvider('yandex', MAP_CONFIG.yandexJavaScriptApiKey, 'yandex#hybrid', 'Yandex hybrid');
 }
 
 const AZURE_STYLES = {
-  road: {name: 'Azure Maps', detail: 'roads', tileset: 'microsoft.base.road', tone: 'light', maxzoom: 22},
-  dark: {name: 'Azure dark', detail: 'dark roads', tileset: 'microsoft.base.darkgrey', tone: 'dark', maxzoom: 22},
-  satellite: {name: 'Azure satellite', detail: 'satellite', tileset: 'microsoft.imagery', tone: 'dark', minzoom: 1, maxzoom: 19},
-  hybrid: {name: 'Azure hybrid', detail: 'satellite with labels', tileset: 'microsoft.imagery', labels: 'microsoft.base.hybrid.road', tone: 'dark', minzoom: 1, maxzoom: 19},
-  relief: {name: 'Azure relief', detail: 'shaded relief · world scale', tileset: 'microsoft.terra.main', tone: 'light', maxzoom: 6, tileSize: 512},
+  road: {name: 'Azure Maps', tileset: 'microsoft.base.road', maxzoom: 22},
+  dark: {name: 'Azure dark', tileset: 'microsoft.base.darkgrey', maxzoom: 22},
+  satellite: {name: 'Azure satellite', tileset: 'microsoft.imagery', minzoom: 1, maxzoom: 19},
+  hybrid: {name: 'Azure hybrid', tileset: 'microsoft.imagery', labels: 'microsoft.base.hybrid.road', minzoom: 1, maxzoom: 19},
+  relief: {name: 'Azure relief', tileset: 'microsoft.terra.main', maxzoom: 6, tileSize: 512},
 };
 export function createAzureProvider(apiKey, type = 'road', fetcher = globalThis.fetch) {
   const spec = AZURE_STYLES[type];
@@ -153,7 +152,7 @@ export function createAzureProvider(apiKey, type = 'road', fetcher = globalThis.
     // Relief can return an empty list; still show the Microsoft provider credit.
     return [`<a href="https://www.microsoft.com/maps/product/terms.html">©${new Date().getUTCFullYear()} Microsoft Azure Maps</a>`, ...copyrights].join(' · ');
   }
-  return {name: spec.name, provider: 'Azure', detail: `Microsoft Azure · ${spec.detail}`, tone: spec.tone, tiles, attribution,
+  return {name: spec.name, provider: 'Azure', tiles, attribution,
     async style(map) {
       const style = raster(tiles()[0], '', spec.maxzoom, tileSize);
       style.sources.basemap.minzoom = spec.minzoom ?? 0;

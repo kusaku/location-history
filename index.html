@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=26">
-    <script type="module" src="js/app.mjs?v=34">
+    <link rel="stylesheet" href="css/styles.css?v=27">
+    <script type="module" src="js/app.mjs?v=35">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -593,7 +593,8 @@
       <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time. Expand <b>Recorded stays</b> or <b>By day</b>, sort by a column heading, and use Previous/Next for longer tables. Every matching stay and day is available. Select a date to filter the map.</p>
       <h3>Filters and date windows</h3>
       <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
-      <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Play, backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Dates and hours use UTC.</p>
+      <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
+      <p>Select any histogram bar to use its UTC dates. The 64 bars span the entire history, so their date ranges depend on the imported history. Short histories have disabled intervals without dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
       <h3>
         Visualization modes
       </h3>
@@ -614,12 +615,6 @@
           Journeys
         </b>
         connects consecutive observations, breaking at gaps over six hours, excluded records, dateline crossings, or implausible speeds.
-      </p>
-      <h3>
-        Date window
-      </h3>
-      <p>
-        Day, Month, and Year resize the window from its current start; they do not jump to the latest dates. Months and years follow the UTC calendar. Backward and forward move the entire window by its selected size, and Play repeats forward steps until the end of the history. Custom windows step by their duration. Select any histogram bar to use its UTC dates. The 64 bars span the entire history, so their date ranges depend on the imported history. Short histories have disabled intervals without dates. Use arrow keys to move between bars, then Enter or Space to select.
       </p>
       <h3>
         Density metrics

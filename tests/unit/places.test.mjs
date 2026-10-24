@@ -78,3 +78,9 @@ test('hexagon edge and vertex records retain the same membership as the drawn ce
     for (const feature of query({mode: 'hex', zoom, radius: 2}).density.features) assert.equal(query.place(feature).count, feature.properties.count);
   }
 });
+
+test('hexagon selection retains dateline duplicates and clamped polar observations', () => {
+  const points = [[-180, 0], [180, 0], [0, 90], [0, -90], [179.9, 50], [-179.9, 50]].map(([lon, lat], t) => point(t, lon, lat));
+  const query = createHistoryQuery(points);
+  for (const zoom of [2, 10, 20]) for (const feature of query({mode: 'hex', zoom, radius: 2}).density.features) assert.equal(query.place(feature).count, feature.properties.count);
+});

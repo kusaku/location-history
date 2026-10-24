@@ -365,6 +365,9 @@ export function createHistoryQuery(points) {
       // Unprojection can round a bin-edge coordinate just outside its polygon.
       // Pad the candidate box only; exact hex rounding still decides membership.
       viewport[0] -= 1e-9; viewport[1] -= 1e-9; viewport[2] += 1e-9; viewport[3] += 1e-9;
+      // Polar observations are rendered at Mercator's latitude limit.
+      if (viewport[1] <= -85.051128) viewport[1] = -90;
+      if (viewport[3] >= 85.051128) viewport[3] = 90;
     }
     const contains = i => {
       const p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);

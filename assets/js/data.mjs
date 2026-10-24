@@ -362,6 +362,9 @@ export function createHistoryQuery(points) {
     if (typeof cell === 'string' && cell.startsWith('hex:')) {
       hex = cell.slice(4).split(':').map(Number);
       if (hex.length !== 3 || !hex.every(Number.isFinite) || !Number.isInteger(hex[0]) || !Number.isInteger(hex[1]) || hex[2] <= 0 || hex[2] > 1) throw new Error('Invalid hexagon.');
+      // Unprojection can round a bin-edge coordinate just outside its polygon.
+      // Pad the candidate box only; exact hex rounding still decides membership.
+      viewport[0] -= 1e-9; viewport[1] -= 1e-9; viewport[2] += 1e-9; viewport[3] += 1e-9;
     }
     const contains = i => {
       const p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);

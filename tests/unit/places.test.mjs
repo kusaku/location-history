@@ -68,3 +68,13 @@ test('invalid, self-crossing, degenerate and oversized areas fail explicitly', (
   for (const ring of [[], [[0, 0], [1, 1]], [[0, 0], [1, 0], [2, 0]], [[0, 0], [2, 2], [0, 2], [2, 0]], [[0, 91], [1, 0], [0, 1]], Array.from({length: 66}, (_, i) => [i, 0])]) assert.throws(() => placePolygon(ring));
   assert.throws(() => createHistoryQuery([]).place(null));
 });
+
+test('hexagon edge and vertex records retain the same membership as the drawn cells', () => {
+  for (const zoom of [2, 10, 18, 20]) {
+    const initial = createHistoryQuery([point(0, 13.4, 52.5)])({mode: 'hex', zoom, radius: 2}).density.features[0];
+    const coords = initial.geometry.coordinates[0];
+    const points = coords.slice(0, -1).flatMap((c, i) => [point(i * 2, ...c), point(i * 2 + 1, (c[0] + coords[(i + 1) % 6][0]) / 2, (c[1] + coords[(i + 1) % 6][1]) / 2)]);
+    const query = createHistoryQuery(points);
+    for (const feature of query({mode: 'hex', zoom, radius: 2}).density.features) assert.equal(query.place(feature).count, feature.properties.count);
+  }
+});

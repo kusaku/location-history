@@ -1073,10 +1073,6 @@ select {
   outline-offset: 2px;
 }
 
-.quality-toggle:has(input:checked) span:before {
-  content: '✓ ';
-}
-
 .place-panel {
   width: 360px;
   max-width: 100%;
@@ -1644,10 +1640,11 @@ dialog p {
     gap: 4px;
   }
   .window-filters select {
-    width: 56px;
+    width: 54px;
+    padding: 5px;
   }
   .window-filters #accuracy {
-    width: 64px;
+    width: 62px;
   }
   .map-stats {
     gap: 12px;

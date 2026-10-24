@@ -1158,6 +1158,7 @@ select {
 }
 
 .place-table th {
+  padding: 6px 2px;
   color: var(--muted);
   font-size: 9px;
   font-weight: 500;
@@ -1170,7 +1171,7 @@ select {
 }
 
 .place-table:has(#place-visits) th:nth-child(3) {
-  width: 16%;
+  width: 18%;
 }
 
 .place-table th[aria-sort=ascending] button::after { content: ' ↑'; }

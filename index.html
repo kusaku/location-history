@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=23">
-    <script type="module" src="assets/js/app.mjs?v=28">
+    <link rel="stylesheet" href="assets/css/styles.css?v=24">
+    <script type="module" src="assets/js/app.mjs?v=29">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -335,7 +335,7 @@
             Settings <span aria-hidden="true">↗</span>
           </button>
         </div>
-        <div class="map-actions">
+        <div id="map-actions" class="map-actions maplibregl-ctrl" role="group" aria-label="History map tools">
           <button id="fit" type="button" class="map-action" hidden aria-label="Fit selected history" title="Fit selected history" disabled>
             <svg class="icon">
               <use href="#i-fit"/>

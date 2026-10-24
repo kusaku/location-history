@@ -1,11 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, paintHistory, MAPS, MAP_GROUPS, MAP_ORDER} from '../../assets/js/maps.mjs';
+import {createGoogleProvider, createAzureProvider, googleViewport, raiseBasemapLabels, paintHistory, fitHistoryBounds, MAPS, MAP_GROUPS, MAP_ORDER} from '../../assets/js/maps.mjs';
 
 const bounds = (west = 13, east = 14, south = 52, north = 53) => ({getWest: () => west, getEast: () => east, getSouth: () => south, getNorth: () => north});
 const map = {getBounds: () => bounds(), getZoom: () => 10.5};
 const session = () => ({session: 'test-session', expiry: Math.floor(Date.now() / 1000) + 3600, tileWidth: 256, tileHeight: 256});
 const ok = data => ({ok: true, json: async () => data});
+
+test('Fit uses the full zoom range for small clusters and resets perspective with stable overlay padding', () => {
+  const rect = value => ({getBoundingClientRect: () => value});
+  const frame = {left: 350, top: 72, right: 1600, bottom: 1000, width: 1250, height: 928};
+  const calls = [], map = {getContainer: () => rect(frame), getMaxZoom: () => 20, fitBounds: (bounds, options) => calls.push({bounds, options})};
+  const overlays = {heading: rect({left: 366, bottom: 156}), timeline: rect({top: 820}), controls: rect({left: 1552})};
+  const bounds = [[13.4, 52.5], [13.4001, 52.5001]];
+  fitHistoryBounds(map, bounds, overlays);
+  assert.equal(calls[0].bounds, bounds);
+  assert.deepEqual(calls[0].options, {padding: {top: 96, bottom: 192, left: 28, right: 60}, maxZoom: 20, bearing: 0, pitch: 0, roll: 0, linear: true, duration: 500});
+  // Repeated Fit must not accumulate padding or change the camera target.
+  fitHistoryBounds(map, bounds, overlays);
+  assert.deepEqual(calls[1], calls[0]);
+  fitHistoryBounds(map, bounds, overlays, true);
+  assert.equal(calls[2].options.duration, 0);
+});
+
+test('Fit keeps usable space on short viewports and preserves dateline and single-point bounds', () => {
+  const rect = value => ({getBoundingClientRect: () => value});
+  const calls = [], map = {getContainer: () => rect({left: 0, top: 0, right: 320, bottom: 360, width: 320, height: 360}), getMaxZoom: () => 18, fitBounds: (bounds, options) => calls.push({bounds, options})};
+  const overlays = {heading: rect({left: 14, bottom: 160}), timeline: rect({top: 100}), controls: rect({left: 274})};
+  for (const bounds of [[[179, 10], [181, 10]], [[13.4, 52.5], [13.4, 52.5]]]) {
+    fitHistoryBounds(map, bounds, overlays);
+    assert.equal(calls.at(-1).bounds, bounds);
+    const {padding, maxZoom} = calls.at(-1).options;
+    assert.equal(maxZoom, 18); assert.ok(padding.top + padding.bottom <= 270);
+    assert.ok(padding.left + padding.right <= 160);
+  }
+});
+
+test('Fit skips empty selections and hidden zero-size containers', () => {
+  const map = {getContainer: () => ({getBoundingClientRect: () => ({width: 0, height: 0})}), fitBounds() { assert.fail('No camera work is needed'); }};
+  fitHistoryBounds(map, null, {});
+  fitHistoryBounds(map, [[0, 0], [1, 1]], {});
+});
 
 test('all history modes stay above vector roads and bridges while interleaved labels stay on top', () => {
   // OpenFreeMap Dark starts its symbols with water_name before the road layers;

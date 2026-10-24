@@ -213,6 +213,22 @@ function colourExpression(palette, input, transparent = false) {
   return ['interpolate', ['linear'], input, ...stops];
 }
 
+// Fit cached selection bounds, reserving only the full-width overlays. A place
+// panel floats in one corner and must not shrink the entire usable map.
+export function fitHistoryBounds(map, bounds, {heading, timeline, controls}, reducedMotion = false) {
+  if (!bounds) return;
+  const frame = map.getContainer().getBoundingClientRect();
+  if (!frame.width || !frame.height) return;
+  const top = heading.getBoundingClientRect(), bottom = timeline.getBoundingClientRect(), right = controls.getBoundingClientRect();
+  const padding = {
+    top: Math.min(Math.max(24, top.bottom - frame.top + 12), frame.height * .25),
+    bottom: Math.min(Math.max(24, frame.bottom - bottom.top + 12), frame.height * .5),
+    left: Math.min(Math.max(24, top.left - frame.left + 12), frame.width * .25),
+    right: Math.min(Math.max(24, frame.right - right.left + 12), frame.width * .25),
+  };
+  map.fitBounds(bounds, {padding, maxZoom: map.getMaxZoom(), bearing: 0, pitch: 0, roll: 0, linear: true, duration: reducedMotion ? 0 : 500});
+}
+
 // Apply only properties affected by a control. A newly loaded style needs all.
 export function paintHistory(map, state, changed) {
   if (!map?.getLayer('history-heat')) return;

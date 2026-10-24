@@ -1,4 +1,4 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=10';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=11';
 import {createPlaceHistory} from './place-history.mjs?v=7';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, HISTOGRAM_BINS} from './data.mjs?v=13';
@@ -70,7 +70,7 @@ function requestQuery() {
   querying = true; queryDirty = false;
   worker.postMessage({type: 'query', id: ++queryId, options: currentOptions(), known: state.result?.versions});
 }
-function refresh() { clearTimeout(queryTimer); if (querying) queryDirty = true; queryTimer = setTimeout(requestQuery, 90); }
+function refresh() { clearTimeout(queryTimer); queryDirty = true; queryTimer = setTimeout(requestQuery, 90); }
 function rememberSettings() {
   preferences = saveSettings({
     ...state,
@@ -213,10 +213,12 @@ function moveWindow(direction) {
   return true;
 }
 function fitHistory() {
+  if (!state.report || state.importing) return;
+  // Filters may still be debouncing or running in the worker. Fit their next
+  // committed result instead of using the previous date window's bounds.
+  if (querying || queryDirty) { state.fitNext = true; requestQuery(); return; }
   if (!state.result?.bounds) return;
-  const height = map.getContainer().clientHeight, heading = document.querySelector('.map-heading'), timeline = $('map-bottom');
-  const padding = {top: Math.min(heading.offsetTop + heading.offsetHeight + 12, height * .25), bottom: Math.min(height - timeline.offsetTop + 12, height * .45), left: 32, right: 48};
-  map.fitBounds(state.result.bounds, {padding, maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 700});
+  fitHistoryBounds(map, state.result.bounds, {heading: document.querySelector('.map-heading'), timeline: document.querySelector('.timeline'), controls: map.getContainer().querySelector('.maplibregl-ctrl-top-right')}, window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 function importFiles(files, sample = false) {
   if (!files.length || state.importing) return;
@@ -416,7 +418,11 @@ async function init() {
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
     placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end) => { stopPlayback(); setDates(start, end); rememberSettings(); }});
-    map.addControl(new maplibre.NavigationControl({showCompass: false}), 'top-right');
+    map.addControl(new maplibre.NavigationControl({visualizePitch: true}), 'top-right');
+    const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
+    compass.setAttribute('aria-label', 'Reset rotation and tilt'); compass.title = 'Reset rotation and tilt';
+    const actions = $('map-actions');
+    map.addControl({onAdd: () => actions, onRemove: () => actions.remove()}, 'top-right');
     attributionControl = new maplibre.AttributionControl({compact: false});
     map.addControl(attributionControl, 'bottom-right');
     new ResizeObserver(entries => $('workspace').style.setProperty('--attribution-space', `${entries[0].contentRect.height + 10}px`)).observe(map.getContainer().querySelector('.maplibregl-ctrl-bottom-right'));

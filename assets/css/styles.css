@@ -1068,9 +1068,11 @@ select {
 
 .place-heading {
   position: sticky;
-  top: 0;
+  top: -12px;
   z-index: 1;
   background: #141d17;
+  margin: -12px -12px 0;
+  padding: 12px 12px 6px;
   display: flex;
   align-items: start;
   justify-content: space-between;

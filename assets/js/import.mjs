@@ -1,4 +1,4 @@
-import {parseHistory} from './data.mjs?v=15';
+import {parseHistory} from './data.mjs?v=16';
 
 // Keep only one array entry in text form. Nested braces and escaped quotes can
 // cross byte chunks; JSON.parse still validates each complete value.
@@ -104,10 +104,10 @@ export async function readHistory(file, append, progress = () => {}) {
         keys.add(key); await reader.expect(':');
         if (['locations', 'semanticSegments', 'timelineObjects', 'features'].includes(key)) await records(key);
         else {
-          // Delta history stores three numeric arrays instead of independent
-          // records. Preserve the existing bounded decoder for that format.
-          const value = await reader.value(key === 'data' ? 512_000_000 : undefined);
-          if (['format', 'base', 'data', 'type'].includes(key)) metadata[key] = value;
+          // Delta history uses bounded numeric columns, including optional
+          // accuracy and explicit visit durations. Legacy samples still work.
+          const value = await reader.value(['data', 'accuracy', 'duration'].includes(key) ? 512_000_000 : undefined);
+          if (['format', 'version', 'base', 'data', 'accuracy', 'duration', 'type'].includes(key)) metadata[key] = value;
         }
         if (await reader.peek() === '}') break;
         await reader.expect(',');

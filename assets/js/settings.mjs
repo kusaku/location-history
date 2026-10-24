@@ -1,5 +1,5 @@
-import {DAY} from './data.mjs?v=15';
-import {resizeWindow} from './timeline.mjs?v=12';
+import {DAY} from './data.mjs?v=16';
+import {resizeWindow} from './timeline.mjs?v=13';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});

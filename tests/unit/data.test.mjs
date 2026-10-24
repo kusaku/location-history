@@ -144,11 +144,14 @@ test('point mode caps rendered observations, while counts stay exact', () => {
   const result = queryHistory(p, {mode: 'points'});
   assert.equal(result.count, 21000); assert.ok(result.dots.features.length <= 20000);
 });
-test('bundled 266,682-point history imports and filters without dropping records', () => {
+test('bundled sample preserves every trimmed observation and its accuracy metadata', () => {
   const data = JSON.parse(gunzipSync(readFileSync(new URL('../../data/sample-location-history.json.gz', import.meta.url))));
   const prepared = preparePoints(parseHistory(data).points);
-  assert.equal(prepared.points.length, 266682);
-  assert.equal(queryHistory(prepared.points).count, 266682);
+  assert.equal(data.version, 2); assert.equal(prepared.duplicates, 0);
+  assert.equal(prepared.points.length, 910311); assert.equal(data.accuracy.length, 910311);
+  const query = createHistoryQuery(prepared.points);
+  assert.equal(query().count, 910311); assert.equal(query({accuracy: 10}).count, 23671);
+  assert.ok(prepared.points.at(-1).t < Date.parse('2020-04-02T00:00:00Z'));
 });
 
 test('malformed semantic waypoints are skipped without losing valid path observations', () => {

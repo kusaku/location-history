@@ -57,12 +57,24 @@ export function parseHistory(data, {allowEmpty = false} = {}) {
     }
   };
   if (data?.format === 'delta-compressed') {
-    if (!Array.isArray(data.base) || data.base.length !== 3 || !Array.isArray(data.data) || data.data.length !== 3 || !data.data.every(Array.isArray) || !data.data.every(a => a.length === data.data[0].length)) throw new Error('Invalid delta-compressed history.');
+    const invalid = () => { throw new Error('Invalid delta-compressed history.'); };
+    if ((data.version !== undefined && data.version !== 2) || !Array.isArray(data.base) || data.base.length !== 3 || !Array.isArray(data.data) || data.data.length !== 3 || !data.data.every(Array.isArray) || !data.data.every(a => a.length === data.data[0].length)) invalid();
+    const count = data.data[0].length + 1;
+    if (count > MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} points. Choose a smaller date range.`);
+    for (const key of ['accuracy', 'duration']) {
+      const values = data[key];
+      if (values !== undefined && (!Array.isArray(values) || values.length !== count || values.some(v => !(key === 'accuracy' && v === null) && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)))) invalid();
+    }
     let [lat, lon, t] = data.base.map(number);
-    add([lon / 1e7, lat / 1e7], t);
+    const append = i => {
+      const before = points.length;
+      add([lon / 1e7, lat / 1e7], t, data.accuracy?.[i], data.duration?.[i]);
+      if (points.length === before) invalid(); // A corrupt delta cannot be skipped safely.
+    };
+    append(0);
     for (let i = 0; i < data.data[0].length; i++) {
       lat += number(data.data[0][i]); lon += number(data.data[1][i]); t += number(data.data[2][i]);
-      add([lon / 1e7, lat / 1e7], t);
+      append(i + 1);
     }
   } else if (Array.isArray(data?.locations)) {
     for (const p of data.locations) {
@@ -80,7 +92,7 @@ export function parseHistory(data, {allowEmpty = false} = {}) {
   if (!points.length && !allowEmpty) throw new Error('No valid timestamped locations were found in this file.');
   return {points, skipped};
 }
-export function preparePoints(points) {
+export function preparePoints(points, {inferStationary = true} = {}) {
   points.sort((a, b) => a.t - b.t || a.lat - b.lat || a.lon - b.lon);
   // Compact the sorted array in place rather than cloning millions of objects.
   const unique = points;
@@ -96,7 +108,7 @@ export function preparePoints(points) {
   }
   unique.length = length;
   // Stationary density excludes travel. Place history estimates area time separately.
-  for (let i = 0; i < unique.length - 1; i++) {
+  if (inferStationary) for (let i = 0; i < unique.length - 1; i++) {
     const p = unique[i], next = unique[i + 1], dt = next.t - p.t;
     if (!p.duration && dt > 0 && dt <= 30 * 60_000 && distance(p, next) <= 0.2) p.duration = dt;
   }

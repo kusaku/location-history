@@ -30,9 +30,18 @@ test('streaming imports match every supported schema regardless of root property
     [segment], {semanticSegments: [segment]}, {timelineObjects: [segment]},
     {features: [{geometry: {type: 'Point', coordinates: [0, 0]}, properties: {timestamp: 0}}], type: 'FeatureCollection'},
     {data: [[1], [2], [1000]], base: [0, 0, 0], format: 'delta-compressed'},
+    {duration: [60000, 0], accuracy: [0, null], data: [[1], [2], [1000]], version: 2, base: [0, 0, 0], format: 'delta-compressed'},
   ]) {
     const streamed = await read(chunked(JSON.stringify(data)));
     assert.deepEqual({points: streamed.points, skipped: streamed.skipped}, parseHistory(data));
+  }
+});
+
+test('corrupt compressed columns fail rather than silently dropping records or metadata', async () => {
+  const base = {format: 'delta-compressed', version: 2, base: [0, 0, 0], data: [[1], [2], [1000]]};
+  for (const changes of [{version: 99}, {accuracy: [10]}, {accuracy: [null, -1]}, {accuracy: [null, '10']}, {duration: [0, -1]}, {duration: [0, null]}, {data: [[null], [2], [1000]]}, {base: [910000000, 0, 0]}]) {
+    assert.throws(() => parseHistory({...base, ...changes}), /Invalid delta/);
+    await assert.rejects(read(chunked(JSON.stringify({...base, ...changes}))), /Invalid delta/);
   }
 });
 

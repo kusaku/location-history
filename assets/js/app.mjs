@@ -1,9 +1,9 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=11';
-import {createPlaceHistory} from './place-history.mjs?v=9';
+import {createPlaceHistory} from './place-history.mjs?v=10';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS} from './data.mjs?v=15';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=12';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=14';
+import {DAY, HISTOGRAM_BINS} from './data.mjs?v=16';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=13';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=15';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -231,7 +231,7 @@ async function loadSample() {
   const request = ++sampleRequest;
   setBusy(true); status('Loading the bundled sample…', false, true);
   try {
-    const response = await fetch(new URL('../../data/sample-location-history.json.gz', import.meta.url), {signal: AbortSignal.timeout(30000)});
+    const response = await fetch(new URL('../../data/sample-location-history.json.gz?v=2', import.meta.url), {signal: AbortSignal.timeout(30000)});
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     if (request !== sampleRequest) return;
@@ -251,7 +251,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=15', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=16', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

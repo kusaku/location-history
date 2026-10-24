@@ -52,11 +52,25 @@ Recorded place stays merge when the gap from the previous stay end is less than 
 - Google Takeout `Records.json` / legacy `locations`, with ISO `timestamp` or numeric/string `timestampMs`.
 - Monthly `timelineObjects` with `placeVisit` and `activitySegment` records.
 - On-device Timeline `semanticSegments` or an array of segments, with visits, timestamped paths, offset-timed paths, and activity endpoints.
-- The original `delta-compressed` sample format.
+- Delta-compressed history: the original sample format and version 2 with optional accuracy and explicit visit durations.
 - GeoJSON FeatureCollections of Point features with `properties.timestamp` or `properties.time` (ISO or milliseconds), and optional `properties.accuracy` in metres.
 - Any of the above compressed with gzip; compression is detected by its magic bytes.
 
-Coordinates and timestamps are validated. Exact duplicates use timestamp **and** coordinates; different locations sharing a timestamp survive. Unknown JSON schemas and files with no valid observations produce an explicit error. Untimed semantic waypoints cannot become dated observations. Records, Timeline, and GeoJSON collections are parsed in batches of up to 1,000 array entries or about one million characters rather than decoding a whole file into one string; there is no 512 MB file-size restriction. The import retains at most five million combined observations before deduplication, with in-place sorting and deduplication to reduce memory use. An individual JSON value is limited to 32 million characters; the older delta-compressed format retains its bounded decoder for the three numeric arrays (512 million characters). Available device memory still limits very large imports. Google changes its export formats; unsupported structures are reported rather than silently treated as locations.
+Coordinates and timestamps are validated. Exact duplicates use timestamp **and** coordinates; different locations sharing a timestamp survive. Unknown JSON schemas and files with no valid observations produce an explicit error. Untimed semantic waypoints cannot become dated observations. Records, Timeline, and GeoJSON collections are parsed in batches of up to 1,000 array entries or about one million characters rather than decoding a whole file into one string; there is no 512 MB file-size restriction. The import retains at most five million combined observations before deduplication, with in-place sorting and deduplication to reduce memory use. An individual JSON value is limited to 32 million characters; compressed numeric columns have a 512-million-character bound. Available device memory still limits very large imports. Google changes its export formats; unsupported structures are reported rather than silently treated as locations.
+
+### Recreate the public sample
+
+```sh
+node scripts/create-sample.mjs /Users/user/Projects/jupyter/location/tanya.json --end 2020-04-01 --output data/sample-location-history.json.gz
+```
+
+The script streams the source, keeps the entire end date in UTC, sorts observations, and merges only exact timestamp/coordinate duplicates, retaining the best accuracy and longest explicit duration. Repeated positions at different times remain because they establish visits and time spent. It replaces the output atomically, leaves the input untouched, and reports aggregate counts without coordinates. Output is deterministic. It retains at most five million selected observations and requires no packages.
+
+The sample has 910,311 observations through April 1, 2020, with accuracy preserved for every record. The previous 266,682-point sample was additionally reduced; exact deduplication alone does not reproduce that selection. The regenerated file includes all trimmed observations and removes zero exact duplicates. It contains precise location history and is a public asset; do not extend its dates or change its source without reviewing what will be published.
+
+Version 2 retains `format: "delta-compressed"`, adds `version: 2`, and keeps the existing `base` plus three delta arrays: latitude E7, longitude E7, and timestamp milliseconds. Optional full-length `accuracy` (metres, `null` when unknown) and `duration` (explicit milliseconds) columns preserve the engine's other inputs. All-unknown accuracy and all-zero durations are omitted. Coordinates use seven decimal places; Google E7 coordinates and millisecond timestamps round-trip exactly. Stationary durations are inferred after import, never baked into an export. Activity labels, device tags, altitude and other unused source fields are omitted. Malformed column lengths, invalid values and unknown versions are rejected; the original unversioned format still imports.
+
+Delta columns plus gzip remain compact and use only native browser APIs. For this sample, gzip level 9 produces 5,205,382 bytes, versus 7,938,230 bytes for absolute coordinate/time columns with the same accuracy. Keeping accuracy adds 472,030 bytes. The 623 MiB source is streamed rather than loaded as a single JSON string.
 
 ## Maps and providers
 
@@ -140,6 +154,7 @@ assets/js/                  Runtime modules and public browser map configuration
 assets/css/styles.css       Responsive layout and component styles
 assets/images/              Shared decorative map previews
 data/                       Public bundled sample, loaded only on request
+scripts/                    Reproducible sample generation
 tests/unit/                 Functional regression tests
 tests/performance/          Local benchmark with revision comparisons
 ```

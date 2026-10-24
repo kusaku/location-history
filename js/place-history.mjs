@@ -39,6 +39,7 @@ export function placeCalendarView(scope) {
 export function createPlaceCalendar(select, requestHours = () => {}, navigateWindow) {
   let days = new Map(), scope = null, anchor = null, active = true, revision = 0;
   let hourId = 0, hourPending = null, hourWanted = null, hourKey = null, hours = [], hourError = '';
+  let scrolledWeek = null;
   const kind = () => $('place-calendar-view').value === 'auto' ? placeCalendarView(scope) : $('place-calendar-view').value || 'year';
   const clamp = value => Math.max(scope.start, Math.min(scope.end, value));
   const latest = () => { let at = scope.start; for (const day of days.keys()) at = Math.max(at, day); return at; };
@@ -156,6 +157,13 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
     }
     keyboard(cells, view === 'week' ? 24 : 1);
     $('place-calendar-hours').replaceChildren(...nodes, ...cells);
+    if (view === 'week' && hourKey === key && scrolledWeek !== key) {
+      let first = 24;
+      for (const row of data.values()) if (row[metric] > 0) first = Math.min(first, new Date(row.start).getUTCHours());
+      $('place-calendar-scroll').scrollTop = first < 24 ? Math.max(0, first - 1) * 19 : 0;
+      scrolledWeek = key;
+    }
+    if (view !== 'week') scrolledWeek = null;
     if (hourKey !== key || hourError) $('place-calendar-detail').textContent = hourError || 'Calculating hourly activity…';
   }
   function render() {
@@ -178,7 +186,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
     if (hourly) {
       $('place-calendar-days').replaceChildren(); $('place-calendar-months').replaceChildren();
       renderHourly(view, period, metric);
-    } else { hourWanted = null; $('place-calendar-hours').replaceChildren(); renderDaily(view, period, metric); }
+    } else { hourWanted = null; scrolledWeek = null; $('place-calendar-hours').replaceChildren(); renderDaily(view, period, metric); }
   }
   $('place-calendar-previous').onclick = () => navigate(-1); $('place-calendar-next').onclick = () => navigate(1);
   function enterYear(commit) {

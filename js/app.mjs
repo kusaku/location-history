@@ -1,5 +1,5 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=12';
-import {createPlaceHistory} from './place-history.mjs?v=14';
+import {createPlaceHistory} from './place-history.mjs?v=15';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, HISTOGRAM_BINS} from './data.mjs?v=17';
 import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=14';

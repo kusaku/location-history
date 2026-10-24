@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/styles.css?v=17">
-    <script type="module" src="assets/js/app.mjs?v=21">
+    <link rel="stylesheet" href="assets/css/styles.css?v=18">
+    <script type="module" src="assets/js/app.mjs?v=22">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -334,6 +334,9 @@
               <use href="#i-fit"/>
             </svg>
           </button>
+          <button id="draw-area" type="button" class="map-action" hidden disabled aria-label="Draw place area" aria-pressed="false" title="Draw an area for place history">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" stroke-dasharray="3 3"/><path d="m8 16 1-4 7-7 3 3-7 7-4 1z"/></svg>
+          </button>
         </div>
         <div id="empty-state" class="empty-state">
           <h3>No history loaded</h3>
@@ -351,6 +354,33 @@
         <div id="map-error" class="map-error" role="alert" hidden>
         </div>
         <div id="map-bottom" class="map-bottom" hidden>
+          <aside id="place-history" class="place-panel" aria-labelledby="place-title" aria-busy="false" hidden>
+            <div class="place-heading">
+              <div><h2 id="place-title">Place history</h2><p id="place-kind" class="hint"></p></div>
+              <button id="place-close" class="quiet-button" type="button" aria-label="Close place history">✕</button>
+            </div>
+            <div id="place-scope" class="presets" role="group" aria-label="Place history date scope">
+              <button type="button" data-scope="window" aria-pressed="true">Current window</button>
+              <button type="button" data-scope="all" aria-pressed="false">All dates</button>
+            </div>
+            <div id="place-drawing" hidden>
+              <p id="place-instruction" class="hint" role="status"></p>
+              <div class="presets"><button id="place-undo" type="button" disabled>Undo corner</button><button id="place-finish" type="button" disabled>Finish area</button></div>
+            </div>
+            <p id="place-message" class="hint" role="status"></p>
+            <div id="place-results" hidden>
+              <dl class="place-stats">
+                <div><dt>Recorded visits</dt><dd id="place-total-visits"></dd></div>
+                <div><dt>Locations</dt><dd id="place-records"></dd></div>
+                <div><dt>Recorded days</dt><dd id="place-days"></dd></div>
+                <div><dt>Estimated time</dt><dd id="place-time"></dd></div>
+                <div><dt>First seen · UTC</dt><dd id="place-first"></dd></div>
+                <div><dt>Last seen · UTC</dt><dd id="place-last"></dd></div>
+              </dl>
+              <details class="place-visit-list"><summary id="place-visits-label">Recent visits</summary><ol id="place-visits"></ol></details>
+              <p class="hint">Current hour, accuracy and quality filters apply. Visits split after 30 minutes without a recording. Time is an estimate.</p>
+            </div>
+          </aside>
           <section class="timeline" aria-labelledby="timeline-title">
             <div class="timeline-heading">
               <div>
@@ -402,6 +432,13 @@
                       <option value="1000">≤ 1 km</option>
                     </select>
                   </label>
+                  <div class="quality-filters" role="group" aria-label="Exclude recording issues">
+                    <span>Exclude</span>
+                    <label class="quality-toggle" title="Exclude both observations bordering a recording gap longer than six hours"><input type="checkbox" class="sr-only" data-quality="1"><span>Recording gaps</span></label>
+                    <label class="quality-toggle" title="Exclude both observations of a jump over 1,000 km/h, including different locations at the same time"><input type="checkbox" class="sr-only" data-quality="2"><span>Suspicious jumps</span></label>
+                    <label class="quality-toggle" title="Exclude known accuracy worse than 100 metres; unknown accuracy stays included"><input type="checkbox" class="sr-only" data-quality="4"><span>Poor accuracy</span></label>
+                    <label class="quality-toggle" title="Exclude observations where sampling intervals change at least tenfold, with the larger interval between five minutes and six hours"><input type="checkbox" class="sr-only" data-quality="8"><span>Uneven sampling</span></label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -521,6 +558,11 @@
       <p>
         Transfer the exported JSON to the device where you use this site, then choose <b>Open location history</b>. Extract ZIP archives first. Select all the JSON files you want to merge together in the same import.
       </p>
+      <h3>Place history</h3>
+      <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
+      <p>Place totals use the current date window or <b>All dates</b>, plus the active hour, accuracy and quality filters. Recorded visits are consecutive in-area observations, separated by exits, excluded records or a gap over 30 minutes. First/last seen are observation times. Estimated time uses short stationary intervals and recorded visit durations, clipped to the window, UTC day, end hour and observed exits; overlapping intervals count once. Missing recordings are not proof that you left or stayed. The 30 latest visit details are shown; totals include every matching observation. Choose a visit to select its dates.</p>
+      <h3>Recording quality filters</h3>
+      <p>The <b>Exclude</b> checkboxes remove the union of selected issues: <b>Recording gaps</b> removes both endpoints of intervals over six hours; <b>Suspicious jumps</b> removes both endpoints exceeding 1,000 km/h, including conflicting locations at the same timestamp; <b>Poor accuracy</b> removes known accuracy worse than 100 m; <b>Uneven sampling</b> removes observations at a tenfold interval change when the larger interval is between five minutes and six hours. These are heuristics, not corrections to your files. Unknown accuracy remains included. Flags are computed once per import, before other filters; exclusions never connect tracks across removed records.</p>
       <h3>
         Visualization modes
       </h3>

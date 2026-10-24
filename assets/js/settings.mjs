@@ -1,10 +1,10 @@
-import {DAY} from './data.mjs?v=6';
-import {resizeWindow} from './timeline.mjs?v=3';
+import {DAY} from './data.mjs?v=7';
+import {resizeWindow} from './timeline.mjs?v=4';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
 const VIEW_DEFAULTS = Object.freeze({metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85});
-const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, period: 'all', periodDay: null, dateRange: null});
+const DEFAULTS = Object.freeze({basemap: 'google', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, exclude: 0, period: 'all', periodDay: null, dateRange: null});
 
 function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes('google') ? 'google' : availableMaps.includes('dark') ? 'dark' : availableMaps[0]};
@@ -28,6 +28,7 @@ function validatedSettings(input, availableMaps) {
     const steps = (value - min) / step;
     if (Math.abs(steps - Math.round(steps)) < 1e-8) settings[key] = value;
   }
+  if (Number.isInteger(input.exclude) && input.exclude >= 0 && input.exclude <= 15) settings.exclude = input.exclude;
   if (settings.hourStart >= settings.hourEnd) { settings.hourStart = 0; settings.hourEnd = 24; }
   const range = input.dateRange;
   if (settings.period !== 'all' && Array.isArray(range) && range.length === 2 && range.every(value => Number.isInteger(value) && Math.abs(value) < 8.64e15) && range[0] <= range[1] && range[0] % DAY === 0 && (range[1] + 1) % DAY === 0) settings.dateRange = [...range];

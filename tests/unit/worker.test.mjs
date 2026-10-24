@@ -94,3 +94,20 @@ test('worker sends changed geometry and never assumes a discarded response was d
     assert.equal(replaced.count, 1); assert.ok(replaced.density);
   } finally { await worker.terminate(); }
 });
+
+test('worker place queries share filters and are replaced transactionally with their dataset', async () => {
+  const {worker, request} = await startWorker();
+  const area = {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[13, 52], [14, 52], [14, 53], [13, 53], [13, 52]]]}};
+  try {
+    await request('import', {files: [json({locations: [record(0), record(60000, 134000000, 500)]})]});
+    assert.equal((await request('place', {area})).result.count, 2);
+    assert.equal((await request('place', {area, options: {exclude: 4}})).result.count, 1);
+    assert.equal((await request('place', {area: null})).type, 'error');
+    assert.equal((await request('query')).result.count, 2);
+    await request('import', {files: [json({locations: [record(100000)]})]});
+    const after = (await request('place', {area})).result;
+    assert.equal(after.count, 1); assert.equal(after.first, 100000);
+    await request('clear');
+    assert.equal((await request('place', {area})).result.count, 0);
+  } finally { await worker.terminate(); }
+});

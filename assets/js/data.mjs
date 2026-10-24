@@ -152,6 +152,56 @@ function accepts(p, accuracy, hourStart, hourEnd) {
   return h >= hourStart && h < hourEnd;
 }
 
+// One byte per observation; classify once, independently of later filters.
+export const QUALITY = Object.freeze({gaps: 1, jumps: 2, accuracy: 4, sampling: 8});
+export function qualityFlags(points) {
+  const flags = new Uint8Array(points.length);
+  let previousInterval = 0;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (p.accuracy !== null && p.accuracy > 100) flags[i] |= QUALITY.accuracy;
+    if (!i) continue;
+    const dt = p.t - points[i - 1].t;
+    if (dt > 6 * 3_600_000) { flags[i - 1] |= QUALITY.gaps; flags[i] |= QUALITY.gaps; }
+    if (dt >= 0 && dt <= 6 * 3_600_000 && distance(points[i - 1], p) > dt / 3_600_000 * 1000) {
+      flags[i - 1] |= QUALITY.jumps; flags[i] |= QUALITY.jumps;
+    }
+    // A tenfold cadence change, at least five minutes, outside recording gaps.
+    if (dt > 0 && previousInterval > 0 && Math.max(dt, previousInterval) <= 6 * 3_600_000 && Math.max(dt, previousInterval) >= 300_000 && Math.max(dt, previousInterval) >= Math.min(dt, previousInterval) * 10) flags[i] |= QUALITY.sampling;
+    previousInterval = dt;
+  }
+  return flags;
+}
+
+// Drawn areas use straight edges in the map's Mercator plane. Longitudes unwrap
+// around the first corner so small areas crossing the dateline stay small.
+export function placePolygon(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 3 || coordinates.length > 65) throw new Error('Choose an area with 3–64 corners.');
+  const ring = [];
+  for (const c of coordinates) {
+    if (!Array.isArray(c) || c.length !== 2 || !c.every(Number.isFinite) || Math.abs(c[0]) > 1e6 || Math.abs(c[1]) > 90) throw new Error('Invalid area coordinates.');
+    let [lon, lat] = c;
+    if (ring.length) lon += 360 * Math.round((ring.at(-1)[0] - lon) / 360);
+    if (!ring.length || lon !== ring.at(-1)[0] || lat !== ring.at(-1)[1]) ring.push([lon, lat]);
+  }
+  if (ring.length > 1 && ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1]) ring.pop();
+  if (ring.length < 3 || ring.length > 64) throw new Error('Choose an area with 3–64 distinct corners.');
+  const xy = ring.map(([lon, lat]) => project(lon, lat));
+  const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  let area = 0;
+  for (let i = 0; i < xy.length; i++) {
+    const a = xy[i], b = xy[(i + 1) % xy.length];
+    area += cross(xy[0], a, b);
+    for (let j = i + 2; j < xy.length; j++) {
+      if (i === 0 && j === xy.length - 1) continue;
+      const c = xy[j], d = xy[(j + 1) % xy.length];
+      if (cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0 && Math.max(Math.min(a[0], b[0]), Math.min(c[0], d[0])) <= Math.min(Math.max(a[0], b[0]), Math.max(c[0], d[0])) && Math.max(Math.min(a[1], b[1]), Math.min(c[1], d[1])) <= Math.min(Math.max(a[1], b[1]), Math.max(c[1], d[1]))) throw new Error('Area edges cross. Undo a corner and try again.');
+    }
+  }
+  if (Math.abs(area) < 1e-24 || Math.max(...ring.map(c => c[0])) - Math.min(...ring.map(c => c[0])) > 360) throw new Error('Choose a larger, non-overlapping area.');
+  return {type: 'Polygon', coordinates: [[...ring, ring[0]]]};
+}
+
 // One compact index and one current filter/selection cache per committed dataset.
 // Panning never recomputes the histogram, distance, date bounds, or route geometry.
 export function createHistoryQuery(points) {
@@ -164,19 +214,39 @@ export function createHistoryQuery(points) {
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
   const min = points[0]?.t ?? 0, max = points.at(-1)?.t ?? 0;
   const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
-  let filterKey, filter, selectionKey, selection;
+  let filterKey, filter, selectionKey, selection, placeKey, placeResult;
+  const flags = qualityFlags(points);
 
-  return (options = {}) => {
-    const {start = -Infinity, end = Infinity, accuracy = 0, hourStart = 0, hourEnd = 24, metric = 'records', mode = 'heat', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
-    const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}`;
+  function ensureFilter({accuracy = 0, hourStart = 0, hourEnd = 24, exclude = 0}) {
+    const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}:${exclude}`;
     if (filterKey !== nextFilterKey) {
       const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0);
-      for (let i = 0; i < points.length; i++) if (accepts(points[i], accuracy, hourStart, hourEnd)) {
+      for (let i = 0; i < points.length; i++) if (!(flags[i] & exclude) && accepts(points[i], accuracy, hourStart, hourEnd)) {
         mask[i] = 1;
         histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) / historyDays * HISTOGRAM_BINS)]++;
       }
       filter = {mask, histogram}; filterKey = nextFilterKey;
     }
+  }
+  function candidateRanges(viewport) {
+    const center = (viewport[0] + viewport[2]) / 2;
+    const firstRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[1] + 90) / 180 * rows)));
+    const lastRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[3] + 90) / 180 * rows)));
+    const ranges = []; let candidates = 0;
+    for (let x = 0; x < columns; x++) {
+      const lon = (x + .5) / columns * 360 - 180;
+      const wrapped = lon + 360 * Math.round((center - lon) / 360);
+      if (wrapped + 180 / columns < viewport[0] || wrapped - 180 / columns > viewport[2]) continue;
+      for (let y = firstRow; y <= lastRow; y++) {
+        const cell = y * columns + x, a = offsets[cell], b = offsets[cell + 1];
+        if (a !== b) { ranges.push([a, b]); candidates += b - a; }
+      }
+    }
+    return {ranges, candidates};
+  }
+  const query = (options = {}) => {
+    const {start = -Infinity, end = Infinity, hourEnd = 24, metric = 'records', mode = 'heat', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
+    ensureFilter(options);
     const nextSelectionKey = `${filterKey}:${start}:${end}`;
     if (selectionKey !== nextSelectionKey) {
       const from = lowerBound(points, start), to = lowerBound(points, end, true);
@@ -210,18 +280,7 @@ export function createHistoryQuery(points) {
       const lon = p.lon + 360 * Math.round((center - p.lon) / 360);
       return lon >= viewport[0] && lon <= viewport[2] && p.lat >= viewport[1] && p.lat <= viewport[3];
     };
-    const firstRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[1] + 90) / 180 * rows)));
-    const lastRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[3] + 90) / 180 * rows)));
-    const ranges = []; let candidates = 0;
-    for (let x = 0; x < columns; x++) {
-      const lon = (x + .5) / columns * 360 - 180;
-      const wrapped = lon + 360 * Math.round((center - lon) / 360);
-      if (wrapped + 180 / columns < viewport[0] || wrapped - 180 / columns > viewport[2]) continue;
-      for (let y = firstRow; y <= lastRow; y++) {
-        const cell = y * columns + x, a = offsets[cell], b = offsets[cell + 1];
-        if (a !== b) { ranges.push([a, b]); candidates += b - a; }
-      }
-    }
+    const {ranges, candidates} = candidateRanges(viewport);
     const visible = mode === 'route' ? null : new Uint32Array(Math.min(candidates, indices.length)); let visibleCount = 0;
     if (candidates < indices.length / 2) {
       for (const [a, b] of ranges) for (let j = a; j < b; j++) {
@@ -264,7 +323,7 @@ export function createHistoryQuery(points) {
         let column = grid.get(a);
         if (!column) { column = new Map(); grid.set(a, column); }
         let bin = column.get(b);
-        if (!bin) { bin = {x: cx, y: cy, count: 0, duration: 0, days: 0, lastDay: undefined}; column.set(b, bin); bins.push(bin); }
+        if (!bin) { bin = {q: a, r: b, x: cx, y: cy, count: 0, duration: 0, days: 0, lastDay: undefined}; column.set(b, bin); bins.push(bin); }
         bin.count++;
         // Visible indices are chronological, so each bin sees UTC days in order.
         const day = Math.floor(p.t / DAY);
@@ -280,12 +339,72 @@ export function createHistoryQuery(points) {
         if (!v) continue;
         const properties = {value: v, count: b.count, days: b.days, minutes: Math.round(b.duration), weight: Math.min(1, Math.sqrt(v / peak))};
         const coordinates = mode === 'hex' ? [Array.from({length: 7}, (_, i) => unproject(b.x + size * Math.cos(rad * (60 * (i % 6) - 30)), b.y + size * Math.sin(rad * (60 * (i % 6) - 30))))] : unproject(b.x, b.y);
-        features.push({type: 'Feature', properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
+        features.push({type: 'Feature', ...(mode === 'hex' ? {id: `hex:${b.q}:${b.r}:${size}`} : {}), properties, geometry: {type: mode === 'hex' ? 'Polygon' : 'Point', coordinates}});
       }
       density = collection(features); drawn = features.length;
     }
     return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds: selection.bounds, histogram: filter.histogram, peak, drawn};
   };
+  // Reuse the dataset index and filter mask, without replacing the map's current
+  // date/route cache. Large areas stream chronologically; small areas sort only
+  // their spatial candidates. Only the latest 30 visits leave the worker.
+  query.place = (feature, options = {}) => {
+    const geometry = placePolygon(feature?.geometry?.coordinates?.[0]);
+    const nextKey = JSON.stringify([feature.id, geometry.coordinates, options.start, options.end, options.accuracy, options.hourStart, options.hourEnd, options.exclude]);
+    if (nextKey === placeKey) return placeResult;
+    ensureFilter(options);
+    const {start = -Infinity, end = Infinity, hourEnd = 24} = options;
+    const ring = geometry.coordinates[0], xy = ring.map(c => project(...c));
+    const xs = ring.map(c => c[0]), ys = ring.map(c => c[1]);
+    const viewport = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], center = (viewport[0] + viewport[2]) / 2;
+    let hex = null;
+    if (typeof feature.id === 'string' && feature.id.startsWith('hex:')) {
+      hex = feature.id.slice(4).split(':').map(Number);
+      if (hex.length !== 3 || !hex.every(Number.isFinite) || !Number.isInteger(hex[0]) || !Number.isInteger(hex[1]) || hex[2] <= 0 || hex[2] > 1) throw new Error('Invalid hexagon.');
+    }
+    const contains = i => {
+      const p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
+      if (lon < viewport[0] || lon > viewport[2] || p.lat < viewport[1] || p.lat > viewport[3]) return false;
+      const x = (lon + 180) / 360, y = projectedY[i];
+      if (hex) { const [q, r] = hexRound((Math.sqrt(3) / 3 * x - y / 3) / hex[2], 2 / 3 * y / hex[2]); return q === hex[0] && r === hex[1]; }
+      let inside = false;
+      for (let j = 0; j < xy.length - 1; j++) {
+        const [ax, ay] = xy[j], [bx, by] = xy[j + 1];
+        const cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax);
+        if (Math.abs(cross) < 1e-12 * (Math.abs(bx - ax) + Math.abs(by - ay)) && x >= Math.min(ax, bx) && x <= Math.max(ax, bx) && y >= Math.min(ay, by) && y <= Math.max(ay, by)) return true;
+        if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) inside = !inside;
+      }
+      return inside;
+    };
+    const from = lowerBound(points, start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
+    let count = 0, days = 0, lastDay, first = null, last = null, previous = -2, visitCount = 0, minutes = 0, coveredUntil = -Infinity, visit;
+    const recent = [];
+    const keep = () => { if (visit) { recent.push(visit); if (recent.length > 30) recent.shift(); } };
+    const add = i => {
+      const p = points[i], day = Math.floor(p.t / DAY);
+      if (i !== previous + 1 || p.t - points[previous].t > 30 * 60_000) {
+        keep(); visit = {start: p.t, end: p.t, count: 0, minutes: 0}; visitCount++;
+      }
+      const next = points[i + 1];
+      const until = Math.max(p.t, Math.min(p.t + p.duration, end + 1, day * DAY + hourEnd * 3_600_000, next && (!filter.mask[i + 1] || !contains(i + 1)) ? next.t : Infinity));
+      const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
+      coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
+      visit.count++; visit.end = Math.max(visit.end, until); count++; previous = i;
+      if (first === null) first = p.t; last = p.t;
+      if (day !== lastDay) { days++; lastDay = day; }
+    };
+    if (candidates < (to - from) / 2) {
+      const matches = new Uint32Array(candidates); let length = 0;
+      for (const [a, b] of ranges) for (let j = a; j < b; j++) {
+        const i = order[j]; if (i >= from && i < to && filter.mask[i] && contains(i)) matches[length++] = i;
+      }
+      for (const i of matches.subarray(0, length).sort()) add(i);
+    } else for (let i = from; i < to; i++) if (filter.mask[i] && contains(i)) add(i);
+    keep();
+    placeKey = nextKey;
+    return placeResult = {count, days, first, last, minutes, visits: visitCount, recent: recent.reverse()};
+  };
+  return query;
 }
 
 // Convenience for one-off queries. The worker retains createHistoryQuery's index.

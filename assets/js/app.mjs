@@ -1,8 +1,9 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory} from './maps.mjs?v=9';
+import {createPlaceHistory} from './place-history.mjs?v=1';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS} from './data.mjs?v=6';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=3';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=5';
+import {DAY, HISTOGRAM_BINS} from './data.mjs?v=7';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=4';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=6';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -12,7 +13,7 @@ const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Individual observations. Click a point to see its timestamp.', route: 'Consecutive observations, with breaks for gaps and excluded data.'};
-let map, mapLibrary, nativeMaps, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
+let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
 function setAttribution(html) {
   if (html === currentAttribution) return;
@@ -45,11 +46,12 @@ function setBusy(busy) {
   state.importing = busy;
   for (const id of ['import', 'sample', 'empty-sample', 'empty-import']) $(id).disabled = busy;
   $('history-file').disabled = busy;
+  $('draw-area').disabled = busy || !state.report;
   $('workspace').setAttribute('aria-busy', String(busy));
 }
 function setEnabled(enabled) {
-  for (const id of ['map-summary', 'map-bottom', 'fit']) $(id).hidden = !enabled;
-  for (const id of ['clear', 'fit', 'date-start', 'date-end', 'range-start', 'range-end', 'play', 'period-back', 'period-forward']) $(id).disabled = !enabled;
+  for (const id of ['map-summary', 'map-bottom', 'fit', 'draw-area']) $(id).hidden = !enabled;
+  for (const id of ['clear', 'fit', 'draw-area', 'date-start', 'date-end', 'range-start', 'range-end', 'play', 'period-back', 'period-forward']) $(id).disabled = !enabled;
   document.querySelectorAll('[data-period]').forEach(b => { b.disabled = !enabled; });
   for (const bar of $('histogram').children) bar.disabled = !enabled;
 }
@@ -59,7 +61,7 @@ function currentOptions() {
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
   const {start, end, mode} = state, {metric, radius} = state.views[mode];
-  return {start, end, mode, metric, radius, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  return {start, end, mode, metric, radius, exclude: state.exclude, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -115,6 +117,7 @@ function installLayers() {
   map.addLayer({id: 'history-hex', type: 'fill', source: 'history-density', paint: {'fill-outline-color': '#ffffff35'}}, before);
   map.addLayer({id: 'history-dots', type: 'circle', source: 'history-dots', paint: {'circle-stroke-width': 0}}, before);
   map.addLayer({id: 'history-route', type: 'line', source: 'history-route', layout: {'line-join': 'round', 'line-cap': 'round'}}, before);
+  placeHistory?.install();
   paintSources(); paint(); refresh();
 }
 async function selectBasemap(key, remember = false) {
@@ -174,6 +177,7 @@ function showResult(result) {
   });
   if (!$('histogram').querySelector('button:not(:disabled)[tabindex="0"]')) $('histogram').querySelector('button:not(:disabled)')?.setAttribute('tabindex', '0');
   paintSources(result);
+  placeHistory?.refresh();
 }
 function syncDates() {
   if (!state.report) return;
@@ -214,7 +218,7 @@ function fitHistory() {
 }
 function importFiles(files, sample = false) {
   if (!files.length || state.importing) return;
-  stopPlayback(); popup?.remove(); setBusy(true); status('Reading history on your device…', false, true);
+  stopPlayback(); popup?.remove(); placeHistory?.clear(); setBusy(true); status('Reading history on your device…', false, true);
   worker.postMessage({type: 'import', id: ++queryId, files});
   state.nextSample = sample;
 }
@@ -231,7 +235,7 @@ async function loadSample() {
   } catch (error) { if (request === sampleRequest) { setBusy(false); status(`The sample could not load: ${error.message}. You can still open your own history.`, true); } }
 }
 function clearHistory() {
-  sampleRequest++; stopPlayback(); popup?.remove();
+  sampleRequest++; stopPlayback(); popup?.remove(); placeHistory?.clear();
   clearTimeout(queryTimer); worker.terminate(); createWorker(); querying = false; queryDirty = false; setBusy(false);
   state.report = null; state.result = null; state.period = 'all'; setEnabled(false); paintSources();
   $('empty-state').hidden = false; $('source-label').textContent = 'No history loaded'; $('dataset-tag').textContent = 'No history loaded';
@@ -243,14 +247,18 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=6', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=7', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
+      if (data.operation === 'place') { placeHistory?.receive(data); return; }
       if (data.operation === 'import') setBusy(false);
       if (data.operation === 'query') { querying = false; queryDirty = false; }
       status(data.message, true);
+    } else if (data.type === 'place') {
+      placeHistory?.receive(data);
     } else if (data.type === 'imported') {
+      placeHistory?.clear();
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
       $('empty-state').hidden = true;
       $('source-label').textContent = state.nextSample ? 'Bundled sample' : data.report.files.length === 1 ? data.report.files[0] : `${data.report.files.length} files merged`;
@@ -336,6 +344,10 @@ function bindControls() {
   $('hour-start').onchange = () => { stopPlayback(); if (+$('hour-start').value >= +$('hour-end').value) $('hour-end').value = String(+$('hour-start').value + 1); rememberSettings(); refresh(); };
   $('hour-end').onchange = () => { stopPlayback(); if (+$('hour-end').value <= +$('hour-start').value) $('hour-start').value = String(+$('hour-end').value - 1); rememberSettings(); refresh(); };
   $('accuracy').onchange = () => { stopPlayback(); rememberSettings(); refresh(); };
+  document.querySelectorAll('[data-quality]').forEach(input => {
+    const bit = Number(input.dataset.quality); input.checked = Boolean(state.exclude & bit);
+    input.onchange = () => { stopPlayback(); state.exclude = input.checked ? state.exclude | bit : state.exclude & ~bit; rememberSettings(); refresh(); };
+  });
   $('metric').onchange = event => { state.views[state.mode].metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };
   document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
   document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.views[state.mode].palette = button.dataset.palette; rememberSettings(); paint('palette'); }; });
@@ -399,6 +411,7 @@ async function init() {
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
+    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end) => { stopPlayback(); setDates(start, end); rememberSettings(); }});
     map.addControl(new maplibre.NavigationControl({showCompass: false}), 'top-right');
     attributionControl = new maplibre.AttributionControl({compact: false});
     map.addControl(attributionControl, 'bottom-right');
@@ -409,12 +422,19 @@ async function init() {
       if (/source|tile|fetch|network|load/i.test(event.error?.message ?? '') && ++errors >= 3) { $('map-error').textContent = 'Some map tiles could not load. Your history is still available. Try another base map.'; $('map-error').hidden = false; }
     });
     map.on('click', event => {
+      if (state.importing || !state.report || placeHistory.handleClick(event)) return;
       const layer = state.mode === 'hex' ? 'history-hex' : state.mode === 'points' ? 'history-dots' : null;
       if (!layer || !map.getLayer(layer)) return;
       const feature = map.queryRenderedFeatures(event.point, {layers: [layer]})[0];
       if (!feature) return;
+      if (state.mode === 'hex') {
+        // Rendered polygons may be tile-clipped. Inspect the original cell.
+        const original = state.result?.density?.features.find(f => f.id === feature.id);
+        if (original) placeHistory.select(original, 'Selected hexagon');
+        return;
+      }
       const p = feature.properties, node = document.createElement('div');
-      node.textContent = state.mode === 'hex' ? `${number.format(p.count)} records · ${number.format(p.days)} UTC days · ${number.format(p.minutes)} stationary minutes` : `${new Date(p.time).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}${p.accuracy == null ? '' : ` · ±${p.accuracy} m`}`;
+      node.textContent = `${new Date(p.time).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}${p.accuracy == null ? '' : ` · ±${p.accuracy} m`}`;
       popup?.remove(); popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat(event.lngLat).setDOMContent(node).addTo(map);
     });
     createWorker(); setBusy(false); await selectBasemap(state.basemap);

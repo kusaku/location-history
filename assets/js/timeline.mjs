@@ -1,4 +1,4 @@
-import {DAY, shiftPeriod} from './data.mjs?v=6';
+import {DAY, shiftPeriod} from './data.mjs?v=7';
 
 // Preset IDs stay compatible with saved preferences. Months and years use UTC
 // calendar arithmetic; a preferred day avoids drifting after February or April.

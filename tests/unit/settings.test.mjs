@@ -110,3 +110,11 @@ test('calendar navigation retains its preferred day across reloads and validates
   for (const periodDay of [0, 32, '31', Infinity, 1.5]) assert.equal(saveSettings({...settings, periodDay}, maps, storage).periodDay, null);
   assert.equal(saveSettings({...settings, period: 'all'}, maps, storage).periodDay, null);
 });
+
+test('quality exclusions round-trip without storing selected places or malformed masks', () => {
+  const storage = memoryStorage();
+  const saved = saveSettings({exclude: 15, area: {coordinates: [[13, 52]]}, place: {first: 123}}, maps, storage);
+  assert.equal(loadSettings(maps, storage).exclude, 15);
+  assert.equal('area' in saved, false); assert.equal('place' in saved, false);
+  for (const exclude of [-1, 16, 1.5, '3', null]) assert.equal(saveSettings({exclude}, maps, storage).exclude, 0);
+});

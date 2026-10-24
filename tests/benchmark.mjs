@@ -41,6 +41,7 @@ const cases = [
   ['hour_accuracy_hex', {mode: 'hex', metric: 'days', accuracy: 100, hourStart: 8, hourEnd: 20, zoom: 5, viewport: [-10, 40, 35, 65]}],
   ['points', {mode: 'points', zoom: 5, viewport: [-10, 40, 35, 65]}],
   ['journeys', {mode: 'route', zoom: 5, viewport: [-10, 40, 35, 65]}],
+  ['journeys_speed', {mode: 'route', colorBy: 'speed', zoom: 5, viewport: [-10, 40, 35, 65]}],
 ];
 if (data.jumpFlags) cases.push(['exclude_jumps', {mode: 'heat', excludeJumps: true, zoom: 5, viewport: [-10, 40, 35, 65]}]);
 for (const [name, options] of cases) {

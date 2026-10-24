@@ -1,4 +1,5 @@
 import {MAP_CONFIG} from './map-config.mjs?v=4';
+import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=19';
 
 // Keep every provider's attribution with its documented endpoint.
 const osm = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
@@ -237,9 +238,10 @@ export function paintHistory(map, state, changed) {
   if (colour) {
     map.setPaintProperty('history-heat', 'heatmap-color', colourExpression(state.palette, ['heatmap-density'], true));
   }
-  if (colour || changed === 'time') {
+  if (colour || changed === 'time' || changed === 'colorBy') {
     const position = ['max', 0, ['min', 1, ['/', ['-', ['get', 'time'], state.start ?? 0], Math.max(1, (state.end ?? 0) - (state.start ?? 0))]]];
-    const color = colourExpression(state.palette, position);
+    const speed = ['interpolate', ['linear'], ['coalesce', ['get', 'speed'], 0], ...SPEED_STOPS.flatMap((stop, i) => [stop, PALETTES[state.palette].colors[i]])];
+    const color = state.colorBy === 'speed' ? ['case', ['==', ['get', 'speed'], null], SPEED_UNKNOWN, speed] : colourExpression(state.palette, position);
     map.setPaintProperty('history-dots', 'circle-color', color);
     map.setPaintProperty('history-route', 'line-color', color);
   }

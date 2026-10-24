@@ -1,6 +1,8 @@
 // Pure import and geospatial functions shared by the worker and Node tests.
 export const DAY = 86_400_000;
 export const HISTOGRAM_BINS = 64;
+export const SPEED_STOPS = Object.freeze([0, 5, 20, 50, 130, 1000]);
+export const SPEED_UNKNOWN = '#8b929a';
 // Date windows have inclusive endpoints. Keep their width when reaching a data boundary.
 export function shiftPeriod(start, end, min, max, direction) {
   const shift = Math.max(min - start, Math.min(max - end, direction * (end - start + 1)));
@@ -119,6 +121,15 @@ export function distance(a, b) {
   const h = Math.sin(lat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(lon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
 }
+// An inter-record average, not instantaneous or road-routed speed. Never turn
+// missing data or motion smaller than reported uncertainty into a zero speed.
+export function intervalSpeed(a, b) {
+  const elapsed = b.t - a.t;
+  if (elapsed <= 0 || elapsed > 15 * 60_000 || a.accuracy > 200 || b.accuracy > 200) return null;
+  const km = distance(a, b), speed = km * 3_600_000 / elapsed;
+  if (speed > 1000 || km > 0 && km * 1000 <= (a.accuracy ?? 0) + (b.accuracy ?? 0)) return null;
+  return speed;
+}
 function projectY(lat) {
   const s = Math.sin(Math.max(-85.051129, Math.min(85.051129, lat)) * rad);
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
@@ -220,6 +231,20 @@ export function createHistoryQuery(points) {
   const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
   const jumps = jumpFlags(points);
+  let speeds;
+  function ensureSpeeds() {
+    if (speeds) return;
+    speeds = new Float32Array(points.length); speeds.fill(NaN);
+    for (let i = 1; i < points.length; i++) if (!jumps[i - 1] && !jumps[i]) speeds[i] = intervalSpeed(points[i - 1], points[i]) ?? NaN;
+  }
+  function pointSpeed(i, from, to) {
+    let weighted = 0, elapsed = 0;
+    for (let edge = i; edge <= i + 1; edge++) if (edge > from && edge < to && filter.mask[edge - 1] && filter.mask[edge] && Number.isFinite(speeds[edge])) {
+      const dt = points[edge].t - points[edge - 1].t;
+      weighted += speeds[edge] * dt; elapsed += dt;
+    }
+    return elapsed ? weighted / elapsed : null;
+  }
 
   function ensureFilter({accuracy = 0, hourStart = 0, hourEnd = 24, excludeJumps = false}) {
     const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}:${excludeJumps}`;
@@ -249,7 +274,7 @@ export function createHistoryQuery(points) {
     return {ranges, candidates};
   }
   const query = (options = {}) => {
-    const {start = -Infinity, end = Infinity, hourEnd = 24, metric = 'records', mode = 'heat', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
+    const {start = -Infinity, end = Infinity, hourEnd = 24, metric = 'records', mode = 'heat', colorBy = 'time', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
     ensureFilter(options);
     const nextSelectionKey = `${filterKey}:${start}:${end}`;
     if (selectionKey !== nextSelectionKey) {
@@ -298,13 +323,30 @@ export function createHistoryQuery(points) {
     }
     let density = EMPTY, dots = EMPTY, routes = EMPTY, peak = 1, drawn = 0;
     if (mode === 'points') {
+      ensureSpeeds();
       const stride = Math.max(1, Math.ceil(visibleCount / 20_000)), features = [];
       for (let j = 0; j < visibleCount; j += stride) {
         const p = points[visible[j]];
-        features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
+        features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy, speed: pointSpeed(visible[j], from, to)}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
       }
       dots = collection(features); drawn = features.length;
     } else if (mode === 'route') {
+      if (selection.routeColor !== colorBy) { selection.routes = null; selection.routeColor = colorBy; }
+      if (!selection.routes && colorBy === 'speed') {
+        ensureSpeeds();
+        const features = [], step = Math.max(1, Math.ceil(indices.length / 20_000));
+        for (const [a, b] of selection.runs) for (let j = a; j < b - 1; j += step) {
+          const end = Math.min(j + step, b - 1), first = points[indices[j]], last = points[indices[end]];
+          let weighted = 0, elapsed = 0;
+          for (let k = j + 1; k <= end; k++) {
+            const i = indices[k], dt = points[i].t - points[i - 1].t;
+            if (Number.isFinite(speeds[i])) { weighted += speeds[i] * dt; elapsed += dt; }
+          }
+          const speed = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
+          features.push({type: 'Feature', properties: {speed}, geometry: {type: 'LineString', coordinates: [[first.lon, first.lat], [last.lon, last.lat]]}});
+        }
+        selection.routes = collection(features);
+      }
       if (!selection.routes) {
         // Split only at time-band boundaries, not every observation. At most
         // 255 extra parts across the window give every run the same time scale.

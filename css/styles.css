@@ -835,6 +835,27 @@ select {
   padding: 3px 8px;
 }
 
+.point-details {
+  display: grid;
+  gap: 4px;
+}
+
+.point-details>div:not(:first-child) {
+  color: var(--muted);
+}
+
+.color-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+
+.color-controls .presets {
+  gap: 4px;
+}
+
 .map-bottom {
   position: absolute;
   top: var(--map-inset);
@@ -869,6 +890,18 @@ select {
   width: 90px;
   height: 5px;
   border-radius: 4px;
+}
+
+.legend-unknown {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-unknown i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
 }
 
 .legend #legend-unit {

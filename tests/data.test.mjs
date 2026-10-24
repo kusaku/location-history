@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
-import {parseHistory, preparePoints, queryHistory, createHistoryQuery, wrappedBounds, project, timestamp, shiftPeriod, DAY} from '../js/data.mjs';
+import {parseHistory, preparePoints, queryHistory, createHistoryQuery, wrappedBounds, project, timestamp, shiftPeriod, intervalSpeed, DAY} from '../js/data.mjs';
 const point = (t, lon = 13.4, lat = 52.5, accuracy = null) => ({t, lon, lat, accuracy, duration: 0});
 const records = locations => parseHistory({locations}).points;
 const legacy = (time, lat = 525000000, lon = 134000000) => ({timestampMs: String(time), latitudeE7: lat, longitudeE7: lon});
@@ -229,6 +229,57 @@ test('time-coloured routes retain simplification limits, exact endpoints and dis
   assert.deepEqual(all[0], [points[0].lon, points[0].lat]);
   assert.deepEqual(all.at(-1), [points.at(-1).lon, points.at(-1).lat]);
   assert.ok(parts.every(part => part.geometry.coordinates.every(([lon]) => lon < 14) || part.geometry.coordinates.every(([lon]) => lon >= 15)));
+});
+
+test('speed estimates reject gaps, impossible travel, poor accuracy and GPS uncertainty', () => {
+  const a = point(0, 0, 0, 5), b = point(60000, .001, 0, 5);
+  assert.ok(Math.abs(intervalSpeed(a, b) - 6.6717) < .001);
+  assert.equal(intervalSpeed(a, {...b, t: 0}), null);
+  assert.equal(intervalSpeed(a, {...b, t: 15 * 60000 + 1}), null);
+  assert.ok(intervalSpeed(a, {...b, t: 15 * 60000}) > 0);
+  assert.equal(intervalSpeed(a, {...b, accuracy: 1799}), null);
+  assert.equal(intervalSpeed(a, {...b, lon: .00001}), null);
+  assert.equal(intervalSpeed(a, {...b, lon: 2}), null);
+  assert.equal(intervalSpeed(a, {...a, t: 60000}), 0);
+  assert.ok(intervalSpeed({...a, accuracy: null}, {...b, accuracy: null}) > 0);
+});
+
+test('point speed uses original adjacent intervals weighted by time and never bridges filtered records', () => {
+  const points = [point(0, 0, 0, 0), point(60000, .0015, 0, 20), point(180000, .0075, 0, 0)];
+  const query = createHistoryQuery(points), dots = query({mode: 'points'}).dots.features;
+  const incoming = intervalSpeed(points[0], points[1]), outgoing = intervalSpeed(points[1], points[2]);
+  assert.ok(Math.abs(dots[0].properties.speed - incoming) < 1e-4);
+  assert.ok(Math.abs(dots[1].properties.speed - (incoming + outgoing * 2) / 3) < 1e-4);
+  assert.ok(Math.abs(dots[2].properties.speed - outgoing) < 1e-4);
+  const filtered = query({mode: 'points', accuracy: 10}).dots.features;
+  assert.equal(filtered.length, 2); assert.ok(filtered.every(dot => dot.properties.speed === null));
+  assert.equal(query({mode: 'points', start: 60000, end: 60000}).dots.features[0].properties.speed, null);
+  const gap = createHistoryQuery([point(0), point(DAY)])({mode: 'points'});
+  assert.ok(gap.dots.features.every(dot => dot.properties.speed === null));
+});
+
+test('speed paths use interval averages, preserve endpoints, cache pans and rebuild when colour mode changes', () => {
+  const points = [point(0, 0, 0), point(60000, .0015, 0), point(180000, .0075, 0)], query = createHistoryQuery(points);
+  const time = query({mode: 'route'}).routes;
+  const speed = query({mode: 'route', colorBy: 'speed'}).routes;
+  assert.equal(speed.features.length, 2);
+  assert.ok(Math.abs(speed.features[0].properties.speed - intervalSpeed(points[0], points[1])) < 1e-4);
+  assert.ok(Math.abs(speed.features[1].properties.speed - intervalSpeed(points[1], points[2])) < 1e-4);
+  assert.deepEqual(speed.features[0].geometry.coordinates[0], [0, 0]);
+  assert.deepEqual(speed.features.at(-1).geometry.coordinates.at(-1), [.0075, 0]);
+  assert.equal(query({mode: 'route', colorBy: 'speed', viewport: [-1, -1, 1, 1]}).routes, speed);
+  assert.deepEqual(query({mode: 'route'}).routes, time);
+  const poor = createHistoryQuery(points.map(p => ({...p, accuracy: 1799})))({mode: 'route', colorBy: 'speed'});
+  assert.ok(poor.routes.features.every(part => part.properties.speed === null));
+});
+
+test('large speed paths remain bounded and do not allocate a feature for every record', () => {
+  const points = Array.from({length: 100001}, (_, i) => point(i * 60000, 13 + i * .000001));
+  const {routes} = createHistoryQuery(points)({mode: 'route', colorBy: 'speed'});
+  assert.ok(routes.features.length <= 20000);
+  assert.deepEqual(routes.features[0].geometry.coordinates[0], [points[0].lon, points[0].lat]);
+  assert.deepEqual(routes.features.at(-1).geometry.coordinates.at(-1), [points.at(-1).lon, points.at(-1).lat]);
+  assert.ok(routes.features.every(part => part.properties.speed > 0));
 });
 
 test('date range queries preserve inclusive fractional timestamp boundaries', () => {

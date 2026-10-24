@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=36">
-    <script type="module" src="js/app.mjs?v=43">
+    <link rel="stylesheet" href="css/styles.css?v=37">
+    <script type="module" src="js/app.mjs?v=44">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -192,6 +192,13 @@
           <p id="mode-description" class="hint">
             Density of nearby recorded locations.
           </p>
+          <div id="color-controls" class="color-controls" hidden>
+            <span>Colour by</span>
+            <div id="color-by" class="presets" role="group" aria-label="Colour points or journeys by">
+              <button type="button" data-color-by="time" aria-pressed="true">Time</button>
+              <button type="button" data-color-by="speed" aria-pressed="false">Speed</button>
+            </div>
+          </div>
           <div id="density-controls">
             <label for="metric">
               Measure density by
@@ -543,6 +550,7 @@
                 <span id="legend-unit">
                   recorded locations
                 </span>
+                <span id="legend-unknown" class="legend-unknown" hidden><i id="legend-unknown-swatch" aria-hidden="true"></i>Unknown</span>
               </div>
               <span id="render-note">
               </span>
@@ -649,7 +657,8 @@
         </b>
         connects consecutive observations, breaking at gaps over six hours, excluded records, dateline crossings, or implausible speeds.
       </p>
-      <p>In <b>Points</b> and <b>Journeys</b>, the palette runs from <b>Earlier</b> to <b>Later</b> across Date window in UTC. Every path uses the same time scale, which stays fixed when panning. Click a point for its exact timestamp. Heatmap and Hexagons use colour for density instead.</p>
+      <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b> or <b>Speed</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. Both scales stay fixed when panning. Click a point for its timestamp, accuracy and estimated speed. Heatmap and Hexagons use colour for density instead.</p>
+      <p>Speed is straight-line distance divided by elapsed time between original consecutive recordings. A point averages its valid incoming and outgoing intervals, weighted by their duration. Gaps over 15 minutes, speeds over 1,000 km/h, known accuracy worse than 200 m, and movement within the combined accuracy radii are unavailable. Exact repeated positions can show 0 km/h. Filtered records are never joined across. Speed is an estimate, not a measured instantaneous speed. For large date windows, speed paths are simplified and average reliable intervals over each displayed section; a section is grey if less than half its duration has reliable speed. Narrow Date window for more detail.</p>
       <h3>
         Density metrics
       </h3>

@@ -1,5 +1,5 @@
-import {DAY} from './data.mjs?v=18';
-import {resizeWindow} from './timeline.mjs?v=13';
+import {DAY} from './data.mjs?v=19';
+import {resizeWindow} from './timeline.mjs?v=16';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
@@ -9,6 +9,7 @@ const DEFAULTS = Object.freeze({basemap: 'dark', mode: 'heat', hourStart: 0, hou
 function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes(DEFAULTS.basemap) ? DEFAULTS.basemap : availableMaps[0]};
   settings.views.route.lineWidth = 1.5;
+  settings.views.points.colorBy = settings.views.route.colorBy = 'time';
   if (!input || typeof input !== 'object' || Array.isArray(input)) return settings;
   for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 10, 50, 100, 500, 1000], period: ['all', '1', '7', '30', '90', '365', null]})) {
     if (values.includes(input[key])) settings[key] = input[key];
@@ -17,6 +18,7 @@ function validatedSettings(input, availableMaps) {
     // Older preferences had one shared set; migrate it into independent copies.
     const source = input.views && typeof input.views === 'object' && !Array.isArray(input.views) ? input.views[mode] : input;
     if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+    if (['points', 'route'].includes(mode) && ['time', 'speed'].includes(source.colorBy)) view.colorBy = source.colorBy;
     for (const [key, values] of Object.entries({metric: ['records', 'days', 'time'], palette: ['ember', 'ocean', 'spectral']})) if (values.includes(source[key])) view[key] = source[key];
     const sliders = [['radius', RADIUS_MIN[mode], 60, 1], ['intensity', .2, 3, .1], ['opacity', .1, 1, .05]];
     if (mode === 'route') sliders.push(['lineWidth', .5, 10, .5]);

@@ -235,3 +235,17 @@ test('Points and Journeys share the palette across the full date window, indepen
   state.end = state.start; paintHistory(map, state, 'time');
   assert.deepEqual(properties.get('history-dots:circle-color')[2], ['max', 0, ['min', 1, ['/', ['-', ['get', 'time'], start], 1]]]);
 });
+
+test('speed colours use fixed km/h stops and an explicit unknown colour, independently of dates and camera', () => {
+  const paints = new Map(), map = {getLayer: () => true, setPaintProperty(id, key, value) { paints.set(`${id}:${key}`, value); }};
+  const state = {mode: 'points', palette: 'ember', colorBy: 'speed', start: 0, end: 60000};
+  paintHistory(map, state, 'colorBy');
+  const color = paints.get('history-dots:circle-color');
+  assert.deepEqual(color, paints.get('history-route:line-color'));
+  assert.deepEqual(color.slice(0, 3), ['case', ['==', ['get', 'speed'], null], '#8b929a']);
+  assert.deepEqual(color[3].filter((_, i) => i >= 3 && i % 2 === 1), [0, 5, 20, 50, 130, 1000]);
+  state.start = 50000; state.end = 900000; state.viewport = [0, 0, 1, 1];
+  paintHistory(map, state, 'time');
+  assert.deepEqual(paints.get('history-route:line-color'), color);
+  assert.equal(paints.size, 2);
+});

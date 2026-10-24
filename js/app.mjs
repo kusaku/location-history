@@ -1,9 +1,9 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=13';
-import {createPlaceHistory} from './place-history.mjs?v=17';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=14';
+import {createPlaceHistory} from './place-history.mjs?v=18';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS} from './data.mjs?v=18';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=15';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=18';
+import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=19';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=16';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=19';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -12,7 +12,7 @@ const formatDate = t => fullDate.format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
-const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for its timestamp.', route: 'Paths coloured by time in Date window, with breaks for gaps and excluded data.'};
+const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy and speed.', route: 'Paths coloured by time in Date window, with breaks for gaps and excluded data.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
 function setAttribution(html) {
@@ -60,8 +60,8 @@ function currentOptions() {
   // Pad the viewport so heat kernels and cells remain complete at its edges.
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
-  const {start, end, mode, period} = state, {metric, radius} = state.views[mode];
-  return {start, end, mode, period, metric, radius, excludeJumps: state.excludeJumps, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  const {start, end, mode, period} = state, {metric, radius, colorBy} = state.views[mode];
+  return {start, end, mode, period, metric, radius, colorBy, excludeJumps: state.excludeJumps, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -96,6 +96,8 @@ function paint(changed) {
   $('legend-ramp').style.background = `linear-gradient(90deg,${palette.colors.join(',')})`;
   $('palette-name').textContent = palette.name;
   $('density-controls').hidden = !['heat', 'hex'].includes(state.mode);
+  $('color-controls').hidden = !['points', 'route'].includes(state.mode);
+  for (const button of $('color-by').children) button.setAttribute('aria-pressed', String(button.dataset.colorBy === view.colorBy));
   $('intensity-field').hidden = !['heat', 'hex'].includes(state.mode);
   $('radius-field').hidden = state.mode === 'route';
   $('line-width-field').hidden = state.mode !== 'route';
@@ -104,16 +106,19 @@ function paint(changed) {
   $('intensity-value').textContent = `${view.intensity.toFixed(1)}×`;
   $('line-width-value').textContent = `${view.lineWidth ?? 1.5} px`;
   $('opacity-value').textContent = `${Math.round(view.opacity * 100)}%`;
-  $('mode-description').textContent = descriptions[state.mode];
+  $('mode-description').textContent = view.colorBy === 'speed' ? 'Estimated speed between recordings. Grey means unavailable.' : descriptions[state.mode];
   $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[view.metric];
   paintLegend();
   paintHistory(map, {...state, ...view}, changed === 'mode' ? undefined : changed);
 }
 function paintLegend() {
   const temporal = state.mode === 'points' || state.mode === 'route';
-  $('legend-low').textContent = temporal ? 'Earlier' : 'Less'; $('legend-high').textContent = temporal ? 'Later' : 'More';
-  $('legend-unit').textContent = temporal ? 'time · UTC' : {records: 'recorded locations', days: 'distinct UTC days', time: 'stationary minutes'}[state.views[state.mode].metric];
-  document.querySelector('.legend').title = temporal ? `${new Date(state.start).toISOString().replace('T', ' ')} → ${new Date(state.end).toISOString().replace('T', ' ')} · UTC` : '';
+  const speed = temporal && state.views[state.mode].colorBy === 'speed';
+  $('legend-low').textContent = speed ? '0' : temporal ? 'Earlier' : 'Less'; $('legend-high').textContent = speed ? '1,000 km/h' : temporal ? 'Later' : 'More';
+  $('legend-unit').textContent = speed ? '' : temporal ? 'time · UTC' : {records: 'recorded locations', days: 'distinct UTC days', time: 'stationary minutes'}[state.views[state.mode].metric];
+  $('legend-unit').hidden = speed;
+  $('legend-unknown').hidden = !speed; $('legend-unknown-swatch').style.background = SPEED_UNKNOWN;
+  document.querySelector('.legend').title = speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: unavailable.` : temporal ? `${new Date(state.start).toISOString().replace('T', ' ')} → ${new Date(state.end).toISOString().replace('T', ' ')} · UTC` : '';
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
@@ -256,7 +261,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=18', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=19', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -360,6 +365,11 @@ function bindControls() {
     rememberSettings(); refresh();
   };
   $('metric').onchange = event => { state.views[state.mode].metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };
+  for (const button of $('color-by').children) button.onclick = () => {
+    state.views[state.mode].colorBy = button.dataset.colorBy;
+    rememberSettings(); paint('colorBy');
+    if (state.mode === 'route') refresh();
+  };
   document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
   document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.views[state.mode].palette = button.dataset.palette; rememberSettings(); paint('palette'); }; });
   for (const id of ['radius', 'intensity', 'lineWidth', 'opacity']) {
@@ -449,7 +459,11 @@ async function init() {
         return;
       }
       const p = feature.properties, node = document.createElement('div');
-      node.textContent = `${new Date(p.time).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}${p.accuracy == null ? '' : ` · ±${p.accuracy} m`}`;
+      node.className = 'point-details';
+      const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
+      for (const text of [new Date(p.time).toISOString().replace('T', ' ').replace(/Z$/, ' UTC'), p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `Est. speed: ${speed}`]) {
+        const line = document.createElement('div'); line.textContent = text; node.append(line);
+      }
       popup?.remove(); popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat(event.lngLat).setDOMContent(node).addTo(map);
     });
     createWorker(); setBusy(false); await selectBasemap(state.basemap);

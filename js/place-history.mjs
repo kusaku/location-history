@@ -19,38 +19,31 @@ const yearStart = year => { const date = new Date(0); date.setUTCFullYear(year, 
 export function placeCalendarPeriod(anchor, view) {
   const date = new Date(anchor); date.setUTCHours(0, 0, 0, 0);
   if (view === 'year') date.setUTCMonth(0, 1);
+  if (view === 'quarter') date.setUTCMonth(Math.floor(date.getUTCMonth() / 3) * 3, 1);
   if (view === 'month') date.setUTCDate(1);
   if (view === 'week') date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
   const start = +date;
   if (view === 'year') date.setUTCFullYear(date.getUTCFullYear() + 1);
-  else if (view === 'month') date.setUTCMonth(date.getUTCMonth() + 1);
+  else if (view === 'quarter' || view === 'month') date.setUTCMonth(date.getUTCMonth() + (view === 'quarter' ? 3 : 1));
   else date.setUTCDate(date.getUTCDate() + (view === 'week' ? 7 : 1));
   return {start, end: +date - 1};
-}
-export function placeCalendarView(scope) {
-  if (scope.allDates) return 'year';
-  const preset = {'1': 'day', '7': 'week', '30': 'month', '90': 'year', '365': 'year', all: 'year'}[scope.period];
-  const days = (scope.end - scope.start + 1) / DAY;
-  return preset ?? (days <= 1 ? 'day' : days <= 7 ? 'week' : days <= 31 ? 'month' : 'year');
 }
 
 // Daily views reuse aggregate totals. Hourly views ask the indexed worker for
 // only the visible day/week, with one pending request and stale-result checks.
-export function createPlaceCalendar(select, requestHours = () => {}, navigateWindow) {
+export function createPlaceCalendar(select, requestHours = () => {}) {
   let days = new Map(), scope = null, anchor = null, active = true, revision = 0;
   let hourId = 0, hourPending = null, hourWanted = null, hourKey = null, hours = [], hourError = '';
-  let scrolledWeek = null;
-  const kind = () => $('place-calendar-view').value === 'auto' ? placeCalendarView(scope) : $('place-calendar-view').value || 'year';
-  const clamp = value => Math.max(scope.start, Math.min(scope.end, value));
+  const kind = () => $('place-calendar-view').value || 'year';
+  const clamp = value => Math.max(scope.historyStart, Math.min(scope.historyEnd, value));
   const latest = () => { let at = scope.start; for (const day of days.keys()) at = Math.max(at, day); return at; };
   function navigate(direction) {
-    if ($('place-calendar-view').value === 'auto' && !scope.allDates && navigateWindow) { navigateWindow(direction); return; }
     const view = kind(), date = new Date(placeCalendarPeriod(anchor, view).start);
     if (view === 'year') date.setUTCFullYear(date.getUTCFullYear() + direction);
-    else if (view === 'month') date.setUTCMonth(date.getUTCMonth() + direction);
+    else if (view === 'quarter' || view === 'month') date.setUTCMonth(date.getUTCMonth() + direction * (view === 'quarter' ? 3 : 1));
     else date.setUTCDate(date.getUTCDate() + direction * (view === 'week' ? 7 : 1));
     anchor = clamp(direction < 0 ? +new Date(placeCalendarPeriod(+date, view).end) : +date);
-    $('place-calendar-view').value = view; render();
+    render();
   }
   function keyboard(cells, right, down = 1) {
     let focused = cells.findIndex(cell => !cell.disabled);
@@ -95,9 +88,34 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
   function renderDaily(view, period, metric) {
     const dates = [];
     for (let at = period.start; at <= period.end; at += DAY) dates.push(at);
+    const peak = summary(dates.map(at => days.get(at)).filter(Boolean), metric);
+    $('place-calendar-chart').className = `place-calendar-chart is-${view}`;
+    if (view === 'quarter') {
+      const months = [], cells = [];
+      for (let month = 0; month < 3; month++) {
+        const start = new Date(period.start); start.setUTCMonth(start.getUTCMonth() + month);
+        const at = +start, end = placeCalendarPeriod(at, 'month').end;
+        const section = document.createElement('section'), heading = document.createElement('h3'), grid = document.createElement('div');
+        section.className = 'place-calendar-month'; grid.className = 'place-quarter-days';
+        heading.textContent = `${monthName.format(at)} ${start.getUTCFullYear()}`;
+        grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', heading.textContent);
+        for (const name of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+          const label = document.createElement('span'); label.textContent = name; grid.append(label);
+        }
+        const offset = (start.getUTCDay() + 6) % 7;
+        for (let day = at, i = 0; day <= end; day += DAY, i++) {
+          const button = cell(day, days.get(day), peak, metric);
+          button.textContent = i + 1;
+          button.style.gridColumn = (offset + i) % 7 + 1; button.style.gridRow = Math.floor((offset + i) / 7) + 2;
+          grid.append(button); cells.push(button);
+        }
+        section.append(heading, grid); months.push(section);
+      }
+      $('place-calendar-months').replaceChildren();
+      $('place-calendar-days').replaceChildren(...months); keyboard(cells, 1, 7); return;
+    }
     const offset = (new Date(period.start).getUTCDay() + (view === 'month' ? 6 : 0)) % 7;
     const weeks = Math.ceil((offset + dates.length) / 7), labels = [];
-    $('place-calendar-chart').className = `place-calendar-chart is-${view}`;
     $('place-calendar-chart').style.setProperty('--weeks', weeks);
     if (view === 'year') {
       for (let i = 0; i < dates.length; i++) if (i === 0 || new Date(dates[i]).getUTCDate() === 1) {
@@ -111,7 +129,6 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
       const label = document.createElement('span'); label.textContent = name; labels.push(label);
     }
     $('place-calendar-months').replaceChildren(...labels);
-    const peak = summary(dates.map(at => days.get(at)).filter(Boolean), metric);
     const cells = dates.map((at, i) => {
       const entry = days.get(at), button = cell(at, entry, peak, metric);
       button.style.gridColumn = view === 'year' ? Math.floor((offset + i) / 7) + 1 : (offset + i) % 7 + 1;
@@ -126,73 +143,64 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
   }
   function renderHourly(view, period, metric) {
     const range = {start: Math.max(period.start, scope.start), end: Math.min(period.end, scope.end + DAY - 1)};
+    const intersects = range.start <= range.end;
     const key = JSON.stringify([revision, range.start, range.end]);
-    hourWanted = {key, ...range};
-    if (hourKey !== key && !hourPending) {
+    hourWanted = intersects ? {key, ...range} : null;
+    if (intersects && hourKey !== key && !hourPending) {
       hourPending = {key, id: ++hourId}; hourError = '';
       requestHours({id: hourId, ...range});
     }
-    const data = new Map((hourKey === key ? hours : []).map(row => [row.start, row]));
+    const data = new Map((intersects && hourKey === key ? hours : []).map(row => [row.start, row]));
     const peak = summary([...data.values()], metric), nodes = [], cells = [];
     $('place-calendar-hours').className = `place-calendar-hours is-${view}`;
-    $('place-calendar-hours').setAttribute('aria-busy', String(hourKey !== key));
+    $('place-calendar-hours').setAttribute('aria-busy', String(intersects && hourKey !== key));
     const headerDate = new Intl.DateTimeFormat('en', {weekday: 'short', day: 'numeric', timeZone: 'UTC'});
     if (view === 'week') for (let d = 0; d < 7; d++) {
       const at = period.start + d * DAY, button = document.createElement('button'); button.type = 'button';
       button.className = 'place-calendar-day-heading'; button.textContent = headerDate.format(at);
-      button.style.gridColumn = d + 2; button.style.gridRow = 1; button.disabled = at < scope.start || at > scope.end;
+      button.style.gridColumn = 1; button.style.gridRow = d + 2; button.disabled = at < scope.start || at > scope.end;
       button.title = `Select ${calendarDate.format(at)}`; button.onclick = () => select({start: at, end: at + DAY}); nodes.push(button);
     }
     const count = view === 'week' ? 168 : 24;
     for (let i = 0; i < count; i++) {
       const at = period.start + i * DAY / 24, row = data.get(at), button = cell(at, row, peak, metric, true);
-      button.style.gridColumn = view === 'week' ? Math.floor(i / 24) + 2 : i + 1;
-      button.style.gridRow = view === 'week' ? i % 24 + 2 : 1;
-      if (view === 'week') button.textContent = row?.count ? number.format(row.count) : '';
+      button.style.gridColumn = view === 'week' ? i % 24 + 2 : i + 1;
+      button.style.gridRow = view === 'week' ? Math.floor(i / 24) + 2 : 1;
       cells.push(button);
       if (i % 3 === 0 && (view === 'day' || i < 24)) {
-        const label = document.createElement('span'); label.textContent = `${String(i % 24).padStart(2, '0')}${view === 'week' ? ':00' : ''}`;
-        label.style.gridColumn = view === 'week' ? 1 : i + 1; label.style.gridRow = view === 'week' ? i + 2 : 2; nodes.push(label);
+        const label = document.createElement('span'); label.textContent = String(i % 24).padStart(2, '0');
+        label.style.gridColumn = view === 'week' ? i + 2 : i + 1; label.style.gridRow = view === 'week' ? 1 : 2; nodes.push(label);
       }
     }
-    keyboard(cells, view === 'week' ? 24 : 1);
+    keyboard(cells, 1, view === 'week' ? 24 : 1);
     $('place-calendar-hours').replaceChildren(...nodes, ...cells);
-    if (view === 'week' && hourKey === key && scrolledWeek !== key) {
-      let first = 24;
-      for (const row of data.values()) if (row[metric] > 0) first = Math.min(first, new Date(row.start).getUTCHours());
-      $('place-calendar-scroll').scrollTop = first < 24 ? Math.max(0, first - 1) * 19 : 0;
-      scrolledWeek = key;
-    }
-    if (view !== 'week') scrolledWeek = null;
-    if (hourKey !== key || hourError) $('place-calendar-detail').textContent = hourError || 'Calculating hourly activity…';
+    if (intersects && (hourKey !== key || hourError)) $('place-calendar-detail').textContent = hourError || 'Calculating hourly activity…';
   }
   function render() {
     if (!scope || !active) return;
     const view = kind(), year = new Date(anchor).getUTCFullYear();
-    const followsRange = $('place-calendar-view').value === 'auto' && !scope.allDates && (view === 'week' || view === 'month' || scope.period === '365');
-    const period = followsRange ? {start: scope.start, end: scope.end + DAY - 1} : placeCalendarPeriod(anchor, view);
+    const period = placeCalendarPeriod(anchor, view);
     const metric = $('place-calendar-metric').value === 'minutes' ? 'minutes' : 'count', hourly = view === 'day' || view === 'week';
     $('place-calendar-detail').textContent = 'Select a day/hour to filter the map · UTC. Arrow keys navigate.';
     $('place-calendar-year').hidden = view !== 'year'; $('place-calendar-anchor').hidden = view === 'year';
-    $('place-calendar-year').value = year; $('place-calendar-year').min = new Date(scope.start).getUTCFullYear(); $('place-calendar-year').max = new Date(scope.end).getUTCFullYear();
-    $('place-calendar-anchor').value = utcDate(anchor); $('place-calendar-anchor').min = utcDate(scope.start); $('place-calendar-anchor').max = utcDate(scope.end);
-    const sync = $('place-calendar-view').value === 'auto' && !scope.allDates && navigateWindow;
-    $('place-calendar-previous').disabled = sync ? scope.start <= Math.floor(scope.historyStart / DAY) * DAY : period.start <= scope.start;
-    $('place-calendar-next').disabled = sync ? scope.end >= Math.floor(scope.historyEnd / DAY) * DAY : period.end >= scope.end;
-    $('place-calendar-previous').setAttribute('aria-label', sync ? 'Previous date window' : `Previous calendar ${view}`);
-    $('place-calendar-next').setAttribute('aria-label', sync ? 'Next date window' : `Next calendar ${view}`);
-    $('place-calendar-caption').textContent = followsRange || view === 'week' ? `${calendarDate.format(period.start)} — ${calendarDate.format(period.end)}` : view === 'year' ? String(year) : view === 'month' ? `${monthName.format(anchor)} ${year}` : calendarDate.format(anchor);
+    $('place-calendar-year').value = year; $('place-calendar-year').min = new Date(scope.historyStart).getUTCFullYear(); $('place-calendar-year').max = new Date(scope.historyEnd).getUTCFullYear();
+    $('place-calendar-anchor').value = utcDate(anchor); $('place-calendar-anchor').min = utcDate(scope.historyStart); $('place-calendar-anchor').max = utcDate(scope.historyEnd);
+    $('place-calendar-previous').disabled = period.start <= scope.historyStart;
+    $('place-calendar-next').disabled = period.end >= scope.historyEnd;
+    $('place-calendar-previous').setAttribute('aria-label', `Previous calendar ${view}`);
+    $('place-calendar-next').setAttribute('aria-label', `Next calendar ${view}`);
+    $('place-calendar-caption').textContent = view === 'week' ? `${calendarDate.format(period.start)} — ${calendarDate.format(period.end)}` : view === 'year' ? String(year) : view === 'quarter' ? `Q${Math.floor(new Date(anchor).getUTCMonth() / 3) + 1} · ${year}` : view === 'month' ? `${monthName.format(anchor)} ${year}` : calendarDate.format(anchor);
     $('place-calendar-chart').hidden = hourly; $('place-calendar-hours').hidden = !hourly;
     if (hourly) {
       $('place-calendar-days').replaceChildren(); $('place-calendar-months').replaceChildren();
       renderHourly(view, period, metric);
-    } else { hourWanted = null; scrolledWeek = null; $('place-calendar-hours').replaceChildren(); renderDaily(view, period, metric); }
+    } else { hourWanted = null; $('place-calendar-hours').replaceChildren(); renderDaily(view, period, metric); }
   }
   $('place-calendar-previous').onclick = () => navigate(-1); $('place-calendar-next').onclick = () => navigate(1);
   function enterYear(commit) {
     if (!scope) return;
     const raw = $('place-calendar-year').value, value = Number(raw);
-    const min = new Date(scope.start).getUTCFullYear(), max = new Date(scope.end).getUTCFullYear();
+    const min = new Date(scope.historyStart).getUTCFullYear(), max = new Date(scope.historyEnd).getUTCFullYear();
     if (raw !== '' && Number.isInteger(value) && (commit || value >= min && value <= max)) {
       anchor = clamp(yearStart(Math.max(min, Math.min(max, value)))); $('place-calendar-view').value = 'year'; render();
     } else if (commit) render();
@@ -200,16 +208,20 @@ export function createPlaceCalendar(select, requestHours = () => {}, navigateWin
   $('place-calendar-year').oninput = () => enterYear(false); $('place-calendar-year').onchange = () => enterYear(true);
   $('place-calendar-anchor').onchange = () => {
     const at = Date.parse($('place-calendar-anchor').value);
-    if (Number.isFinite(at)) { const view = kind(); anchor = clamp(at); $('place-calendar-view').value = view; } render();
+    if (Number.isFinite(at)) anchor = clamp(at); render();
   };
-  $('place-calendar-view').onchange = () => { if (scope && $('place-calendar-view').value === 'auto') anchor = scope.allDates ? latest() : scope.start; render(); };
+  $('place-calendar-view').onchange = render;
   $('place-calendar-metric').onchange = render;
   return {
     setRows(rows, value) {
       days = new Map(rows.map(entry => [entry.start, entry]));
-      scope = {...value, start: Math.floor(value.start / DAY) * DAY, end: Math.floor(value.end / DAY) * DAY}; revision++;
-      if (anchor === null || $('place-calendar-view').value === 'auto') anchor = scope.allDates ? latest() : $('place-calendar-view').value === 'auto' ? scope.start : latest();
-      anchor = clamp(anchor); render();
+      scope = {
+        start: Math.floor(value.start / DAY) * DAY, end: Math.floor(value.end / DAY) * DAY,
+        historyStart: Math.floor((value.historyStart ?? value.start) / DAY) * DAY,
+        historyEnd: Math.floor((value.historyEnd ?? value.end) / DAY) * DAY
+      }; revision++;
+      if (anchor === null) anchor = latest();
+      render();
     },
     setActive(value) { active = value; render(); },
     receive(message) {
@@ -264,17 +276,15 @@ export function createPlaceTable(id, columns, select) {
 
 // Drawing and the optional panel share one source. Personal selections stay in
 // memory; only their aggregate statistics cross back from the data worker.
-export function createPlaceHistory({map, report, options, send, selectDates, status, navigateWindow}) {
+export function createPlaceHistory({map, report, options, send, selectDates, status}) {
   let area = null, corners = [], drawing = false, allDates = false, zoomEnabled = false;
   let requestId = 0, pending = false, dirty = false, lastKey = null, ignoreClickUntil = 0;
   const panel = $('place-history');
   const selectRow = entry => {
-    allDates = false; syncScope();
-    $('place-calendar-view').value = 'auto';
     selectDates(Math.floor(entry.start / DAY) * DAY, Math.floor(Math.max(entry.start, (entry.end ?? entry.start + DAY) - 1) / DAY) * DAY + DAY - 1, entry.hour);
     refresh();
   };
-  const calendar = createPlaceCalendar(selectRow, ({id, start, end}) => send({type: 'place-hours', id, area, options: {...options(), start, end}}), navigateWindow);
+  const calendar = createPlaceCalendar(selectRow, ({id, start, end}) => send({type: 'place-hours', id, area, options: {...options(), start, end}}));
   const stays = createPlaceTable('place-visits', [
     {key: 'start', label: 'From (UTC)', format: utcTime}, {key: 'end', label: 'To (UTC)', format: utcTime},
     {key: 'count', label: 'Locations', format: value => number.format(value)}, {key: 'minutes', label: 'Duration', format: duration},
@@ -366,7 +376,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     $('place-visits-label').textContent = `Recorded stays · ${number.format(result.visits)}`;
     $('place-daily-label').textContent = `By day · ${number.format(result.days)}`;
     const history = report(), current = options();
-    calendar.setRows(result.daily, allDates ? {start: history.min, end: history.max, allDates: true} : {...current, historyStart: history.min, historyEnd: history.max});
+    calendar.setRows(result.daily, {start: allDates ? history.min : current.start, end: allDates ? history.max : current.end, historyStart: history.min, historyEnd: history.max});
     stays.setRows(result.stays); daily.setRows(result.daily);
   }
   function syncScope() {

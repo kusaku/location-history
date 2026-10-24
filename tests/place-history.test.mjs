@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlaceHistory, createPlaceTable, createPlaceCalendar, placeCalendarPeriod, placeCalendarView} from '../js/place-history.mjs';
+import {createPlaceHistory, createPlaceTable, createPlaceCalendar, placeCalendarPeriod} from '../js/place-history.mjs';
 const area = {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]]}};
 class Element {
   hidden = false; disabled = false; textContent = ''; style = {setProperty(key, value) { this[key] = String(value); }}; children = []; dataset = {}; attributes = {};
@@ -11,12 +11,13 @@ class Element {
   click() { this.onclick?.(); }
   addEventListener(key, callback) { this[key] = callback; }
 }
-function fixture() {
+function fixture(history = {min: 0, max: 100000}) {
   const original = globalThis.document, elements = new Map(), sources = new Map(), handlers = new Map(), sent = [], statuses = [], dates = [];
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   globalThis.document = {getElementById: get, createElement: () => new Element(), addEventListener: (name, fn) => handlers.set(`document:${name}`, fn)};
-  get('place-scope').children = ['window', 'all'].map(scope => { const button = new Element(); button.dataset.scope = scope; return button; });
+  get('place-scope').children = ['window', 'all'].map(scope => { const button = new Element(); button.dataset.scope = scope; button.setAttribute('aria-pressed', String(scope === 'window')); return button; });
   get('place-views').children = ['calendar', 'visits', 'daily'].map((view, i) => { const button = get(['place-tab-calendar', 'place-visits-label', 'place-daily-label'][i]); button.dataset.view = view; return button; });
+  get('place-calendar-view').value = 'year';
   const canvas = new Element(); let zoom = true;
   const map = {
     getSource: key => sources.get(key),
@@ -25,7 +26,7 @@ function fixture() {
     on: (name, fn) => handlers.set(name, fn), project: coordinates => ({x: coordinates[0] * 100, y: coordinates[1] * 100}), getCenter: () => ({lng: 1, lat: 1})
   };
   const options = {start: 0, end: 1000, hourStart: 0, hourEnd: 24, accuracy: 0, excludeJumps: true};
-  const controller = createPlaceHistory({map, report: () => ({min: 0, max: 100000}), options: () => options, send: message => sent.push(message), status: (...args) => statuses.push(args), selectDates: (start, end) => dates.push([start, end])});
+  const controller = createPlaceHistory({map, report: () => history, options: () => options, send: message => sent.push(message), status: (...args) => statuses.push(args), selectDates: (start, end, hour) => { dates.push([start, end]); Object.assign(options, {start, end}, hour === undefined ? {} : {hourStart: hour, hourEnd: hour + 1}); }});
   controller.install();
   return {controller, sent, get, options, canvas, handlers, sources, dates, zoom: () => zoom, statuses, cleanup: () => { globalThis.document = original; }};
 }
@@ -167,6 +168,7 @@ test('place calendar lays out leap days and 54-week years in UTC, preserving exa
     assert.equal(f.get('place-calendar-year').value, 2023);
     assert.equal(f.get('place-calendar-previous').disabled, true);
     calendar.setRows([{start: Date.UTC(2000, 0, 1), count: 1, minutes: 1}], {start: Date.UTC(2000, 0, 1), end: Date.UTC(2000, 11, 31)});
+    f.get('place-calendar-year').value = '2000'; f.get('place-calendar-year').onchange();
     assert.equal(f.get('place-calendar-chart').style['--weeks'], '54');
     assert.equal(f.get('place-calendar-months').children.length, 12);
     assert.equal(f.get('place-calendar-next').disabled, true);
@@ -192,6 +194,7 @@ test('calendar metric, year and keyboard navigation stay bounded and never reque
     assert.equal(f.get('place-calendar-year').value, new Date(rows.at(-1).start).getUTCFullYear());
     assert.equal(f.get('place-calendar-next').disabled, true);
     calendar.setRows(rows.slice(0, 3), {start: rows[1].start, end: rows[2].start});
+    f.get('place-calendar-year').value = '2000'; f.get('place-calendar-year').onchange();
     assert.equal(f.get('place-calendar-days').children[0].disabled, true);
     assert.match(f.get('place-calendar-days').children[0].title, /outside selected dates/);
     calendar.clear(); assert.equal(f.get('place-calendar-days').children.length, 0);
@@ -217,26 +220,25 @@ test('place views switch with tabs and keyboard without recomputing the selectio
   } finally { f.cleanup(); }
 });
 
-test('calendar periods and automatic view follow UTC days, weeks, months and calendar presets', () => {
-  const day = 86_400_000, anchor = Date.UTC(2024, 1, 29, 18);
+test('calendar periods use UTC calendar boundaries including leap quarters and year rollover', () => {
+  const anchor = Date.UTC(2024, 1, 29, 18);
+  assert.deepEqual(placeCalendarPeriod(anchor, 'year'), {start: Date.UTC(2024, 0, 1), end: Date.UTC(2025, 0, 1) - 1});
+  assert.deepEqual(placeCalendarPeriod(anchor, 'quarter'), {start: Date.UTC(2024, 0, 1), end: Date.UTC(2024, 3, 1) - 1});
+  assert.deepEqual(placeCalendarPeriod(Date.UTC(2024, 11, 31), 'quarter'), {start: Date.UTC(2024, 9, 1), end: Date.UTC(2025, 0, 1) - 1});
   assert.deepEqual(placeCalendarPeriod(anchor, 'month'), {start: Date.UTC(2024, 1, 1), end: Date.UTC(2024, 2, 1) - 1});
   assert.deepEqual(placeCalendarPeriod(anchor, 'week'), {start: Date.UTC(2024, 1, 26), end: Date.UTC(2024, 2, 4) - 1});
   assert.deepEqual(placeCalendarPeriod(anchor, 'day'), {start: Date.UTC(2024, 1, 29), end: Date.UTC(2024, 2, 1) - 1});
-  for (const [period, view] of [['1', 'day'], ['7', 'week'], ['30', 'month'], ['90', 'year'], ['365', 'year'], ['all', 'year']]) {
-    assert.equal(placeCalendarView({start: 0, end: day - 1, period}), view);
-  }
-  assert.equal(placeCalendarView({start: 0, end: 4 * day - 1}), 'week');
-  assert.equal(placeCalendarView({start: 0, end: day - 1, allDates: true}), 'year');
 });
 
 test('hourly calendar coalesces requests, ignores stale replies, and selects a UTC hour', () => {
   const f = fixture(), requests = [], selected = [], day = 86_400_000;
   try {
-    f.get('place-calendar-view').value = 'auto';
+    f.get('place-calendar-view').value = 'day';
     const calendar = createPlaceCalendar(entry => selected.push(entry), request => requests.push(request));
     calendar.setRows([{start: 0, count: 1, minutes: 10}], {start: 0, end: day - 1, period: '1'});
     assert.equal(requests.length, 1); assert.equal(requests[0].end, day - 1);
     calendar.setRows([{start: day, count: 2, minutes: 20}], {start: day, end: 2 * day - 1, period: '1'});
+    f.get('place-calendar-anchor').value = '1970-01-02'; f.get('place-calendar-anchor').onchange();
     calendar.receive({id: requests[0].id, hours: [{start: 0, count: 1, minutes: 10}]});
     assert.equal(requests.length, 2); assert.equal(requests[1].start, day);
     calendar.receive({id: requests[0].id, hours: [{start: 0, count: 99, minutes: 999}]});
@@ -255,21 +257,96 @@ test('hourly calendar coalesces requests, ignores stale replies, and selects a U
   } finally { f.cleanup(); }
 });
 
-test('following Date window preserves its exact week/month and navigation uses the map window', () => {
-  const f = fixture(), requests = [], moves = [], day = 86_400_000;
+test('quarter keeps Month available, shows all three months, and steps across year boundaries', () => {
+  const f = fixture(), day = 86_400_000, requests = [];
   try {
-    f.get('place-calendar-view').value = 'auto';
-    const calendar = createPlaceCalendar(() => {}, request => requests.push(request), direction => moves.push(direction));
-    const start = Date.UTC(2024, 5, 21), end = start + 7 * day - 1;
-    calendar.setRows([{start, count: 1, minutes: 1}], {start, end, period: '7', historyStart: start - day, historyEnd: end + day});
-    assert.equal(requests[0].start, start); assert.equal(requests[0].end, end);
-    assert.equal(f.get('place-calendar-previous').disabled, false); assert.equal(f.get('place-calendar-next').disabled, false);
-    f.get('place-calendar-previous').onclick(); f.get('place-calendar-next').onclick();
-    assert.deepEqual(moves, [-1, 1]); assert.equal(f.get('place-calendar-view').value, 'auto');
-    calendar.setRows([], {start, end: start + 30 * day - 1, period: '30'});
-    const cells = f.get('place-calendar-days').children;
-    assert.equal(cells.length, 30); assert.equal(cells[0].dataset.date, '2024-06-21'); assert.equal(cells.at(-1).dataset.date, '2024-07-20');
-    assert.ok(cells.every(cell => cell.disabled));
+    f.get('place-calendar-view').value = 'quarter';
+    const calendar = createPlaceCalendar(() => {}, request => requests.push(request));
+    const leap = Date.UTC(2024, 1, 29);
+    calendar.setRows([{start: leap, count: 3, minutes: 12}], {start: Date.UTC(2023, 0, 1), end: Date.UTC(2024, 11, 31)});
+    const months = f.get('place-calendar-days').children;
+    assert.deepEqual(months.map(month => month.children[0].textContent), ['Jan 2024', 'Feb 2024', 'Mar 2024']);
+    const cells = months.flatMap(month => month.children[1].children.filter(cell => cell.dataset.date));
+    assert.equal(cells.length, 91);
+    const february = cells.find(cell => cell.dataset.date === '2024-02-29');
+    assert.equal(february.style.gridColumn, 4); assert.equal(february.style.gridRow, 6);
+    assert.match(february.title, /3 locations · 12 min/);
+    f.get('place-calendar-previous').click();
+    assert.equal(f.get('place-calendar-caption').textContent, 'Q4 · 2023');
+    assert.equal(f.get('place-calendar-anchor').value, '2023-12-31');
+    f.get('place-calendar-next').click();
+    assert.equal(f.get('place-calendar-caption').textContent, 'Q1 · 2024');
+    f.get('place-calendar-view').value = 'month'; f.get('place-calendar-view').onchange();
+    assert.equal(f.get('place-calendar-days').children.length, 31);
+    assert.equal(requests.length, 0);
+    assert.equal(placeCalendarPeriod(leap, 'quarter').end - placeCalendarPeriod(leap, 'quarter').start + 1, 91 * day);
+  } finally { f.cleanup(); }
+});
+
+test('week has day rows, hour columns and matching keyboard navigation without scroll state', () => {
+  const f = fixture(), day = 86_400_000, requests = [], selected = [], start = Date.UTC(2024, 1, 26);
+  try {
+    f.get('place-calendar-view').value = 'week';
+    const calendar = createPlaceCalendar(entry => selected.push(entry), request => requests.push(request));
+    calendar.setRows([{start, count: 168, minutes: 168}], {start, end: start + 7 * day - 1});
+    assert.equal(requests[0].start, start); assert.equal(requests[0].end, start + 7 * day - 1);
+    calendar.receive({id: requests[0].id, hours: Array.from({length: 168}, (_, i) => ({start: start + i * day / 24, count: 1, minutes: 1}))});
+    const nodes = f.get('place-calendar-hours').children, cells = nodes.filter(node => node.dataset.date);
+    assert.equal(cells.length, 168);
+    assert.equal(cells[57].style.gridColumn, 11); assert.equal(cells[57].style.gridRow, 4);
+    assert.equal(nodes[0].style.gridColumn, 1); assert.equal(nodes[0].style.gridRow, 2);
+    assert.equal(nodes[6].style.gridRow, 8);
+    assert.equal(nodes[7].style.gridColumn, 2); assert.equal(nodes[7].style.gridRow, 1); assert.equal(nodes[7].textContent, '00');
+    cells[0].onkeydown({key: 'ArrowRight', preventDefault() {}}); assert.equal(cells[1].focused, true);
+    cells[1].onkeydown({key: 'ArrowDown', preventDefault() {}}); assert.equal(cells[25].focused, true);
+    nodes[2].click(); assert.deepEqual(selected, [{start: start + 2 * day, end: start + 3 * day}]);
+    assert.equal(f.get('place-calendar-scroll').scrollTop, undefined);
+  } finally { f.cleanup(); }
+});
+
+test('calendar dates and table rows update Date window without changing view, anchor, tab or scope', () => {
+  const day = 86_400_000, start = Date.UTC(2024, 0, 1), end = Date.UTC(2024, 11, 31) + day - 1;
+  const f = fixture({min: start, max: end});
+  try {
+    Object.assign(f.options, {start, end});
+    f.get('place-calendar-view').value = 'quarter';
+    f.controller.select(area, 'Drawn area');
+    const daily = [{start: Date.UTC(2024, 3, 3), count: 2, minutes: 10}, {start: Date.UTC(2024, 5, 20), count: 1, minutes: 1}];
+    const result = {count: 3, visits: 2, days: 2, first: daily[0].start, last: daily[1].start, minutes: 11, stays: daily.map(row => ({...row, end: row.start + 60000})), daily};
+    f.controller.receive({type: 'place', id: f.sent[0].id, result});
+    const caption = f.get('place-calendar-caption').textContent, anchor = f.get('place-calendar-anchor').value;
+    const first = f.get('place-calendar-days').children[0].children[1].children.find(cell => cell.dataset.date === '2024-04-03');
+    first.click();
+    assert.deepEqual(f.dates, [[Date.UTC(2024, 3, 3), Date.UTC(2024, 3, 4) - 1]]);
+    f.controller.receive({type: 'place', id: f.sent.at(-1).id, result: {...result, daily: daily.slice(0, 1)}});
+    assert.equal(f.get('place-calendar-view').value, 'quarter');
+    assert.equal(f.get('place-calendar-caption').textContent, caption); assert.equal(f.get('place-calendar-anchor').value, anchor);
+    assert.equal(f.get('place-scope').children[0].attributes['aria-pressed'], 'true');
+    f.get('place-scope').children[1].click();
+    f.controller.receive({type: 'place', id: f.sent.at(-1).id, result});
+    const requests = f.sent.length;
+    f.get('place-daily-label').click(); f.get('place-daily').children[0].children[0].children[0].click();
+    assert.equal(f.sent.length, requests); // All dates remains independent of the map window.
+    assert.equal(f.get('place-scope').children[1].attributes['aria-pressed'], 'true');
+    assert.equal(f.get('place-view-calendar').hidden, true); assert.equal(f.get('place-view-daily').hidden, false);
+    f.get('place-tab-calendar').click();
+    assert.equal(f.get('place-calendar-caption').textContent, caption); assert.equal(f.get('place-calendar-anchor').value, anchor);
+  } finally { f.cleanup(); }
+});
+
+test('browsing an hourly period outside Current window does not send an invalid query', () => {
+  const f = fixture(), requests = [], start = Date.UTC(2024, 1, 29), day = 86_400_000;
+  try {
+    f.get('place-calendar-view').value = 'day';
+    const calendar = createPlaceCalendar(() => {}, request => requests.push(request));
+    calendar.setRows([{start, count: 1, minutes: 1}], {start, end: start + day - 1, historyStart: Date.UTC(2024, 0, 1), historyEnd: Date.UTC(2024, 11, 31)});
+    f.get('place-calendar-next').click();
+    calendar.receive({id: requests[0].id, hours: [{start, count: 1, minutes: 1}]});
+    assert.equal(requests.length, 1); assert.equal(f.get('place-calendar-hours').attributes['aria-busy'], 'false');
+    assert.ok(f.get('place-calendar-hours').children.filter(node => node.dataset.date).every(cell => cell.disabled));
+    assert.equal(f.get('place-calendar-anchor').value, '2024-03-01');
+    f.get('place-calendar-view').value = 'year'; f.get('place-calendar-view').onchange();
+    assert.equal(f.get('place-calendar-days').children.length, 366);
   } finally { f.cleanup(); }
 });
 

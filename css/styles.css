@@ -1311,7 +1311,7 @@ select {
   padding: 0;
   border: 1px solid #ffffff05;
   border-radius: 2px;
-  background: var(--activity-color,#28312b);
+  background: var(--activity-color,var(--border));
 }
 
 .place-calendar-days button:disabled {
@@ -1322,21 +1322,24 @@ select {
   outline-offset: 1px;
 }
 
-.place-view [data-level="1"] { --activity-color: #244d2d; }
-.place-view [data-level="2"] { --activity-color: #397d3f; }
-.place-view [data-level="3"] { --activity-color: #65ad51; }
-.place-view [data-level="4"] { --activity-color: #b0da70; }
+.place-view [data-level="1"] { --activity-color: color-mix(in srgb,var(--accent) 25%,var(--bg)); }
+.place-view [data-level="2"] { --activity-color: color-mix(in srgb,var(--accent) 45%,var(--bg)); }
+.place-view [data-level="3"] { --activity-color: color-mix(in srgb,var(--accent) 70%,var(--bg)); }
+.place-view [data-level="4"] { --activity-color: var(--accent); }
 
 .place-calendar-scale i {
   width: 10px;
   height: 10px;
 }
 
-.is-month .place-calendar-body {
+.is-month .place-calendar-body,
+.is-quarter .place-calendar-body {
   display: block;
 }
 
-.is-month .place-calendar-weekdays {
+.is-month .place-calendar-weekdays,
+.is-quarter .place-calendar-weekdays,
+.is-quarter .place-calendar-months {
   display: none;
 }
 
@@ -1371,11 +1374,43 @@ select {
   font-size: 8px;
 }
 
+.is-quarter .place-calendar-days {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  grid-template-rows: none;
+  gap: 14px;
+}
+
+.place-calendar-month h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.place-quarter-days {
+  display: grid;
+  grid-template-columns: repeat(7,minmax(0,1fr));
+  grid-auto-rows: 20px;
+  gap: 3px;
+  align-items: center;
+}
+
+.place-quarter-days span {
+  font-size: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.place-quarter-days button {
+  height: 100%;
+  font-size: 10px;
+  color: var(--ink);
+}
+
 .is-month .place-calendar-days [data-level="3"],
 .is-month .place-calendar-days [data-level="4"],
-.place-calendar-hours.is-week [data-level="3"],
-.place-calendar-hours.is-week [data-level="4"] {
-  color: #142018;
+.place-quarter-days [data-level="3"],
+.place-quarter-days [data-level="4"] {
+  color: var(--bg);
 }
 
 .place-calendar-hours {
@@ -1387,19 +1422,17 @@ select {
 }
 
 .place-calendar-hours.is-week {
-  grid-template-columns: 32px repeat(7,minmax(0,1fr));
-  grid-template-rows: 28px repeat(24,16px);
+  grid-template-columns: 36px repeat(24,minmax(0,1fr));
+  grid-template-rows: 14px repeat(7,11px);
 }
 
 .place-calendar-hours.is-week .place-calendar-day-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  height: 28px;
+  height: 11px;
   padding: 0;
-  background: #141d17;
   color: var(--accent);
-  font-size: 9px;
+  font-size: 8px;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .place-calendar-hours button[data-level] {
@@ -1426,7 +1459,7 @@ select {
   right: 0;
   height: var(--activity,0%);
   border-radius: 2px;
-  background: var(--activity-color,#28312b);
+  background: var(--activity-color,var(--border));
 }
 
 #place-finish:not(:disabled) {
@@ -1463,6 +1496,9 @@ select {
 }
 
 @media(max-width:550px) {
+  .is-quarter .place-calendar-days {
+    grid-template-columns: minmax(0,1fr);
+  }
   .place-heading {
     flex-wrap: wrap;
     gap: 4px 10px;

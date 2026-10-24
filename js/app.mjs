@@ -1,5 +1,5 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=12';
-import {createPlaceHistory} from './place-history.mjs?v=15';
+import {createPlaceHistory} from './place-history.mjs?v=16';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, HISTOGRAM_BINS} from './data.mjs?v=17';
 import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=14';
@@ -417,7 +417,7 @@ async function init() {
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
-    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, navigateWindow: direction => { stopPlayback(); moveWindow(direction); }, selectDates: (start, end, hour) => { stopPlayback(); if (hour !== undefined) { $('hour-start').value = hour; $('hour-end').value = hour + 1; } setDates(start, end); rememberSettings(); }});
+    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end, hour) => { stopPlayback(); if (hour !== undefined) { $('hour-start').value = hour; $('hour-end').value = hour + 1; } setDates(start, end); rememberSettings(); }});
     map.addControl(new maplibre.NavigationControl({visualizePitch: true}), 'top-right');
     const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
     compass.setAttribute('aria-label', 'Reset rotation and tilt'); compass.title = 'Reset rotation and tilt';

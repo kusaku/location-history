@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=34">
-    <script type="module" src="js/app.mjs?v=40">
+    <link rel="stylesheet" href="css/styles.css?v=35">
+    <script type="module" src="js/app.mjs?v=41">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -390,8 +390,7 @@
               <section id="place-view-calendar" class="place-view" role="tabpanel" aria-labelledby="place-tab-calendar">
                 <div class="place-calendar-toolbar">
                   <select id="place-calendar-view" aria-label="Calendar view">
-                    <option value="auto">Follow Date window</option>
-                    <option value="year">Year</option><option value="month">Month</option><option value="week">Week</option><option value="day">Day · hours</option>
+                    <option value="year">Year</option><option value="quarter">Quarter</option><option value="month">Month</option><option value="week">Week</option><option value="day">Day · hours</option>
                   </select>
                   <div class="place-calendar-years">
                     <button id="place-calendar-previous" type="button" aria-label="Previous calendar year">←</button>
@@ -624,7 +623,7 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. <b>Calendar</b> follows the Date window by default: Day shows hourly bars, Week shows an hourly timetable, Month shows a day calendar, and longer ranges use a yearly activity grid. All dates uses the yearly view. While following Current window, the calendar arrows step the map window too. Choose a view manually to browse with the arrows or date/year field; <b>Follow Date window</b> restores synchronization. Shade by locations or time in the area. Hover or focus an interval for its totals; select a day to filter its dates, or an hour to set both the date and hour filters. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Selecting a date updates Date window without changing the calendar view or period; selecting an hour also sets the hour filter. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
       <h3>Filters and date windows</h3>
       <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>

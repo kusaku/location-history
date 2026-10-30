@@ -1,9 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=16';
-import {createPlaceHistory} from './place-history.mjs?v=20';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=17';
+import {createPlaceHistory} from './place-history.mjs?v=21';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=21';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=18';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=21';
+import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=22';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=19';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=22';
+import {createFilters, bindRange, paintRange} from './filters.mjs?v=1';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -14,7 +15,14 @@ let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy, speed and altitude.', route: 'Paths coloured by time in Date window. Accuracy filtering connects retained locations; gaps and excluded jumps still break paths.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
-let currentAttribution = '';
+let currentAttribution = '', filters, selectedPoint;
+function paintAccuracy() {
+  if (!map?.getSource('point-accuracy')) return;
+  const p = selectedPoint, metresPerPixel = p ? 40_075_016.6856 * Math.cos(p.lat * Math.PI / 180) / (512 * 2 ** map.getZoom()) : Infinity;
+  const visible = state.mode === 'points' && p && p.accuracy / metresPerPixel > state.views.points.radius / 8;
+  map.setLayoutProperty('point-accuracy-fill', 'visibility', visible ? 'visible' : 'none');
+  map.setLayoutProperty('point-accuracy-line', 'visibility', visible ? 'visible' : 'none');
+}
 function setAttribution(html) {
   if (html === currentAttribution) return;
   currentAttribution = html;
@@ -61,7 +69,7 @@ function currentOptions() {
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
   const {start, end, mode, period} = state, {metric, radius, colorBy} = state.views[mode];
-  return {start, end, mode, period, metric, radius, colorBy, excludeJumps: state.excludeJumps, accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  return {start, end, mode, period, metric, radius, colorBy, excludeJumps: state.excludeJumps, ...filters.values(), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -76,7 +84,7 @@ function rememberSettings() {
     ...state,
     // An automatic provider fallback must not replace the user's choice.
     basemap: preferences.basemap,
-    accuracy: Number($('accuracy').value), hourStart: Number($('hour-start').value), hourEnd: Number($('hour-end').value),
+    ...filters.values(),
     period: state.report ? state.period : preferences.period,
     periodDay: state.report ? state.periodDay : preferences.periodDay,
     dateRange: state.report ? [state.start, state.end] : preferences.dateRange,
@@ -89,6 +97,8 @@ function paintSources(changes = state.result) {
   }
 }
 function paint(changed) {
+  paintAccuracy();
+  if (changed === 'mode' && map && map.getCanvas().style.cursor !== 'crosshair') map.getCanvas().style.cursor = '';
   const view = state.views[state.mode], palette = PALETTES[view.palette];
   $('radius').min = RADIUS_MIN[state.mode];
   for (const [id, value] of Object.entries({metric: view.metric, radius: view.radius, intensity: view.intensity, lineWidth: view.lineWidth ?? 1.5, opacity: view.opacity * 100})) $(id).value = value;
@@ -125,6 +135,9 @@ function paintLegend() {
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
   const before = raiseBasemapLabels(map);
+  map.addSource('point-accuracy', {type: 'geojson', data: empty()});
+  map.addLayer({id: 'point-accuracy-fill', type: 'fill', source: 'point-accuracy', paint: {'fill-color': '#d5f476', 'fill-opacity': .12}}, before);
+  map.addLayer({id: 'point-accuracy-line', type: 'line', source: 'point-accuracy', paint: {'line-color': '#d5f476', 'line-opacity': .7, 'line-width': 1}}, before);
   for (const name of ['density', 'dots', 'route']) map.addSource(`history-${name}`, {type: 'geojson', data: empty(), maxzoom: 18, tolerance: .5, buffer: 64});
   map.addLayer({id: 'history-heat', type: 'heatmap', source: 'history-density', paint: {'heatmap-weight': ['get', 'weight']}}, before);
   map.addLayer({id: 'history-hex', type: 'fill', source: 'history-density', paint: {'fill-outline-color': '#ffffff35'}}, before);
@@ -154,6 +167,7 @@ async function selectBasemap(key, remember = false) {
       if (Array.isArray(icon) && icon[0] === 'step' && icon[2] === 'circle-11') icon[2] = 'circle_11';
     }
     state.basemap = key;
+    popup?.remove();
     nativeMaps.activate(native);
     $('workspace').classList.toggle('native-map', Boolean(provider.native));
     $('workspace').classList.toggle('google-map', key.startsWith('google'));
@@ -174,7 +188,7 @@ function showResult(result) {
   if (state.views[state.mode].colorBy === 'altitude') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode], altitudeRange: result.altitudeRange}, 'altitude'); }
   $('stat-records').textContent = number.format(result.count);
   $('stat-days').textContent = number.format(result.days);
-  $('stat-distance').textContent = number.format(result.km);
+  $('stat-distance').textContent = new Intl.NumberFormat('en', {maximumFractionDigits: result.km < 1 ? 3 : 1}).format(result.km);
   $('range-summary').textContent = result.count || result.drawn ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
   $('render-note').textContent = !result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`;
   $('fit').disabled = !result.bounds;
@@ -197,10 +211,14 @@ function syncDates() {
   if (!state.report) return;
   $('date-start').value = date(state.start); $('date-end').value = date(state.end);
   const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY;
-  const span = Math.max(DAY, max - min);
-  $('range-start').value = Math.round((state.start - min) / span * 1000);
-  $('range-end').value = max === min ? 1000 : Math.round((Math.min(max, Math.floor(state.end / DAY) * DAY) - min) / span * 1000);
+  const days = Math.max(1, Math.round((max - min) / DAY));
+  $('range-start').max = $('range-end').max = days;
+  $('range-start').value = Math.round((state.start - min) / DAY);
+  $('range-end').value = max === min ? 1 : Math.round((Math.min(max, Math.floor(state.end / DAY) * DAY) - min) / DAY);
   $('range-start').disabled = $('range-end').disabled = max === min;
+  paintRange($('date-range'));
+  $('range-start').setAttribute('aria-valuetext', formatDate(state.start));
+  $('range-end').setAttribute('aria-valuetext', formatDate(state.end));
   $('period-back').disabled = state.start <= min;
   $('period-forward').disabled = state.end >= max + DAY - 1;
   $('play').disabled = !playback && $('period-forward').disabled;
@@ -213,6 +231,7 @@ function stopPlayback() {
   $('play').disabled = !state.report || $('period-forward').disabled;
 }
 function setDates(start, end, period = null, periodDay = null) {
+  popup?.remove();
   state.start = start; state.end = end;
   state.period = period ?? (start <= state.report.min && end >= state.report.max ? 'all' : null);
   state.periodDay = periodDay;
@@ -264,7 +283,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=21', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=22', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -277,6 +296,7 @@ function createWorker() {
     } else if (data.type === 'imported') {
       placeHistory?.clear();
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
+      filters.setBounds(data.report.ranges);
       $('empty-state').hidden = true;
       $('source-label').textContent = state.nextSample ? 'Bundled sample' : data.report.files.length === 1 ? data.report.files[0] : `${data.report.files.length} files merged`;
       $('source-label').title = data.report.files.join(', ');
@@ -353,14 +373,8 @@ function bindControls() {
     bar.onfocus = () => { for (const sibling of $('histogram').children) sibling.tabIndex = sibling === bar ? 0 : -1; };
     $('histogram').append(bar);
   }
-  for (let i = 0; i <= 24; i++) {
-    if (i < 24) $('hour-start').add(new Option(`${String(i).padStart(2, '0')}:00`, i));
-    if (i > 0) $('hour-end').add(new Option(`${String(i).padStart(2, '0')}:00`, i));
-  }
-  for (const [id, value] of Object.entries({'hour-start': preferences.hourStart, 'hour-end': preferences.hourEnd, accuracy: preferences.accuracy})) $(id).value = value;
-  $('hour-start').onchange = () => { stopPlayback(); if (+$('hour-start').value >= +$('hour-end').value) $('hour-end').value = String(+$('hour-start').value + 1); rememberSettings(); refresh(); };
-  $('hour-end').onchange = () => { stopPlayback(); if (+$('hour-end').value <= +$('hour-start').value) $('hour-start').value = String(+$('hour-end').value - 1); rememberSettings(); refresh(); };
-  $('accuracy').onchange = () => { stopPlayback(); rememberSettings(); refresh(); };
+  filters = createFilters($('window-filters'), preferences, () => { stopPlayback(); popup?.remove(); refresh(); }, rememberSettings);
+  bindRange($('date-range'));
   $('exclude-jumps').setAttribute('aria-pressed', String(state.excludeJumps));
   $('exclude-jumps').onclick = () => {
     stopPlayback(); state.excludeJumps = !state.excludeJumps;
@@ -390,9 +404,9 @@ function bindControls() {
     setDates(start, end); rememberSettings();
   };
   for (const id of ['range-start', 'range-end']) $(id).oninput = () => {
-    stopPlayback(); const min = Math.floor(state.report.min / DAY) * DAY, span = Math.floor(state.report.max / DAY) * DAY - min;
-    let start = min + Math.round(Number($('range-start').value) / 1000 * span / DAY) * DAY;
-    let end = min + Math.round(Number($('range-end').value) / 1000 * span / DAY) * DAY + DAY - 1;
+    stopPlayback(); const min = Math.floor(state.report.min / DAY) * DAY;
+    let start = min + Number($('range-start').value) * DAY;
+    let end = min + Number($('range-end').value) * DAY + DAY - 1;
     if (start > end) { if (id === 'range-start') end = start + DAY - 1; else start = end - DAY + 1; }
     setDates(start, end);
   };
@@ -435,7 +449,7 @@ async function init() {
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
-    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end, hour) => { stopPlayback(); $('hour-start').value = hour ?? 0; $('hour-end').value = hour === undefined ? 24 : hour + 1; setDates(start, end); rememberSettings(); }});
+    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end, hour) => { stopPlayback(); filters.setHours(hour ?? 0, hour === undefined ? 24 : hour + 1); setDates(start, end); rememberSettings(); }});
     map.addControl(new maplibre.NavigationControl({visualizePitch: true}), 'top-right');
     const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
     compass.setAttribute('aria-label', 'Reset rotation and tilt'); compass.title = 'Reset rotation and tilt';
@@ -444,7 +458,10 @@ async function init() {
     attributionControl = new maplibre.AttributionControl({compact: false});
     map.addControl(attributionControl, 'bottom-right');
     new ResizeObserver(entries => $('workspace').style.setProperty('--attribution-space', `${entries[0].contentRect.height + 10}px`)).observe(map.getContainer().querySelector('.maplibregl-ctrl-bottom-right'));
-    map.on('style.load', installLayers); map.on('moveend', refresh); map.on('moveend', refreshAttribution);
+    map.on('style.load', installLayers); map.on('moveend', refresh); map.on('moveend', refreshAttribution); map.on('zoomend', paintAccuracy);
+    map.on('mouseenter', 'history-dots', () => { if (state.mode === 'points' && !state.importing && map.getCanvas().style.cursor !== 'crosshair') map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'history-dots', () => { if (map.getCanvas().style.cursor === 'pointer') map.getCanvas().style.cursor = ''; });
+    $('draw-area').addEventListener('click', () => popup?.remove());
     let errors = 0;
     map.on('error', event => {
       if (/source|tile|fetch|network|load/i.test(event.error?.message ?? '') && ++errors >= 3) { $('map-error').textContent = 'Some map tiles could not load. Your history is still available. Try another base map.'; $('map-error').hidden = false; }
@@ -454,7 +471,7 @@ async function init() {
       const layer = state.mode === 'hex' ? 'history-hex' : state.mode === 'points' ? 'history-dots' : null;
       if (!layer || !map.getLayer(layer)) return;
       const feature = map.queryRenderedFeatures(event.point, {layers: [layer]})[0];
-      if (!feature) return;
+      if (!feature) { popup?.remove(); return; }
       if (state.mode === 'hex') {
         // Rendered polygons may be tile-clipped. Inspect the original cell.
         const original = state.result?.density?.features.find(f => f.properties.cell === feature.properties.cell);
@@ -467,7 +484,12 @@ async function init() {
       for (const text of [new Date(p.time).toISOString().replace('T', ' ').replace(/Z$/, ' UTC'), p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
         const line = document.createElement('div'); line.textContent = text; node.append(line);
       }
-      popup?.remove(); popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat(event.lngLat).setDOMContent(node).addTo(map);
+      popup?.remove();
+      const [lon, lat] = feature.geometry.coordinates;
+      selectedPoint = {lon: lon + 360 * Math.round((event.lngLat.lng - lon) / 360), lat, accuracy: p.accuracy};
+      map.getSource('point-accuracy').setData(accuracyCircle([selectedPoint.lon, lat], p.accuracy)); paintAccuracy();
+      popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat([selectedPoint.lon, lat]).setDOMContent(node).addTo(map);
+      popup.on('close', () => { selectedPoint = null; map.getSource('point-accuracy')?.setData(empty()); paintAccuracy(); });
     });
     createWorker(); setBusy(false); await selectBasemap(state.basemap);
     // The existing public sample is explicit; personal imports are never persisted.

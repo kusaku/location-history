@@ -39,6 +39,7 @@ test('worker merges files, preserves old data after failure, filters exact obser
     assert.equal(imported.type, 'imported'); assert.equal(imported.report.total, 3); assert.equal(imported.report.duplicates, 1);
     const failed = await request('import', {files: [json({locations: [record(9000)]}), json({unsupported: true})]});
     assert.equal(failed.type, 'error'); assert.equal(failed.operation, 'import');
+    assert.match(failed.message, /^File 2: Unsupported JSON/);
     const result = await request('query');
     assert.equal(result.result.count, 3);
     const filtered = await request('query', {options: {mode: 'points', start: 0, end: 2000, accuracy: 100, hourStart: 0, hourEnd: 24}});
@@ -132,5 +133,17 @@ test('combined phone imports ignore recognized empty files, preserve metadata an
     assert.equal(points[0].properties.altitude, 50); assert.equal(points[0].properties.speed, 0);
     const failed = await request('import', {files: [json({rawSignals: []})]});
     assert.equal(failed.type, 'error'); assert.equal((await request('query')).result.count, 1);
+  } finally { await worker.terminate(); }
+});
+
+test('all six overlapping phone export variants merge in the same batch, including the empty variant', async () => {
+  const {worker, request} = await startWorker();
+  const semanticSegments = [{startTime: 0, timelinePath: [{point: 'geo:52.5,13.4', time: 0}]}];
+  const rawSignals = [{position: {LatLng: '52.5,13.4', timestamp: 0, accuracyMeters: 5}}, {position: {LatLng: '52.5,13.401', timestamp: 1000}}];
+  try {
+    const variants = [{semanticSegments, rawSignals}, {rawSignals}, {semanticSegments, rawSignals: []}, {semanticSegments, rawSignals: []}, {rawSignals: []}, {semanticSegments, rawSignals}];
+    const result = await request('import', {files: variants.map(data => json({...data, userLocationProfile: {}}))});
+    assert.equal(result.type, 'imported'); assert.equal(result.report.total, 2); assert.equal(result.report.duplicates, 8);
+    assert.equal((await request('query', {options: {mode: 'points', accuracy: 10}})).result.count, 2);
   } finally { await worker.terminate(); }
 });

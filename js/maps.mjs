@@ -1,5 +1,5 @@
 import {MAP_CONFIG} from './map-config.mjs?v=4';
-import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=21';
+import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=22';
 
 // Keep every provider's attribution with its documented endpoint.
 const osm = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
@@ -205,6 +205,21 @@ export const PALETTES = {
   ocean: {name: 'Ocean', colors: ['#182a74', '#1761ab', '#1aa6b2', '#47d7bb', '#a3f1b5', '#f0ffce']},
   spectral: {name: 'Spectrum', colors: ['#4155b4', '#21a6cc', '#75d2a5', '#f6e683', '#f89b54', '#d94448']},
 };
+
+// A single selected measurement, computed on demand rather than for every fix.
+export function accuracyCircle([lon, lat], metres) {
+  if (!Number.isFinite(metres) || metres <= 0) return {type: 'FeatureCollection', features: []};
+  const rad = Math.PI / 180, angle = Math.min(metres, 10_000_000) / 6_371_000;
+  const sin = Math.sin(lat * rad), cos = Math.cos(lat * rad), coordinates = [];
+  for (let i = 0; i < 64; i++) {
+    const bearing = i / 64 * 2 * Math.PI;
+    const y = Math.asin(Math.max(-1, Math.min(1, sin * Math.cos(angle) + cos * Math.sin(angle) * Math.cos(bearing))));
+    const x = lon * rad + Math.atan2(Math.sin(bearing) * Math.sin(angle) * cos, Math.cos(angle) - sin * Math.sin(y));
+    coordinates.push([x / rad, y / rad]);
+  }
+  coordinates.push(coordinates[0]);
+  return {type: 'FeatureCollection', features: [{type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [coordinates]}}]};
+}
 
 function colourExpression(palette, input, transparent = false) {
   const colors = PALETTES[palette].colors;

@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=37">
-    <script type="module" src="js/app.mjs?v=46">
+    <link rel="stylesheet" href="css/styles.css?v=38">
+    <script type="module" src="js/app.mjs?v=47">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -461,25 +461,8 @@
                 </p>
               </div>
               <div class="timeline-controls">
-                <div class="window-filters" role="group" aria-label="Hour and accuracy filters">
-                  <label for="hour-start">From
-                    <select id="hour-start" aria-label="From hour UTC" title="From hour · UTC"></select>
-                  </label>
-                  <label for="hour-end">To
-                    <select id="hour-end" aria-label="Until hour UTC" title="Until hour · UTC"></select>
-                  </label>
-                  <label for="accuracy">Accuracy
-                    <select id="accuracy" title="Locations without accuracy information stay included">
-                      <option value="0">All</option>
-                      <option value="10">&lt;10 m</option>
-                      <option value="50">&lt;50 m</option>
-                      <option value="100">&lt;100 m</option>
-                      <option value="500">&lt;500 m</option>
-                      <option value="1000">&lt;1 km</option>
-                    </select>
-                  </label>
-                  <button id="exclude-jumps" class="filter-toggle" type="button" aria-pressed="false" title="Exclude both observations of a jump over 1,000 km/h within six hours, including different locations at the same time">Exclude jumps</button>
-                </div>
+                <div class="window-filters" id="window-filters" role="group" aria-label="Location filters"></div>
+                <button id="exclude-jumps" class="filter-toggle" type="button" aria-pressed="false" title="Exclude implausible speeds and isolated spikes, allowing for GPS uncertainty">Exclude jumps</button>
                 <div class="presets" role="group" aria-label="Window size">
                   <button type="button" data-period="1" aria-pressed="false" title="Resize the current window to one day" disabled>
                     Day
@@ -520,7 +503,7 @@
                 From
                 <input id="date-start" type="date" aria-label="Start date" disabled>
               </label>
-              <div class="range-controls">
+              <div class="range-controls dual-range" id="date-range">
                 <label class="sr-only" for="range-start">
                   Timeline start
                 </label>
@@ -632,9 +615,10 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Known visit intervals contribute time on every covered UTC day and hour, including days without a new GPS observation; no extra GPS points are invented. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy, speed, altitude and jump filters still apply. Known visit intervals contribute time on every covered UTC day and hour, including days without a new GPS observation; no extra GPS points are invented. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
       <h3>Filters and date windows</h3>
-      <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import. Jump and hour exclusions preserve route breaks; accuracy filtering connects the retained locations. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
+      <p><b>Hours</b>, <b>Accuracy</b>, <b>Speed</b> and <b>Altitude</b> open compact range controls. Drag either thumb or enter exact bounds; Reset clears that filter. Accuracy and speed sliders give extra room to small values. Unknown measurements stay included unless you turn off <b>Include unknown</b>. The date range has two thumbs on one track, with one-day steps and exact date fields.</p>
+      <p><b>Exclude jumps</b> checks implausible speeds and isolated out-and-back spikes, allowing for GPS uncertainty. It preserves supported neighbouring observations and ordinary flight tracks; ambiguous conflicts may exclude both endpoints. It is a heuristic, computed once per import. Jump and hour exclusions preserve route breaks; numeric measurement filters connect retained locations.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
       <p>Select any histogram bar to use its UTC dates. The 64 bars span the entire history, so their date ranges depend on the imported history. Short histories have disabled intervals without dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
       <h3>
@@ -659,7 +643,8 @@
         connects consecutive observations, skipping inaccurate locations while preserving breaks at gaps over six hours, excluded jumps, hour filters, dateline crossings, or implausible speeds.
       </p>
       <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b>, <b>Speed</b> or <b>Altitude</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. The scales stay fixed when panning. Altitude uses the known height range in Date window, including zero and negative heights. It is the height recorded in the file; the export may use WGS84 rather than mean sea level. Click a point for its timestamp, accuracy, speed and altitude. Heatmap and Hexagons use colour for density instead.</p>
-      <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between retained recordings, averaged at a point over its incoming and outgoing intervals. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude paths average values over bounded displayed sections; a section is grey if less than half its duration has data. Narrow Date window for more detail.</p>
+      <p>Distance uses accumulated displacement beyond GPS uncertainty rather than adding every small fluctuation. Short intervals with recorded device speed use its time integral. Small walks can still count, but movements below measurement uncertainty may be missed. Distance is an estimate.</p>
+      <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between neighbouring original recordings, averaged at a point over its incoming and outgoing intervals. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude paths average values over bounded displayed sections; a section is grey if less than half its duration has data. Narrow Date window for more detail.</p>
       <h3>
         Density metrics
       </h3>
@@ -724,7 +709,7 @@
         </div>
       </dl>
       <p class="hint">
-        Dates and hours use UTC. Distance follows usable consecutive observations and can undercount travel. Unknown accuracy stays included. No data is a valid filter result.
+        Dates and hours use UTC. Distance suppresses GPS jitter using accumulated displacement beyond measurement uncertainty. Short intervals with device speed use that measurement. It remains an estimate and can undercount small movements when accuracy is poor. Unknown accuracy stays included. No data is a valid filter result.
       </p>
     </dialog>
     <noscript>

@@ -24,7 +24,7 @@ test('area time never bridges an exit, an excluded observation, or a 15-minute r
   assert.equal(query.place(box).minutes, 3);
   const jumps = createHistoryQuery([point(0), point(minute, 13.9), point(2 * minute, 13.9)]);
   assert.equal(jumps.place(box).minutes, 2);
-  assert.equal(jumps.place(box, {excludeJumps: true}).minutes, 0);
+  assert.equal(jumps.place(box, {excludeJumps: true}).minutes, 1); // Keep the supported pair after the bad starting fix.
 });
 test('moving time splits across midnight and clips to selected hours', () => {
   const query = createHistoryQuery([point(DAY - 5 * minute, 12.8), point(DAY + 5 * minute, 13), point(DAY + 10 * minute, 13.2)]);

@@ -244,7 +244,7 @@ test('speed estimates reject gaps and impossible travel but ignore GPS accuracy'
   assert.ok(intervalSpeed({...a, accuracy: null}, {...b, accuracy: null}) > 0);
 });
 
-test('point speed uses retained adjacent intervals weighted by time and skips accuracy exclusions', () => {
+test('point speed is weighted by time and remains stable across display filters', () => {
   const points = [point(0, 0, 0, 0), point(60000, .0015, 0, 20), point(180000, .0075, 0, 0)];
   const query = createHistoryQuery(points), dots = query({mode: 'points'}).dots.features;
   const incoming = intervalSpeed(points[0], points[1]), outgoing = intervalSpeed(points[1], points[2]);
@@ -252,8 +252,8 @@ test('point speed uses retained adjacent intervals weighted by time and skips ac
   assert.ok(Math.abs(dots[1].properties.speed - (incoming + outgoing * 2) / 3) < 1e-4);
   assert.ok(Math.abs(dots[2].properties.speed - outgoing) < 1e-4);
   const filtered = query({mode: 'points', accuracy: 10}).dots.features;
-  assert.equal(filtered.length, 2); assert.ok(filtered.every(dot => Math.abs(dot.properties.speed - intervalSpeed(points[0], points[2])) < 1e-4));
-  assert.equal(query({mode: 'points', start: 60000, end: 60000}).dots.features[0].properties.speed, null);
+  assert.equal(filtered.length, 2); assert.equal(filtered[0].properties.speed, dots[0].properties.speed); assert.equal(filtered[1].properties.speed, dots[2].properties.speed);
+  assert.equal(query({mode: 'points', start: 60000, end: 60000}).dots.features[0].properties.speed, dots[1].properties.speed);
   const gap = createHistoryQuery([point(0), point(DAY)])({mode: 'points'});
   assert.ok(gap.dots.features.every(dot => dot.properties.speed === null));
 });
@@ -318,8 +318,8 @@ test('accuracy exclusions connect retained paths without bridging jump exclusion
   const query = createHistoryQuery(points);
   for (const colorBy of ['time', 'speed', 'altitude']) {
     const result = query({mode: 'route', colorBy, accuracy: 50, excludeJumps: true});
-    assert.equal(result.count, 3);
-    assert.ok(result.routes.features.every(part => part.geometry.coordinates.every(([lon]) => lon >= .003)));
+    assert.equal(result.count, 5); // Only the isolated spike is removed.
+    assert.ok(result.routes.features.every(part => part.geometry.coordinates.every(([lon]) => lon <= .001) || part.geometry.coordinates.every(([lon]) => lon >= .002)));
   }
 });
 

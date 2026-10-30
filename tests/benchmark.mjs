@@ -24,9 +24,10 @@ for (let i = 0; i < synthetic; i++) points.push({t: i * 60000 + Math.floor(i / 1
 for (const path of files) {
   const head = new Uint8Array(2), fd = openSync(path, 'r');
   readSync(fd, head); closeSync(fd);
-  const result = await readHistory({name: basename(path), size: statSync(path).size, slice: (start, end) => new Blob([head.slice(start, end)]), stream: () => Readable.toWeb(createReadStream(path))}, batch => { for (const p of batch) points.push(p); });
+  const result = await readHistory({name: basename(path), size: statSync(path).size, slice: (start, end) => new Blob([head.slice(start, end)]), stream: () => Readable.toWeb(createReadStream(path))}, batch => { for (const p of batch) points.push(p); }, () => {}, {allowEmpty: true});
   skipped += result.skipped;
 }
+if (!points.length) throw new Error('No valid timestamped locations were found.');
 const prepared = data.preparePoints(points);
 const setup = performance.now();
 const query = data.createHistoryQuery ? data.createHistoryQuery(prepared.points) : options => data.queryHistory(prepared.points, options);

@@ -1049,8 +1049,7 @@ select {
   flex-wrap: wrap;
 }
 
-.timeline-inputs label,
-.window-filters label {
+.timeline-inputs label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1060,8 +1059,7 @@ select {
   flex-shrink: 0;
 }
 
-.timeline-inputs input[type=date],
-.window-filters select {
+.timeline-inputs input[type=date] {
   padding: 5px 7px;
   font-size: 10px;
   background: #1e2a1f;
@@ -1078,19 +1076,6 @@ select {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-
-.window-filters label {
-  gap: 5px;
-}
-
-.window-filters select {
-  width: 64px;
-  min-width: 0;
-}
-
-.window-filters #accuracy {
-  width: 74px;
 }
 
 .filter-toggle {
@@ -1689,21 +1674,10 @@ select {
 }
 
 .range-controls {
-  display: flex;
-  align-items: center;
-  gap: 9px;
   flex: 1;
-  min-width: 50px;
+  min-width: 70px;
 }
 
-.range-controls input {
-  width: 50%;
-  min-width: 20px;
-  height: 24px;
-  accent-color: var(--accent);
-  cursor: pointer;
-  margin: 0;
-}
 
 .back-to-map {
   display: none;
@@ -1958,9 +1932,6 @@ dialog p {
     width: 110px;
   }
   .timeline-inputs input[type=date],
-  .window-filters select {
-    font-size: 9px;
-  }
   .utc-tag {
     display: none;
   }
@@ -2072,9 +2043,6 @@ dialog p {
     font-size: 9px;
     padding: 5px;
   }
-  .range-controls {
-    gap: 5px;
-  }
   .histogram {
     gap: 2px;
     height: 24px;
@@ -2143,16 +2111,6 @@ dialog p {
 }
 
 @media(max-width:400px) {
-  .window-filters label {
-    gap: 4px;
-  }
-  .window-filters select {
-    width: 54px;
-    padding: 5px;
-  }
-  .window-filters #accuracy {
-    width: 62px;
-  }
   .map-stats {
     gap: 12px;
   }
@@ -2181,4 +2139,33 @@ dialog p {
     transition: none!important;
     animation: none!important;
   }
+}
+
+/* One shared track, two native keyboard-accessible thumbs. */
+.dual-range { position: relative; height: 30px; min-width: 70px; }
+.dual-range::before { content: ''; position: absolute; inset: 12px 8px; height: 6px; border-radius: 8px; background: linear-gradient(to right, #53604d var(--low, 0%), var(--accent) var(--low, 0%), var(--accent) var(--high, 100%), #53604d var(--high, 100%)); }
+.dual-range input[type=range] { position: absolute; inset: 0; width: 100%; height: 30px; margin: 0; padding: 0; appearance: none; background: transparent; pointer-events: none; border: 0; }
+.dual-range input[type=range]::-webkit-slider-runnable-track { height: 6px; background: transparent; }
+.dual-range input[type=range]::-moz-range-track { height: 6px; background: transparent; }
+.dual-range input[type=range]::-webkit-slider-thumb { appearance: none; pointer-events: auto; width: 16px; height: 16px; margin-top: -5px; border: 2px solid #25321f; border-radius: 50%; background: var(--accent); cursor: ew-resize; }
+.dual-range input[type=range]::-moz-range-thumb { pointer-events: auto; width: 13px; height: 13px; border: 2px solid #25321f; border-radius: 50%; background: var(--accent); cursor: ew-resize; }
+.dual-range input[type=range]:focus-visible { outline: none; }
+.dual-range input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid white; outline-offset: 2px; }
+.dual-range input[type=range]:focus-visible::-moz-range-thumb { outline: 2px solid white; outline-offset: 2px; }
+.dual-range:has(input:disabled) { opacity: .35; }
+.filter-toggle.active { color: var(--accent); background: #2b381e; }
+.filter-popover { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 14px; border: 1px solid #63725a; border-radius: 9px; background: #162019; color: var(--text); box-shadow: 0 6px 25px #0008; }
+.filter-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.filter-title button { color: var(--accent); font-size: 11px; padding: 5px; }
+.filter-values { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 3px; }
+.filter-values label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
+.filter-values input { min-width: 0; width: 100%; padding: 6px 8px; font-size: 12px; background: #202c20; border: 1px solid #43513f; border-radius: 5px; }
+.filter-popover>.filter-toggle { margin-top: 7px; }
+@media(max-width:700px) {
+  .timeline-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+  .timeline-inputs label { min-width: 0; }
+  .timeline-inputs label:nth-of-type(2) { grid-column: 2; grid-row: 1; justify-content: flex-end; }
+  .timeline-inputs .dual-range { grid-column: 1/-1; grid-row: 2; width: 100%; }
+  .timeline-inputs input[type=date] { width: min(140px,100%); }
+  .timeline-inputs .utc-tag { display: none; }
 }

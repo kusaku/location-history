@@ -35,7 +35,7 @@ test('storage excludes imported history, map position, credentials and unknown f
 });
 
 test('invalid and obsolete values fall back independently without losing valid preferences', () => {
-  const storage = memoryStorage(JSON.stringify({basemap: 'removed-provider', mode: 'unknown', metric: 'days', palette: '__proto__', radius: 1e9, intensity: '2', opacity: .64, accuracy: 25, period: '999', dateRange: [0, 4], hourStart: 23, hourEnd: 2}));
+  const storage = memoryStorage(JSON.stringify({basemap: 'removed-provider', mode: 'unknown', metric: 'days', palette: '__proto__', radius: 1e9, intensity: '2', opacity: .64, accuracy: -25, period: '999', dateRange: [0, 4], hourStart: 23, hourEnd: 2}));
   const expected = loadSettings(maps, memoryStorage());
   for (const view of Object.values(expected.views)) view.metric = 'days';
   assert.deepEqual(loadSettings(maps, storage), expected);

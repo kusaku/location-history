@@ -1,18 +1,23 @@
-import {DAY} from './data.mjs?v=21';
-import {resizeWindow} from './timeline.mjs?v=18';
+import {DAY} from './data.mjs?v=22';
+import {resizeWindow} from './timeline.mjs?v=19';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
 const VIEW_DEFAULTS = Object.freeze({metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85});
-const DEFAULTS = Object.freeze({basemap: 'dark', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, excludeJumps: false, period: 'all', periodDay: null, dateRange: null});
+const DEFAULTS = Object.freeze({basemap: 'dark', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, accuracyMin: 0, accuracyUnknown: true, speedMin: null, speedMax: null, speedUnknown: true, altitudeMin: null, altitudeMax: null, altitudeUnknown: true, excludeJumps: false, period: 'all', periodDay: null, dateRange: null});
 
 function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes(DEFAULTS.basemap) ? DEFAULTS.basemap : availableMaps[0]};
   settings.views.route.lineWidth = 1.5;
   settings.views.points.colorBy = settings.views.route.colorBy = 'time';
   if (!input || typeof input !== 'object' || Array.isArray(input)) return settings;
-  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), accuracy: [0, 10, 50, 100, 500, 1000], period: ['all', '1', '7', '30', '90', '365', null]})) {
+  for (const [key, values] of Object.entries({basemap: availableMaps, mode: Object.keys(RADIUS_MIN), period: ['all', '1', '7', '30', '90', '365', null]})) {
     if (values.includes(input[key])) settings[key] = input[key];
+  }
+  for (const [minKey, maxKey, lower, upper, unknown] of [['accuracyMin', 'accuracy', 0, 1e6, 'accuracyUnknown'], ['speedMin', 'speedMax', 0, 1000, 'speedUnknown'], ['altitudeMin', 'altitudeMax', -1e6, 1e6, 'altitudeUnknown']]) {
+    for (const key of [minKey, maxKey]) if (Number.isFinite(input[key]) && input[key] >= lower && input[key] <= upper) settings[key] = input[key];
+    if (settings[maxKey] !== null && !(maxKey === 'accuracy' && settings[maxKey] === 0) && settings[minKey] !== null && settings[minKey] > settings[maxKey]) { settings[minKey] = DEFAULTS[minKey]; settings[maxKey] = DEFAULTS[maxKey]; }
+    if (typeof input[unknown] === 'boolean') settings[unknown] = input[unknown];
   }
   for (const [mode, view] of Object.entries(settings.views)) {
     // Older preferences had one shared set; migrate it into independent copies.

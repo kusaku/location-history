@@ -24,12 +24,14 @@ export function encodeHistory(points) {
   const encoded = {format: 'delta-compressed', version: 2, base: [], data: [[], [], []]};
   if (points.some(p => p.accuracy !== null)) encoded.accuracy = [];
   if (points.some(p => p.duration > 0)) encoded.duration = [];
+  for (const key of ['altitude', 'recordedSpeed']) if (points.some(p => p[key] != null)) encoded[key] = [];
   let lat = 0, lon = 0, t = 0;
   for (const p of points) {
     const nextLat = Math.round(p.lat * 1e7), nextLon = Math.round(p.lon * 1e7);
     if (!encoded.base.length) encoded.base = [nextLat, nextLon, p.t];
     else { encoded.data[0].push(nextLat - lat); encoded.data[1].push(nextLon - lon); encoded.data[2].push(p.t - t); }
     encoded.accuracy?.push(p.accuracy); encoded.duration?.push(p.duration);
+    for (const key of ['altitude', 'recordedSpeed']) encoded[key]?.push(p[key] ?? null);
     lat = nextLat; lon = nextLon; t = p.t;
   }
   return {encoded, duplicates: prepared.duplicates};

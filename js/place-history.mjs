@@ -1,4 +1,4 @@
-import {DAY, placePolygon} from './data.mjs?v=19';
+import {DAY, placePolygon} from './data.mjs?v=20';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -70,7 +70,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, windowStart
     if (hourly) button.dataset.hour = hour;
     button.dataset.level = value > 0 ? Math.ceil(Math.sqrt(value / peak) * 4) : 0;
     button.style.setProperty('--activity', value > 0 ? `${Math.max(3, Math.sqrt(value / peak) * 100)}%` : '0%');
-    button.disabled = !count || day < scope.start || day > scope.end; button.tabIndex = -1;
+    button.disabled = !count && !entry?.minutes || day < scope.start || day > scope.end; button.tabIndex = -1;
     const clock = value => `${String(value).padStart(2, '0')}:00`;
     button.title = `${calendarDate.format(at)}${hourly ? ` · ${clock(hour)}–${clock(hour + 1)} UTC` : ''} · ${number.format(count)} locations · ${duration(entry?.minutes ?? 0)}${day < scope.start || day > scope.end ? ' · outside selected dates' : ''}`;
     button.setAttribute('aria-label', button.title);
@@ -79,7 +79,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, windowStart
     return button;
   }
   function summary(rows, metric) {
-    const recorded = rows.filter(row => row.count).length, minutes = rows.reduce((sum, row) => sum + row.minutes, 0);
+    const recorded = rows.filter(row => row.count || row.minutes).length, minutes = rows.reduce((sum, row) => sum + row.minutes, 0);
     $('place-calendar-summary').textContent = `${number.format(recorded)} recorded ${kind() === 'day' || kind() === 'week' ? recorded === 1 ? 'hour' : 'hours' : recorded === 1 ? 'day' : 'days'} · ${duration(minutes)}`;
     const peak = rows.reduce((max, row) => Math.max(max, row[metric]), 0);
     $('place-calendar-scale').title = `Maximum per ${kind() === 'day' || kind() === 'week' ? 'hour' : 'day'}: ${metric === 'minutes' ? duration(peak) : `${number.format(peak)} locations`}`;
@@ -370,7 +370,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     panel.setAttribute('aria-busy', 'false');
     if (message.type === 'error') { $('place-message').textContent = message.message; return; }
     const result = message.result;
-    $('place-message').textContent = result.count ? '' : 'No locations in this area match the current filters.';
+    $('place-message').textContent = result.count || result.minutes ? '' : 'No locations in this area match the current filters.';
     $('place-results').hidden = false;
     for (const [id, value] of Object.entries({'place-records': number.format(result.count), 'place-days': number.format(result.days), 'place-total-visits': number.format(result.visits), 'place-time': duration(result.minutes), 'place-first': time(result.first), 'place-last': time(result.last)})) $(id).textContent = value;
     $('place-visits-label').textContent = `Recorded stays · ${number.format(result.visits)}`;

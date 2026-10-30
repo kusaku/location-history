@@ -22,18 +22,18 @@ function coordinate(value) {
       || value.match(/^(?:geo:)?\s*([-+\d.e]+)\s*,\s*([-+\d.e]+)$/i);
     return match ? [Number(match[2]), Number(match[1])] : [NaN, NaN];
   }
-  if (value?.latLng) return coordinate(value.latLng);
+  if (value?.latLng ?? value?.LatLng) return coordinate(value.latLng ?? value.LatLng);
   if (value?.latitudeE7 !== undefined || value?.latE7 !== undefined) return [number(value.longitudeE7 ?? value.lngE7) / 1e7, number(value.latitudeE7 ?? value.latE7) / 1e7];
   return [number(value?.longitude ?? value?.lng), number(value?.latitude ?? value?.lat)];
 }
 export function parseHistory(data, {allowEmpty = false} = {}) {
   const points = [];
   let skipped = 0;
-  const add = (coords, time, accuracy, duration = 0) => {
-    const [lon, lat] = Array.isArray(coords) ? coords : [NaN, NaN], t = timestamp(time), a = number(accuracy);
+  const add = (coords, time, accuracy, duration = 0, altitude, recordedSpeed) => {
+    const [lon, lat, z] = Array.isArray(coords) ? coords : [NaN, NaN], t = timestamp(time), a = number(accuracy), h = number(altitude ?? z), speed = number(recordedSpeed);
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !Number.isFinite(t) || Math.abs(t) > 8.64e15) { skipped++; return; }
     if (points.length >= MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} points. Choose a smaller date range.`);
-    points.push({lon, lat, t, accuracy: Number.isFinite(a) && a >= 0 ? a : null, duration: Math.max(0, duration) || 0});
+    points.push({lon, lat, t, accuracy: Number.isFinite(a) && a >= 0 ? a : null, duration: Math.max(0, Math.min(duration, 8.64e15 - t)) || 0, ...(Number.isFinite(h) ? {altitude: h} : {}), ...(Number.isFinite(speed) && speed >= 0 && speed <= 1000 ? {recordedSpeed: speed} : {})});
   };
   const segment = entry => {
     if (!entry || typeof entry !== 'object') { skipped++; return; }
@@ -50,7 +50,7 @@ export function parseHistory(data, {allowEmpty = false} = {}) {
         let t = p.time ?? p.timestamp ?? p.timestampMs;
         if (t === undefined && p.durationMinutesOffsetFromStartTime !== undefined) t = start + number(p.durationMinutesOffsetFromStartTime) * 60_000;
         // Untimed waypoints cannot be used as timestamped observations.
-        add(coordinate(p.point ?? p), t, p.accuracyMeters ?? p.accuracy);
+        add(coordinate(p.point ?? p), t, p.accuracyMeters ?? p.accuracy, 0, p.altitudeMeters ?? p.altitude, p.speedMetersPerSecond === undefined ? undefined : number(p.speedMetersPerSecond) * 3.6);
       }
     }
     if (activity) {
@@ -63,14 +63,14 @@ export function parseHistory(data, {allowEmpty = false} = {}) {
     if ((data.version !== undefined && data.version !== 2) || !Array.isArray(data.base) || data.base.length !== 3 || !Array.isArray(data.data) || data.data.length !== 3 || !data.data.every(Array.isArray) || !data.data.every(a => a.length === data.data[0].length)) invalid();
     const count = data.data[0].length + 1;
     if (count > MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} points. Choose a smaller date range.`);
-    for (const key of ['accuracy', 'duration']) {
+    for (const key of ['accuracy', 'duration', 'altitude', 'recordedSpeed']) {
       const values = data[key];
-      if (values !== undefined && (!Array.isArray(values) || values.length !== count || values.some(v => !(key === 'accuracy' && v === null) && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)))) invalid();
+      if (values !== undefined && (!Array.isArray(values) || values.length !== count || values.some(v => !(key !== 'duration' && v === null) && (typeof v !== 'number' || !Number.isFinite(v) || key !== 'altitude' && v < 0 || key === 'recordedSpeed' && v > 1000)))) invalid();
     }
     let [lat, lon, t] = data.base.map(number);
     const append = i => {
       const before = points.length;
-      add([lon / 1e7, lat / 1e7], t, data.accuracy?.[i], data.duration?.[i]);
+      add([lon / 1e7, lat / 1e7], t, data.accuracy?.[i], data.duration?.[i], data.altitude?.[i], data.recordedSpeed?.[i]);
       if (points.length === before) invalid(); // A corrupt delta cannot be skipped safely.
     };
     append(0);
@@ -81,14 +81,23 @@ export function parseHistory(data, {allowEmpty = false} = {}) {
   } else if (Array.isArray(data?.locations)) {
     for (const p of data.locations) {
       if (!p || typeof p !== 'object') { skipped++; continue; }
-      add(coordinate(p), p.timestamp ?? p.timestampMs, p.accuracy);
+      add(coordinate(p), p.timestamp ?? p.timestampMs, p.accuracy, 0, p.altitudeMeters ?? p.altitude, p.speedMetersPerSecond === undefined ? undefined : number(p.speedMetersPerSecond) * 3.6);
+    }
+  } else if (Array.isArray(data?.semanticSegments) || Array.isArray(data?.rawSignals)) {
+    for (const key of ['semanticSegments', 'rawSignals']) if (data[key] !== undefined && !Array.isArray(data[key])) throw new Error('Invalid Timeline collection.');
+    for (const p of data.semanticSegments ?? []) segment(p);
+    for (const entry of data.rawSignals ?? []) if (entry?.position) {
+      const p = entry.position;
+      add(coordinate(p), p.timestamp, p.accuracyMeters, 0, p.altitudeMeters, p.speedMetersPerSecond === undefined ? undefined : number(p.speedMetersPerSecond) * 3.6);
     }
   } else if (Array.isArray(data?.semanticSegments ?? data?.timelineObjects ?? data)) {
     for (const p of data.semanticSegments ?? data.timelineObjects ?? data) segment(p);
   } else if (data?.type === 'FeatureCollection' && Array.isArray(data.features)) {
     for (const f of data.features) {
       if (f?.geometry?.type !== 'Point') { skipped++; continue; }
-      add(f.geometry.coordinates, f.properties?.timestamp ?? f.properties?.time, f.properties?.accuracy);
+      const p = f.properties ?? {}, android = typeof p.provider === 'string' && Number.isFinite(p.time_long);
+      const speed = p.speedMetersPerSecond ?? (android ? p.speed : undefined);
+      add(f.geometry.coordinates, p.timestamp ?? p.time ?? p.time_long, p.accuracy, 0, p.altitudeMeters ?? p.altitude ?? p.elevation ?? p.ele, speed === undefined ? undefined : number(speed) * 3.6);
     }
   } else throw new Error('Unsupported JSON. Use Google Records, Timeline, semantic history, delta-compressed history, or timestamped GeoJSON points.');
   if (!points.length && !allowEmpty) throw new Error('No valid timestamped locations were found in this file.');
@@ -103,7 +112,11 @@ export function preparePoints(points, {inferStationary = true} = {}) {
     const last = unique[length - 1];
     if (last && last.t === p.t && last.lat === p.lat && last.lon === p.lon) {
       last.duration = Math.max(last.duration, p.duration);
-      if (p.accuracy !== null && (last.accuracy === null || p.accuracy < last.accuracy)) last.accuracy = p.accuracy;
+      if (p.accuracy !== null && (last.accuracy === null || p.accuracy < last.accuracy)) {
+        last.accuracy = p.accuracy;
+        for (const key of ['altitude', 'recordedSpeed']) if (p[key] != null) last[key] = p[key];
+      }
+      for (const key of ['altitude', 'recordedSpeed']) if (last[key] == null && p[key] != null) last[key] = p[key];
       duplicates++; continue;
     }
     unique[length++] = p;
@@ -121,14 +134,14 @@ export function distance(a, b) {
   const h = Math.sin(lat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(lon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
 }
-// An inter-record average, not instantaneous or road-routed speed. Never turn
-// missing data or motion smaller than reported uncertainty into a zero speed.
+// Accuracy filters visibility, not speed. Keep interval and jump safeguards;
+// device speed, when present, is already normalized to km/h during import.
 export function intervalSpeed(a, b) {
   const elapsed = b.t - a.t;
-  if (elapsed <= 0 || elapsed > 15 * 60_000 || a.accuracy > 200 || b.accuracy > 200) return null;
+  if (elapsed <= 0 || elapsed > 15 * 60_000) return null;
   const km = distance(a, b), speed = km * 3_600_000 / elapsed;
-  if (speed > 1000 || km > 0 && km * 1000 <= (a.accuracy ?? 0) + (b.accuracy ?? 0)) return null;
-  return speed;
+  if (speed > 1000) return null;
+  return a.recordedSpeed != null && b.recordedSpeed != null ? (a.recordedSpeed + b.recordedSpeed) / 2 : speed;
 }
 function projectY(lat) {
   const s = Math.sin(Math.max(-85.051129, Math.min(85.051129, lat)) * rad);
@@ -168,6 +181,14 @@ function hexRound(q, r) {
 const collection = features => ({type: 'FeatureCollection', features});
 const EMPTY = collection([]);
 const hour = t => Math.floor(((t % DAY) + DAY) % DAY / 3_600_000);
+function selectedMillis(from, until, {start = -Infinity, end = Infinity, hourStart = 0, hourEnd = 24}) {
+  from = Math.max(from, start); until = Math.min(until, end + 1);
+  if (until <= from) return 0;
+  if (hourStart === 0 && hourEnd === 24) return until - from;
+  const span = (hourEnd - hourStart) * 3_600_000;
+  const elapsed = t => Math.floor(t / DAY) * span + Math.max(0, Math.min(span, t - Math.floor(t / DAY) * DAY - hourStart * 3_600_000));
+  return elapsed(until) - elapsed(from);
+}
 function accepts(p, accuracy, hourStart, hourEnd) {
   if (accuracy && p.accuracy !== null && !(p.accuracy < accuracy)) return false;
   if (hourStart === 0 && hourEnd === 24) return true;
@@ -222,39 +243,55 @@ export function placePolygon(coordinates) {
 export function createHistoryQuery(points) {
   const columns = 128, rows = 64, cells = columns * rows;
   const cell = p => Math.min(rows - 1, Math.floor((p.lat + 90) / 180 * rows)) * columns + Math.min(columns - 1, Math.floor((p.lon + 180) / 360 * columns));
-  const offsets = new Uint32Array(cells + 1), order = new Uint32Array(points.length), projectedY = new Float64Array(points.length);
-  for (let i = 0; i < points.length; i++) { offsets[cell(points[i]) + 1]++; projectedY[i] = projectY(points[i].lat); }
+  const offsets = new Uint32Array(cells + 1), order = new Uint32Array(points.length), projectedY = new Float64Array(points.length), intervalEnds = new Float64Array(points.length);
+  let latestEnd = -Infinity;
+  for (let i = 0; i < points.length; i++) {
+    offsets[cell(points[i]) + 1]++; projectedY[i] = projectY(points[i].lat);
+    latestEnd = Math.max(latestEnd, points[i].t + points[i].duration); intervalEnds[i] = latestEnd;
+  }
   for (let i = 1; i <= cells; i++) offsets[i] += offsets[i - 1];
   const cursors = offsets.slice();
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
-  const min = points[0]?.t ?? 0, max = points.at(-1)?.t ?? 0;
+  const min = points[0]?.t ?? 0, max = points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1)?.t ?? 0);
   const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
   const jumps = jumpFlags(points);
-  let speeds;
-  function ensureSpeeds() {
-    if (speeds) return;
-    speeds = new Float32Array(points.length); speeds.fill(NaN);
-    for (let i = 1; i < points.length; i++) if (!jumps[i - 1] && !jumps[i]) speeds[i] = intervalSpeed(points[i - 1], points[i]) ?? NaN;
+  const quality = (i, {accuracy = 0, excludeJumps = false}) => (!excludeJumps || !jumps[i]) && accepts(points[i], accuracy, 0, 24);
+  function intervalFrom(time) {
+    let lo = 0, hi = intervalEnds.length;
+    while (lo < hi) { const m = (lo + hi) >>> 1; if (intervalEnds[m] <= time) lo = m + 1; else hi = m; }
+    return Math.min(lo, Math.max(0, lowerBound(points, time) - 1));
   }
-  function pointSpeed(i, from, to) {
-    let weighted = 0, elapsed = 0;
-    for (let edge = i; edge <= i + 1; edge++) if (edge > from && edge < to && filter.mask[edge - 1] && filter.mask[edge] && Number.isFinite(speeds[edge])) {
-      const dt = points[edge].t - points[edge - 1].t;
-      weighted += speeds[edge] * dt; elapsed += dt;
+  function ensureSpeeds() {
+    if (selection.speeds) return;
+    const speeds = new Float32Array(points.length); speeds.fill(NaN);
+    for (const i of selection.indices) if (points[i].recordedSpeed != null) speeds[i] = points[i].recordedSpeed;
+    for (const [a, b] of selection.runs) {
+      let incoming = null, before = 0;
+      for (let k = a; k < b; k++) {
+        const p = points[selection.indices[k]], next = k + 1 < b ? points[selection.indices[k + 1]] : null;
+        const outgoing = next ? intervalSpeed(p, next) : null, after = next ? next.t - p.t : 0;
+        const elapsed = (incoming === null ? 0 : before) + (outgoing === null ? 0 : after);
+        if (p.recordedSpeed == null && elapsed) speeds[selection.indices[k]] = ((incoming ?? 0) * before + (outgoing ?? 0) * after) / elapsed;
+        incoming = outgoing; before = after;
+      }
     }
-    return elapsed ? weighted / elapsed : null;
+    selection.speeds = speeds;
   }
 
   function ensureFilter({accuracy = 0, hourStart = 0, hourEnd = 24, excludeJumps = false}) {
     const nextFilterKey = `${accuracy}:${hourStart}:${hourEnd}:${excludeJumps}`;
     if (filterKey !== nextFilterKey) {
-      const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0);
-      for (let i = 0; i < points.length; i++) if ((!excludeJumps || !jumps[i]) && accepts(points[i], accuracy, hourStart, hourEnd)) {
-        mask[i] = 1;
-        histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) / historyDays * HISTOGRAM_BINS)]++;
+      const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0), barriers = accuracy ? new Uint32Array(points.length + 1) : null;
+      for (let i = 0; i < points.length; i++) {
+        const blocked = excludeJumps && jumps[i] || !accepts(points[i], 0, hourStart, hourEnd);
+        if (barriers) barriers[i + 1] = barriers[i] + (blocked ? 1 : 0);
+        if (!blocked && accepts(points[i], accuracy, 0, 24)) {
+          mask[i] = 1;
+          histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) / historyDays * HISTOGRAM_BINS)]++;
+        }
       }
-      filter = {mask, histogram}; filterKey = nextFilterKey;
+      filter = {mask, histogram, barriers}; filterKey = nextFilterKey;
     }
   }
   function candidateRanges(viewport) {
@@ -280,13 +317,14 @@ export function createHistoryQuery(points) {
     if (selectionKey !== nextSelectionKey) {
       const from = lowerBound(points, start), to = lowerBound(points, end, true);
       const indices = new Uint32Array(Math.max(0, to - from)), runs = [];
-      let count = 0, km = 0, previous = -1, run = 0, days = 0, lastDay;
+      let count = 0, km = 0, previous = -1, run = 0, days = 0, lastDay, low = Infinity, high = -Infinity;
       for (let i = from; i < to; i++) {
         if (!filter.mask[i]) continue;
         const p = points[i];
         if (previous >= 0) {
           const dt = p.t - points[previous].t;
-          let connected = i === previous + 1 && dt > 0 && dt <= 6 * 3_600_000 && Math.abs(p.lon - points[previous].lon) < 180;
+          const adjacent = i === previous + 1 || filter.barriers && filter.barriers[i] === filter.barriers[previous + 1];
+          let connected = adjacent && dt > 0 && dt <= 6 * 3_600_000 && Math.abs(p.lon - points[previous].lon) < 180;
           if (connected) {
             const d = distance(points[previous], p);
             connected = d / (dt / 3_600_000) <= 1000;
@@ -295,12 +333,13 @@ export function createHistoryQuery(points) {
           if (!connected) { if (count - run > 1) runs.push([run, count]); run = count; }
         }
         indices[count++] = i; previous = i;
+        if (p.altitude != null) { low = Math.min(low, p.altitude); high = Math.max(high, p.altitude); }
         const day = Math.floor(p.t / DAY);
         if (day !== lastDay) { days++; lastDay = day; }
       }
       if (count - run > 1) runs.push([run, count]);
       const selected = indices.subarray(0, count);
-      selection = {from, to, indices: selected, runs, count, days, km: Math.round(km), bounds: wrappedBounds(points, selected), routes: null};
+      selection = {from, to, indices: selected, runs, count, days, km: Math.round(km), bounds: wrappedBounds(points, selected), routes: null, altitudeRange: low <= high ? [low, high] : null};
       selectionKey = nextSelectionKey;
     }
     const {from, to, indices} = selection;
@@ -321,29 +360,40 @@ export function createHistoryQuery(points) {
     } else {
       for (const i of indices) if (inView(points[i])) { if (visible) visible[visibleCount] = i; visibleCount++; }
     }
+    let densityIndices = visible?.subarray(0, visibleCount);
+    if (metric === 'time' && (mode === 'heat' || mode === 'hex')) {
+      const first = intervalFrom(start), active = new Uint32Array(Math.min(candidates, to - first)); let length = 0;
+      const matches = i => i >= first && i < to && quality(i, options) && inView(points[i]) && (points[i].t >= start && filter.mask[i] || points[i].duration > 0 && selectedMillis(points[i].t, points[i].t + points[i].duration, options) > 0);
+      if (candidates < to - first) {
+        for (const [a, b] of ranges) for (let j = a; j < b; j++) { const i = order[j]; if (matches(i)) active[length++] = i; }
+        active.subarray(0, length).sort();
+      } else for (let i = first; i < to; i++) if (matches(i)) active[length++] = i;
+      densityIndices = active.subarray(0, length);
+    }
     let density = EMPTY, dots = EMPTY, routes = EMPTY, peak = 1, drawn = 0;
     if (mode === 'points') {
       ensureSpeeds();
       const stride = Math.max(1, Math.ceil(visibleCount / 20_000)), features = [];
       for (let j = 0; j < visibleCount; j += stride) {
         const p = points[visible[j]];
-        features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy, speed: pointSpeed(visible[j], from, to)}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
+        const speed = selection.speeds[visible[j]];
+        features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy, speed: Number.isFinite(speed) ? speed : null, speedRecorded: p.recordedSpeed != null, altitude: p.altitude ?? null}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
       }
       dots = collection(features); drawn = features.length;
     } else if (mode === 'route') {
       if (selection.routeColor !== colorBy) { selection.routes = null; selection.routeColor = colorBy; }
-      if (!selection.routes && colorBy === 'speed') {
-        ensureSpeeds();
+      if (!selection.routes && (colorBy === 'speed' || colorBy === 'altitude')) {
         const features = [], step = Math.max(1, Math.ceil(indices.length / 20_000));
         for (const [a, b] of selection.runs) for (let j = a; j < b - 1; j += step) {
           const end = Math.min(j + step, b - 1), first = points[indices[j]], last = points[indices[end]];
           let weighted = 0, elapsed = 0;
           for (let k = j + 1; k <= end; k++) {
-            const i = indices[k], dt = points[i].t - points[i - 1].t;
-            if (Number.isFinite(speeds[i])) { weighted += speeds[i] * dt; elapsed += dt; }
+            const a = points[indices[k - 1]], b = points[indices[k]], dt = b.t - a.t;
+            const value = colorBy === 'speed' ? intervalSpeed(a, b) : a.altitude != null && b.altitude != null ? (a.altitude + b.altitude) / 2 : null;
+            if (value !== null) { weighted += value * dt; elapsed += dt; }
           }
-          const speed = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
-          features.push({type: 'Feature', properties: {speed}, geometry: {type: 'LineString', coordinates: [[first.lon, first.lat], [last.lon, last.lat]]}});
+          const value = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
+          features.push({type: 'Feature', properties: {[colorBy]: value, time: first.t + (last.t - first.t) / 2}, geometry: {type: 'LineString', coordinates: [[first.lon, first.lat], [last.lon, last.lat]]}});
         }
         selection.routes = collection(features);
       }
@@ -379,8 +429,8 @@ export function createHistoryQuery(points) {
       const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));
       const size = (mode === 'hex' ? Math.max(2, radius) : Math.max(3, radius / 4)) / scale;
       const grid = new Map(), bins = [];
-      for (let j = 0; j < visibleCount; j++) {
-        const i = visible[j], p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
+      for (const i of densityIndices) {
+        const p = points[i], lon = p.lon + 360 * Math.round((center - p.lon) / 360);
         const x = (lon + 180) / 360, y = projectedY[i];
         let a, b, cx, cy;
         if (mode === 'hex') {
@@ -390,12 +440,13 @@ export function createHistoryQuery(points) {
         let column = grid.get(a);
         if (!column) { column = new Map(); grid.set(a, column); }
         let bin = column.get(b);
-        if (!bin) { bin = {q: a, r: b, x: cx, y: cy, count: 0, duration: 0, days: 0, lastDay: undefined}; column.set(b, bin); bins.push(bin); }
-        bin.count++;
+        if (!bin) { bin = {q: a, r: b, x: cx, y: cy, count: 0, duration: 0, days: 0, lastDay: undefined, coveredUntil: -Infinity}; column.set(b, bin); bins.push(bin); }
+        if (p.t >= start && filter.mask[i]) bin.count++;
         // Visible indices are chronological, so each bin sees UTC days in order.
         const day = Math.floor(p.t / DAY);
         if (day !== bin.lastDay) { bin.days++; bin.lastDay = day; }
-        bin.duration += Math.max(0, Math.min(p.t + p.duration, end + 1, (day + 1) * DAY + (hourEnd - 24) * 3_600_000) - p.t) / 60_000;
+        bin.duration += selectedMillis(Math.max(p.t, bin.coveredUntil), p.t + p.duration, options) / 60_000;
+        bin.coveredUntil = Math.max(bin.coveredUntil, p.t + p.duration);
       }
       const value = b => metric === 'days' ? b.days : metric === 'time' ? b.duration : b.count;
       const values = bins.map(value).filter(v => v > 0).sort((a, b) => a - b);
@@ -410,7 +461,7 @@ export function createHistoryQuery(points) {
       }
       density = collection(features); drawn = features.length;
     }
-    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds: selection.bounds, histogram: filter.histogram, peak, drawn};
+    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds: selection.bounds ?? (metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null), histogram: filter.histogram, altitudeRange: selection.altitudeRange, peak, drawn};
   };
   // Reuse the dataset index and filter mask, without replacing the map's current
   // date/route cache. Large areas stream chronologically; small areas sort only
@@ -461,52 +512,57 @@ export function createHistoryQuery(points) {
       }
       return inside;
     };
-    const from = lowerBound(points, start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
-    let count = 0, days = 0, lastDay, first = null, last = null, minutes = 0, coveredUntil = -Infinity, previous = -1, visit, dayTotal;
-    const stays = [], daily = [];
+    const from = intervalFrom(start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
+    let count = 0, first = null, last = null, minutes = 0, coveredUntil = -Infinity, visit, knownFirst = null, knownLast = null;
+    const stays = [], days = new Map();
+    const dayRow = day => {
+      if (!days.has(day)) days.set(day, {start: day, count: 0, minutes: 0});
+      return days.get(day);
+    };
     const add = i => {
-      const p = points[i], day = Math.floor(p.t / DAY);
-      if (hours) hours[Math.floor(p.t / hour) - firstHour].count++;
-      if (day !== lastDay) {
-        days++; lastDay = day;
-        dayTotal = {start: day * DAY, count: 0, minutes: 0}; daily.push(dayTotal);
-      }
-      const next = points[i + 1], nextInside = next && filter.mask[i + 1] && contains(i + 1);
-      // Consecutive accepted observations establish time in the area even while
-      // moving. Do not bridge an exit, excluded observation or a 15-minute gap.
+      const p = points[i], observed = p.t >= start && p.t <= end && filter.mask[i];
+      const next = points[i + 1], nextInside = next && quality(i + 1, options) && contains(i + 1);
+      // An explicit interval can span days. Short consecutive recordings also
+      // establish time in the area, but never across an exit or rejected record.
       const interval = nextInside && next.t > p.t && next.t - p.t < 15 * 60_000 ? next.t - p.t : 0;
-      const until = Math.max(p.t, Math.min(p.t + Math.max(p.duration, interval), end + 1, day * DAY + hourEnd * 3_600_000, next && !nextInside ? next.t : Infinity));
-      if (!visit || p.t - visit.end >= 15 * 60_000) {
-        visit = {start: p.t, end: p.t, count: 0, minutes: 0}; stays.push(visit);
+      const until = Math.min(p.t + Math.max(p.duration, interval), end + 1, next && !nextInside ? next.t : Infinity);
+      const from = Math.max(p.t, start);
+      let currentVisit = null;
+      const ensureVisit = at => {
+        if (!currentVisit) {
+          if (!visit || at - visit.end >= 15 * 60_000) { visit = {start: at, end: at, count: 0, minutes: 0}; stays.push(visit); }
+          currentVisit = visit;
+        }
+        return currentVisit;
+      };
+      if (observed) {
+        ensureVisit(p.t).count++; visit.end = Math.max(visit.end, p.t); count++;
+        dayRow(Math.floor(p.t / DAY) * DAY).count++;
+        if (hours) hours[Math.floor(p.t / hour) - firstHour].count++;
+        if (first === null) first = p.t; last = p.t;
       }
-      // The preceding observation's interval was clipped at midnight. Credit
-      // its remainder to this recorded day, without counting overlaps twice.
-      const before = points[i - 1];
-      const connected = previous === i - 1 || previous === -1 && before && before.t < start && filter.mask[i - 1] && contains(i - 1);
-      if (before && connected && before.t < day * DAY && p.t - before.t < 15 * 60_000) {
-        const carryStart = Math.max(day * DAY, start, coveredUntil), carry = Math.max(0, p.t - carryStart) / 60_000;
-        if (hours) addHours(carryStart, p.t);
-        if (carry) visit.start = Math.min(visit.start, carryStart);
-        minutes += carry; visit.minutes += carry; dayTotal.minutes += carry;
-        coveredUntil = Math.max(coveredUntil, p.t);
+      for (let day = Math.floor(from / DAY) * DAY; day < until; day += DAY) {
+        const a = Math.max(from, day + (options.hourStart ?? 0) * hour), b = Math.min(until, day + hourEnd * hour);
+        if (b <= a) continue;
+        const row = dayRow(day), stay = ensureVisit(a), credited = Math.max(a, coveredUntil);
+        if (knownFirst === null) knownFirst = a; knownLast = Math.max(knownLast ?? b, b);
+        if (b > credited) {
+          const duration = (b - credited) / 60_000;
+          if (hours) addHours(credited, b);
+          minutes += duration; stay.minutes += duration; row.minutes += duration;
+        }
+        stay.end = Math.max(stay.end, b); coveredUntil = Math.max(coveredUntil, b);
       }
-      const duration = Math.max(0, until - Math.max(p.t, coveredUntil)) / 60_000;
-      if (hours) addHours(Math.max(p.t, coveredUntil), until);
-      coveredUntil = Math.max(coveredUntil, until); minutes += duration; visit.minutes += duration;
-      dayTotal.count++; dayTotal.minutes += duration;
-      visit.count++; visit.end = Math.max(visit.end, until); count++;
-      if (first === null) first = p.t; last = p.t;
-      previous = i;
     };
     if (candidates < (to - from) / 2) {
       const matches = new Uint32Array(candidates); let length = 0;
       for (const [a, b] of ranges) for (let j = a; j < b; j++) {
-        const i = order[j]; if (i >= from && i < to && filter.mask[i] && contains(i)) matches[length++] = i;
+        const i = order[j]; if (i >= from && i < to && quality(i, options) && contains(i)) matches[length++] = i;
       }
       for (const i of matches.subarray(0, length).sort()) add(i);
-    } else for (let i = from; i < to; i++) if (filter.mask[i] && contains(i)) add(i);
+    } else for (let i = from; i < to; i++) if (quality(i, options) && contains(i)) add(i);
     placeKey = nextKey;
-    return placeResult = {count, days, first, last, minutes, visits: stays.length, stays: stays.reverse(), daily: daily.reverse(), ...(hours ? {hours} : {})};
+    return placeResult = {count, days: days.size, first: first ?? knownFirst, last: last ?? (knownLast === null ? null : knownLast - 1), minutes, visits: stays.length, stays: stays.reverse(), daily: [...days.values()].sort((a, b) => b.start - a.start), ...(hours ? {hours} : {})};
   };
   return query;
 }

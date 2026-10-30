@@ -23,10 +23,12 @@ test('jump exclusion keeps map, histogram and combined accuracy totals exact', (
     assert.equal(result.histogram.reduce((a, b) => a + b, 0), expected);
   }
 });
-test('accuracy filtering never joins tracks across removed observations and panning reuses selection', () => {
+test('accuracy filtering connects retained locations and panning reuses selection', () => {
   const query = createHistoryQuery([point(0), point(60_000, .001, 500), point(120_000, .002)]);
   const result = query({accuracy: 100, mode: 'route'});
-  assert.equal(result.count, 2); assert.equal(result.km, 0); assert.equal(result.routes.features.length, 0);
+  assert.equal(result.count, 2); assert.ok(result.routes.features.length > 0);
+  assert.deepEqual(result.routes.features[0].geometry.coordinates[0], [0, 0]);
+  assert.deepEqual(result.routes.features.at(-1).geometry.coordinates.at(-1), [.002, 0]);
   const pan = query({accuracy: 100, mode: 'route', viewport: [-1, -1, 1, 1]});
   assert.equal(pan.histogram, result.histogram); assert.equal(pan.bounds, result.bounds); assert.equal(pan.routes, result.routes);
 });

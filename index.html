@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/styles.css?v=37">
-    <script type="module" src="js/app.mjs?v=44">
+    <script type="module" src="js/app.mjs?v=45">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -197,6 +197,7 @@
             <div id="color-by" class="presets" role="group" aria-label="Colour points or journeys by">
               <button type="button" data-color-by="time" aria-pressed="true">Time</button>
               <button type="button" data-color-by="speed" aria-pressed="false">Speed</button>
+              <button type="button" data-color-by="altitude" aria-pressed="false">Altitude</button>
             </div>
           </div>
           <div id="density-controls">
@@ -583,7 +584,7 @@
         User guide
       </h2>
       <p>
-        Open one or more Google Takeout Records JSON files, monthly semantic history files, or an on-device Timeline JSON export. Gzip, our delta-compressed sample, and timestamped GeoJSON points work too. A new import replaces the current history; files selected together are merged and exact duplicates removed.
+        Open one or more Google Takeout Records JSON files, monthly semantic history files, or an on-device Timeline JSON export. Phone exports combine semanticSegments with rawSignals.position, including raw accuracy, height and device speed. Their exact duplicates merge across sections and files. Empty exports are ignored in a combined import. Gzip, our delta-compressed sample, and timestamped GeoJSON points work too. A new import replaces the current history; files selected together are merged and exact duplicates removed.
       </p>
       <h3>
         Export your history as JSON
@@ -631,9 +632,9 @@
       </p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
+      <p>Choose the current window or <b>All dates</b>. Hour, accuracy and jump filters still apply. Known visit intervals contribute time on every covered UTC day and hour, including days without a new GPS observation; no extra GPS points are invented. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
       <h3>Filters and date windows</h3>
-      <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import; filters never join tracks across removed records. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
+      <p><b>Exclude jumps</b> removes both endpoints exceeding 1,000 km/h within six hours, including conflicting locations at the same timestamp. Longer recording gaps are not treated as jumps. This heuristic is computed once per import. Jump and hour exclusions preserve route breaks; accuracy filtering connects the retained locations. Use <b>Accuracy</b> to filter known measurement error; observations with unknown accuracy stay included.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
       <p>Select any histogram bar to use its UTC dates. The 64 bars span the entire history, so their date ranges depend on the imported history. Short histories have disabled intervals without dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
       <h3>
@@ -655,15 +656,15 @@
         <b>
           Journeys
         </b>
-        connects consecutive observations, breaking at gaps over six hours, excluded records, dateline crossings, or implausible speeds.
+        connects consecutive observations, skipping inaccurate locations while preserving breaks at gaps over six hours, excluded jumps, hour filters, dateline crossings, or implausible speeds.
       </p>
-      <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b> or <b>Speed</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. Both scales stay fixed when panning. Click a point for its timestamp, accuracy and estimated speed. Heatmap and Hexagons use colour for density instead.</p>
-      <p>Speed is straight-line distance divided by elapsed time between original consecutive recordings. A point averages its valid incoming and outgoing intervals, weighted by their duration. Gaps over 15 minutes, speeds over 1,000 km/h, known accuracy worse than 200 m, and movement within the combined accuracy radii are unavailable. Exact repeated positions can show 0 km/h. Filtered records are never joined across. Speed is an estimate, not a measured instantaneous speed. For large date windows, speed paths are simplified and average reliable intervals over each displayed section; a section is grey if less than half its duration has reliable speed. Narrow Date window for more detail.</p>
+      <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b>, <b>Speed</b> or <b>Altitude</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. The scales stay fixed when panning. Altitude uses the known height range in Date window, including zero and negative heights. It is the height recorded in the file; the export may use WGS84 rather than mean sea level. Click a point for its timestamp, accuracy, speed and altitude. Heatmap and Hexagons use colour for density instead.</p>
+      <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between retained recordings, averaged at a point over its incoming and outgoing intervals. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude paths average values over bounded displayed sections; a section is grey if less than half its duration has data. Narrow Date window for more detail.</p>
       <h3>
         Density metrics
       </h3>
       <p>
-        Measure density by records, distinct UTC days per cell, or estimated stationary time. Time uses recorded visit duration or stationary intervals of at most 30 minutes within 200 metres, clipped to the observation’s UTC day and chosen hours. It is an estimate, not a complete measure of time spent. Colour strength adapts to the 95th percentile of occupied cells in view; compare patterns, not absolute values between zoom levels. Spread changes the radius in screen pixels. Click a hexagon or point for details.
+        Measure density by records, distinct UTC days per cell, or estimated stationary time. Time uses recorded visit duration or stationary intervals of at most 30 minutes within 200 metres, intersected with every selected UTC day and hour, including intervals that started before Date window. It is an estimate, not a complete measure of time spent. Colour strength adapts to the 95th percentile of occupied cells in view; compare patterns, not absolute values between zoom levels. Spread changes the radius in screen pixels. Click a hexagon or point for details.
       </p>
       <h3>
         Privacy

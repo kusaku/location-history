@@ -1,9 +1,9 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=14';
-import {createPlaceHistory} from './place-history.mjs?v=18';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds} from './maps.mjs?v=15';
+import {createPlaceHistory} from './place-history.mjs?v=19';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=19';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=16';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=19';
+import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=20';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=17';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=20';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -12,7 +12,7 @@ const formatDate = t => fullDate.format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
-const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy and speed.', route: 'Paths coloured by time in Date window, with breaks for gaps and excluded data.'};
+const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy, speed and altitude.', route: 'Paths coloured by time in Date window. Accuracy filtering connects retained locations; gaps and excluded jumps still break paths.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let currentAttribution = '';
 function setAttribution(html) {
@@ -106,19 +106,21 @@ function paint(changed) {
   $('intensity-value').textContent = `${view.intensity.toFixed(1)}×`;
   $('line-width-value').textContent = `${view.lineWidth ?? 1.5} px`;
   $('opacity-value').textContent = `${Math.round(view.opacity * 100)}%`;
-  $('mode-description').textContent = view.colorBy === 'speed' ? 'Estimated speed between recordings. Grey means unavailable.' : descriptions[state.mode];
+  $('mode-description').textContent = view.colorBy === 'speed' ? 'Recorded speed when available, otherwise estimated from positions. Grey means unavailable.' : view.colorBy === 'altitude' ? 'Recorded altitude in metres. Grey means unavailable.' : descriptions[state.mode];
   $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[view.metric];
   paintLegend();
-  paintHistory(map, {...state, ...view}, changed === 'mode' ? undefined : changed);
+  paintHistory(map, {...state, ...view, altitudeRange: state.result?.altitudeRange}, changed === 'mode' ? undefined : changed);
 }
 function paintLegend() {
   const temporal = state.mode === 'points' || state.mode === 'route';
   const speed = temporal && state.views[state.mode].colorBy === 'speed';
-  $('legend-low').textContent = speed ? '0' : temporal ? 'Earlier' : 'Less'; $('legend-high').textContent = speed ? '1,000 km/h' : temporal ? 'Later' : 'More';
-  $('legend-unit').textContent = speed ? '' : temporal ? 'time · UTC' : {records: 'recorded locations', days: 'distinct UTC days', time: 'stationary minutes'}[state.views[state.mode].metric];
-  $('legend-unit').hidden = speed;
-  $('legend-unknown').hidden = !speed; $('legend-unknown-swatch').style.background = SPEED_UNKNOWN;
-  document.querySelector('.legend').title = speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: unavailable.` : temporal ? `${new Date(state.start).toISOString().replace('T', ' ')} → ${new Date(state.end).toISOString().replace('T', ' ')} · UTC` : '';
+  const altitude = temporal && state.views[state.mode].colorBy === 'altitude', range = state.result?.altitudeRange;
+  $('legend-low').textContent = altitude ? range ? number.format(Math.floor(range[0])) : '—' : speed ? '0' : temporal ? 'Earlier' : 'Less';
+  $('legend-high').textContent = altitude ? range ? `${number.format(Math.ceil(range[1]))} m` : '— m' : speed ? '1,000 km/h' : temporal ? 'Later' : 'More';
+  $('legend-unit').textContent = speed || altitude ? '' : temporal ? 'time · UTC' : {records: 'recorded locations', days: 'distinct UTC days', time: 'stationary minutes'}[state.views[state.mode].metric];
+  $('legend-unit').hidden = speed || altitude;
+  $('legend-unknown').hidden = !speed && !altitude; $('legend-unknown-swatch').style.background = SPEED_UNKNOWN;
+  document.querySelector('.legend').title = altitude ? 'Altitude as recorded in the file; reference datum depends on the export. Range follows Date window, not the viewport.' : speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: unavailable.` : temporal ? `${new Date(state.start).toISOString().replace('T', ' ')} → ${new Date(state.end).toISOString().replace('T', ' ')} · UTC` : '';
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
@@ -169,12 +171,13 @@ async function selectBasemap(key, remember = false) {
 }
 function showResult(result) {
   state.result = {...state.result, ...result};
+  if (state.views[state.mode].colorBy === 'altitude') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode], altitudeRange: result.altitudeRange}, 'altitude'); }
   $('stat-records').textContent = number.format(result.count);
   $('stat-days').textContent = number.format(result.days);
   $('stat-distance').textContent = number.format(result.km);
-  $('range-summary').textContent = result.count ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
-  $('render-note').textContent = state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`;
-  $('fit').disabled = !result.count;
+  $('range-summary').textContent = result.count || result.drawn ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
+  $('render-note').textContent = !result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`;
+  $('fit').disabled = !result.bounds;
   const max = Math.max(1, ...result.histogram);
   [...$('histogram').children].forEach((bar, i) => {
     const range = histogramWindow(state.report.min, state.report.max, i, result.histogram.length);
@@ -202,7 +205,7 @@ function syncDates() {
   $('period-forward').disabled = state.end >= max + DAY - 1;
   $('play').disabled = !playback && $('period-forward').disabled;
   document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.period === state.period)));
-  if (state.mode === 'points' || state.mode === 'route') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode]}, 'time'); }
+  if (state.mode === 'points' || state.mode === 'route') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode], altitudeRange: state.result?.altitudeRange}, 'time'); }
 }
 function stopPlayback() {
   clearTimeout(playback); playback = null;
@@ -261,7 +264,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=19', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=20', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -461,7 +464,7 @@ async function init() {
       const p = feature.properties, node = document.createElement('div');
       node.className = 'point-details';
       const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
-      for (const text of [new Date(p.time).toISOString().replace('T', ' ').replace(/Z$/, ' UTC'), p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `Est. speed: ${speed}`]) {
+      for (const text of [new Date(p.time).toISOString().replace('T', ' ').replace(/Z$/, ' UTC'), p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
         const line = document.createElement('div'); line.textContent = text; node.append(line);
       }
       popup?.remove(); popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat(event.lngLat).setDOMContent(node).addTo(map);

@@ -37,6 +37,19 @@ test('sample deduplication merges exact observations while preserving repeated c
   assert.equal(close.duplicates, 1); assert.equal(parseHistory(close.encoded).points[0].accuracy, 5);
 });
 
+test('compressed history round-trips known altitude and recorded speed, including zero and negative altitude', () => {
+  const points = parseHistory({rawSignals: [
+    {position: {LatLng: '52.5,13.4', timestamp: 0, altitudeMeters: -20, speedMetersPerSecond: 0}},
+    {position: {LatLng: '52.5,13.4', timestamp: 1000, altitudeMeters: 0, speedMetersPerSecond: 2}},
+    {position: {LatLng: '52.5,13.4', timestamp: 2000}}
+  ]}).points;
+  const encoded = encode(points);
+  assert.deepEqual(encoded.altitude, [-20, 0, null]); assert.deepEqual(encoded.recordedSpeed, [0, 7.2, null]);
+  assert.deepEqual(parseHistory(encoded).points, points);
+  assert.throws(() => parseHistory({...encoded, altitude: [0]}), /Invalid delta/);
+  assert.throws(() => parseHistory({...encoded, recordedSpeed: [null, -1, null]}), /Invalid delta/);
+});
+
 test('sample generation is deterministic, clips the end date, preserves the input and replaces output atomically', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'location-history-sample-'));
   try {

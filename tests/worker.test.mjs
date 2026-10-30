@@ -117,3 +117,20 @@ test('worker place queries share filters and are replaced transactionally with t
     assert.equal((await request('place', {area})).result.count, 0);
   } finally { await worker.terminate(); }
 });
+
+test('combined phone imports ignore recognized empty files, preserve metadata and extend bounds through visits', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    const start = Date.UTC(2026, 0, 1, 18), end = start + 40 * 3600000;
+    const imported = await request('import', {files: [json({rawSignals: []}), json({
+      semanticSegments: [{startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), visit: {topCandidate: {placeLocation: {latLng: 'geo:52.5,13.4'}}}}],
+      rawSignals: [{position: {LatLng: '52.5,13.4', timestamp: start, altitudeMeters: 50, speedMetersPerSecond: 0, accuracyMeters: 5}}]
+    })]});
+    assert.equal(imported.type, 'imported'); assert.equal(imported.report.total, 1); assert.equal(imported.report.duplicates, 1);
+    assert.equal(imported.report.max, end - 1);
+    const points = (await request('query', {options: {mode: 'points'}})).result.dots.features;
+    assert.equal(points[0].properties.altitude, 50); assert.equal(points[0].properties.speed, 0);
+    const failed = await request('import', {files: [json({rawSignals: []})]});
+    assert.equal(failed.type, 'error'); assert.equal((await request('query')).result.count, 1);
+  } finally { await worker.terminate(); }
+});

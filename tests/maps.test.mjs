@@ -249,3 +249,15 @@ test('speed colours use fixed km/h stops and an explicit unknown colour, indepen
   assert.deepEqual(paints.get('history-route:line-color'), color);
   assert.equal(paints.size, 2);
 });
+
+test('altitude colours preserve zero, negative and constant heights while marking missing values', () => {
+  const paints = new Map(), map = {getLayer: () => true, setPaintProperty(id, key, value) { paints.set(`${id}:${key}`, value); }};
+  const state = {mode: 'points', palette: 'ember', colorBy: 'altitude', altitudeRange: [-20, 80]};
+  paintHistory(map, state, 'altitude');
+  const color = paints.get('history-dots:circle-color');
+  assert.deepEqual(color.slice(0, 3), ['case', ['==', ['get', 'altitude'], null], '#8b929a']);
+  assert.deepEqual(color, paints.get('history-route:line-color'));
+  assert.deepEqual(color[3][2], ['max', 0, ['min', 1, ['/', ['-', ['coalesce', ['get', 'altitude'], -20], -20], 100]]]);
+  state.altitudeRange = [0, 0]; paintHistory(map, state, 'altitude');
+  assert.equal(paints.get('history-dots:circle-color')[3][2], .5);
+});

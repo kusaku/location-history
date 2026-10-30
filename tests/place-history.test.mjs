@@ -387,3 +387,16 @@ test('empty place results retain calendar and navigation instead of trapping the
     assert.match(f.get('place-message').textContent, /No locations/);
   } finally { f.cleanup(); }
 });
+
+test('calendar days with visit time remain selectable without new GPS observations', () => {
+  const f = fixture(), day = 86400000;
+  try {
+    f.controller.select(area, 'Drawn area');
+    f.controller.receive({type: 'place', id: f.sent[0].id, result: {count: 0, days: 1, visits: 1, minutes: 1440, first: 0, last: day - 1, stays: [{start: 0, end: day, count: 0, minutes: 1440}], daily: [{start: 0, count: 0, minutes: 1440}]}});
+    assert.equal(f.get('place-message').textContent, '');
+    const button = f.get('place-calendar-days').children.find(cell => cell.dataset.date === '1970-01-01');
+    assert.equal(button.disabled, false); button.click();
+    assert.deepEqual(f.dates, [[0, day - 1]]);
+    assert.match(f.get('place-calendar-summary').textContent, /1 recorded day/);
+  } finally { f.cleanup(); }
+});

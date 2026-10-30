@@ -102,10 +102,10 @@ test('estimated time is clipped at the selected end and UTC hour boundary', () =
   assert.equal(queryHistory([p], {metric: 'time', hourStart: 10, hourEnd: 11}).density.features[0].properties.value, 15);
   assert.equal(queryHistory([p], {metric: 'time', end: p.t + 300_000 - 1}).density.features[0].properties.value, 5);
 });
-test('routes break at filtered observations, long gaps and implausible jumps', () => {
+test('routes skip inaccurate observations but still break at long gaps and implausible jumps', () => {
   const p = [point(0), point(60000, 13.401), point(120000, 13.402, 52.5, 500), point(180000, 13.403), point(240000, 13.404), point(DAY, 13.405), point(DAY + 60_000, 140)];
   const result = queryHistory(p, {mode: 'route', accuracy: 100});
-  assert.equal(result.routes.features.length, 2); assert.equal(result.routes.features[0].geometry.coordinates.length, 2); assert.equal(result.routes.features[1].geometry.coordinates.length, 2);
+  assert.equal(result.routes.features.length, 1); assert.equal(result.routes.features[0].geometry.coordinates.length, 4);
 });
 test('dateline bounds select the short longitude arc and density wraps to view', () => {
   const p = [point(0, 179, 10), point(1, -179, 10)];
@@ -231,20 +231,20 @@ test('time-coloured routes retain simplification limits, exact endpoints and dis
   assert.ok(parts.every(part => part.geometry.coordinates.every(([lon]) => lon < 14) || part.geometry.coordinates.every(([lon]) => lon >= 15)));
 });
 
-test('speed estimates reject gaps, impossible travel, poor accuracy and GPS uncertainty', () => {
+test('speed estimates reject gaps and impossible travel but ignore GPS accuracy', () => {
   const a = point(0, 0, 0, 5), b = point(60000, .001, 0, 5);
   assert.ok(Math.abs(intervalSpeed(a, b) - 6.6717) < .001);
   assert.equal(intervalSpeed(a, {...b, t: 0}), null);
   assert.equal(intervalSpeed(a, {...b, t: 15 * 60000 + 1}), null);
   assert.ok(intervalSpeed(a, {...b, t: 15 * 60000}) > 0);
-  assert.equal(intervalSpeed(a, {...b, accuracy: 1799}), null);
-  assert.equal(intervalSpeed(a, {...b, lon: .00001}), null);
+  assert.equal(intervalSpeed(a, {...b, accuracy: 1799}), intervalSpeed(a, b));
+  assert.ok(intervalSpeed(a, {...b, lon: .00001}) > 0);
   assert.equal(intervalSpeed(a, {...b, lon: 2}), null);
   assert.equal(intervalSpeed(a, {...a, t: 60000}), 0);
   assert.ok(intervalSpeed({...a, accuracy: null}, {...b, accuracy: null}) > 0);
 });
 
-test('point speed uses original adjacent intervals weighted by time and never bridges filtered records', () => {
+test('point speed uses retained adjacent intervals weighted by time and skips accuracy exclusions', () => {
   const points = [point(0, 0, 0, 0), point(60000, .0015, 0, 20), point(180000, .0075, 0, 0)];
   const query = createHistoryQuery(points), dots = query({mode: 'points'}).dots.features;
   const incoming = intervalSpeed(points[0], points[1]), outgoing = intervalSpeed(points[1], points[2]);
@@ -252,7 +252,7 @@ test('point speed uses original adjacent intervals weighted by time and never br
   assert.ok(Math.abs(dots[1].properties.speed - (incoming + outgoing * 2) / 3) < 1e-4);
   assert.ok(Math.abs(dots[2].properties.speed - outgoing) < 1e-4);
   const filtered = query({mode: 'points', accuracy: 10}).dots.features;
-  assert.equal(filtered.length, 2); assert.ok(filtered.every(dot => dot.properties.speed === null));
+  assert.equal(filtered.length, 2); assert.ok(filtered.every(dot => Math.abs(dot.properties.speed - intervalSpeed(points[0], points[2])) < 1e-4));
   assert.equal(query({mode: 'points', start: 60000, end: 60000}).dots.features[0].properties.speed, null);
   const gap = createHistoryQuery([point(0), point(DAY)])({mode: 'points'});
   assert.ok(gap.dots.features.every(dot => dot.properties.speed === null));
@@ -270,7 +270,7 @@ test('speed paths use interval averages, preserve endpoints, cache pans and rebu
   assert.equal(query({mode: 'route', colorBy: 'speed', viewport: [-1, -1, 1, 1]}).routes, speed);
   assert.deepEqual(query({mode: 'route'}).routes, time);
   const poor = createHistoryQuery(points.map(p => ({...p, accuracy: 1799})))({mode: 'route', colorBy: 'speed'});
-  assert.ok(poor.routes.features.every(part => part.properties.speed === null));
+  assert.ok(poor.routes.features.every(part => part.properties.speed > 0));
 });
 
 test('large speed paths remain bounded and do not allocate a feature for every record', () => {
@@ -284,6 +284,43 @@ test('large speed paths remain bounded and do not allocate a feature for every r
 
 test('date range queries preserve inclusive fractional timestamp boundaries', () => {
   assert.equal(queryHistory([point(.1), point(.5), point(.9)], {start: .1, end: .5}).count, 2);
+});
+
+test('GeoJSON preserves altitude and Android device speed with explicit unit handling', () => {
+  const points = parseHistory({type: 'FeatureCollection', features: [
+    {geometry: {type: 'Point', coordinates: [13, 52, -12]}, properties: {time: 0}},
+    {geometry: {type: 'Point', coordinates: [13, 52, 123]}, properties: {time: 5000, altitude: 0, provider: 'gps', time_long: 5000, speed: 1.5, accuracy: 1799}},
+    {geometry: {type: 'Point', coordinates: [13, 52]}, properties: {time: 10000, speed: 100}},
+    {geometry: {type: 'Point', coordinates: [13, 52]}, properties: {time: 15000, altitude: 'bad', speedMetersPerSecond: 0}},
+  ]}).points;
+  assert.equal(points[0].altitude, -12); assert.equal(points[1].altitude, 0);
+  assert.equal(points[1].recordedSpeed, 5.4); assert.equal(points[2].recordedSpeed, undefined);
+  assert.equal(points[3].altitude, undefined); assert.equal(points[3].recordedSpeed, 0);
+  const result = createHistoryQuery(preparePoints(points).points)({mode: 'points'});
+  assert.deepEqual(result.altitudeRange, [-12, 0]);
+  assert.ok(Math.abs(result.dots.features[1].properties.speed - 5.4) < 1e-5);
+  assert.equal(result.dots.features[1].properties.speedRecorded, true);
+});
+
+test('altitude paths and their range follow the selection, not the viewport, including zero and missing heights', () => {
+  const points = [{...point(0), altitude: -10}, {...point(60000, 13.401), altitude: 0}, point(120000, 13.402), {...point(180000, 13.403), altitude: 50}];
+  const query = createHistoryQuery(points), result = query({mode: 'route', colorBy: 'altitude'});
+  assert.deepEqual(result.altitudeRange, [-10, 50]);
+  assert.equal(result.routes.features[0].properties.altitude, -5);
+  assert.equal(result.routes.features[1].properties.altitude, null);
+  const pan = query({mode: 'route', colorBy: 'altitude', viewport: [-1, -1, 1, 1]});
+  assert.deepEqual(pan.altitudeRange, result.altitudeRange); assert.equal(pan.routes, result.routes);
+  assert.deepEqual(query({mode: 'points', start: 60000, end: 120000}).altitudeRange, [0, 0]);
+});
+
+test('accuracy exclusions connect retained paths without bridging jump exclusions', () => {
+  const points = [point(-60000, 0, 0), point(0, .001, 0), point(60000, 80, 0), point(120000, .002, 0), point(180000, .003, 0), point(240000, .004, 0)];
+  const query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) {
+    const result = query({mode: 'route', colorBy, accuracy: 50, excludeJumps: true});
+    assert.equal(result.count, 3);
+    assert.ok(result.routes.features.every(part => part.geometry.coordinates.every(([lon]) => lon >= .003)));
+  }
 });
 
 test('accuracy limits are strict for all five thresholds and retain unknown metadata', () => {

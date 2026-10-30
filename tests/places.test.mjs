@@ -32,10 +32,10 @@ test('moving time splits across midnight and clips to selected hours', () => {
   assert.equal(result.minutes, 15); assert.equal(result.visits, 1);
   assert.deepEqual(result.daily, [{start: DAY, count: 2, minutes: 10}, {start: 0, count: 1, minutes: 5}]);
   assert.equal(query.place(box, {end: DAY - 1}).minutes, 5);
-  assert.equal(query.place(box, {hourStart: 0, hourEnd: 1}).minutes, 5);
-  assert.equal(query.place(box, {hourStart: 23, hourEnd: 24}).minutes, 0);
+  assert.equal(query.place(box, {hourStart: 0, hourEnd: 1}).minutes, 10);
+  assert.equal(query.place(box, {hourStart: 23, hourEnd: 24}).minutes, 5);
   const hour = createHistoryQuery([point(8 * 60 * minute + 55 * minute, 12.8), point(9 * 60 * minute + 5 * minute, 13)]);
-  assert.equal(hour.place(box, {hourStart: 8, hourEnd: 9}).minutes, 0);
+  assert.equal(hour.place(box, {hourStart: 8, hourEnd: 9}).minutes, 5);
 });
 
 test('hourly place totals split intervals at hours and preserve midnight carry in a selected day', () => {
@@ -130,8 +130,8 @@ test('every stay is returned, newest first, without the old 30-row limit', () =>
 test('daily table totals clip overlapping stays at midnight and honor the selected window', () => {
   const query = createHistoryQuery([point(DAY - 10 * minute, 13, 52, 60 * minute), point(DAY, 13, 52, 20 * minute), point(DAY + 10 * minute, 13, 52, 20 * minute)]);
   const result = query.place(box);
-  assert.equal(result.visits, 1); assert.equal(result.minutes, 40);
-  assert.deepEqual(result.daily, [{start: DAY, count: 2, minutes: 30}, {start: 0, count: 1, minutes: 10}]);
+  assert.equal(result.visits, 1); assert.equal(result.minutes, 60);
+  assert.deepEqual(result.daily, [{start: DAY, count: 2, minutes: 50}, {start: 0, count: 1, minutes: 10}]);
   const clipped = query.place(box, {end: DAY + 15 * minute - 1});
   assert.equal(clipped.minutes, 25); assert.equal(clipped.daily[0].minutes, 15);
 });
@@ -183,4 +183,36 @@ test('stay gaps are measured from the estimated end, including long explicit vis
   assert.equal(result.visits, 2);
   assert.equal(result.stays[1].count, 2); assert.equal(result.stays[1].end, 75 * minute);
   assert.equal(result.stays[1].minutes, 61);
+});
+
+test('a 40-hour visit retains all days and hours even when its only observation predates Date window', () => {
+  const start = 18 * 60 * minute, source = [point(start, 13, 52, 40 * 60 * minute)], query = createHistoryQuery(source);
+  const all = query.place(box);
+  assert.equal(all.minutes, 2400); assert.equal(all.visits, 1); assert.equal(all.count, 1); assert.equal(all.days, 3);
+  assert.deepEqual(all.daily.map(day => day.minutes), [600, 1440, 360]);
+  const options = {start: DAY, end: 2 * DAY - 1, hourly: true};
+  const day = query.place(box, options);
+  assert.equal(day.minutes, 1440); assert.equal(day.count, 0); assert.equal(day.days, 1);
+  assert.equal(day.hours.reduce((sum, row) => sum + row.minutes, 0), 1440);
+  assert.ok(day.hours.every(row => row.minutes === 60));
+  const hours = query.place(box, {...options, hourStart: 9, hourEnd: 18});
+  assert.equal(hours.minutes, 540);
+  for (const mode of ['heat', 'hex']) {
+    const density = query({...options, mode, metric: 'time'});
+    assert.equal(density.density.features.reduce((sum, feature) => sum + feature.properties.minutes, 0), 1440);
+    assert.ok(density.bounds);
+    assert.equal(query({...options, mode, metric: 'time', hourStart: 9, hourEnd: 18}).density.features.reduce((sum, feature) => sum + feature.properties.minutes, 0), 540);
+  }
+  assert.equal(source.length, 1); // No invented hourly GPS observations.
+});
+
+test('long overlapping visits count their union, respect accuracy and do not create an extra midnight day', () => {
+  const source = [point(0, 13, 52, 2 * DAY), point(DAY / 2, 13, 52, DAY)];
+  const query = createHistoryQuery(source), result = query.place(box);
+  assert.equal(result.minutes, 2880); assert.equal(result.days, 2);
+  assert.deepEqual(result.daily.map(row => row.minutes), [1440, 1440]);
+  assert.equal(query({metric: 'time'}).density.features.reduce((sum, f) => sum + f.properties.minutes, 0), 2880);
+  const poor = createHistoryQuery([point(0, 13, 52, 2 * DAY, 500)]);
+  assert.equal(poor.place(box, {start: DAY, end: 2 * DAY - 1, accuracy: 100}).minutes, 0);
+  assert.equal(poor({metric: 'time', start: DAY, end: 2 * DAY - 1, accuracy: 100}).density.features.length, 0);
 });

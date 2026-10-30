@@ -1,5 +1,5 @@
-import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=19';
-import {readHistory} from './import.mjs?v=18';
+import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=20';
+import {readHistory} from './import.mjs?v=19';
 let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;
@@ -18,14 +18,15 @@ self.onmessage = async ({data}) => {
           if (Date.now() - lastProgress < 200) return;
           lastProgress = Date.now();
           self.postMessage({type: 'progress', id, message: `Reading ${file.name} (${i + 1}/${data.files.length}) · ${Math.min(100, Math.round(bytes / Math.max(1, size) * 100))}% · ${staged.length.toLocaleString('en')} locations…`});
-        });
+        }, {allowEmpty: true});
         skipped += parsed.skipped;
       }
       self.postMessage({type: 'progress', id, message: `Sorting and merging ${staged.length.toLocaleString('en')} locations…`});
+      if (!staged.length) throw new Error('No valid timestamped locations were found in these files.');
       const prepared = preparePoints(staged);
       const nextQuery = createHistoryQuery(prepared.points);
       points = prepared.points; query = nextQuery; geometry = {};
-      const report = {total: points.length, min: points[0].t, max: points.at(-1).t, skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name)};
+      const report = {total: points.length, min: points[0].t, max: points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1).t), skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name)};
       self.postMessage({type: 'imported', id, report});
     } else if (type === 'query') {
       const result = query(data.options), versions = {};

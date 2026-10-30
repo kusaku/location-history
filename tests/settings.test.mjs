@@ -85,6 +85,8 @@ test('Points and Journeys remember independent validated colour choices, default
   saveSettings(saved, maps, storage);
   assert.equal(loadSettings(maps, storage).views.route.colorBy, 'speed');
   assert.equal(loadSettings(maps, storage).views.points.colorBy, 'time');
+  saved.views.points.colorBy = 'altitude'; saveSettings(saved, maps, storage);
+  assert.equal(loadSettings(maps, storage).views.points.colorBy, 'altitude');
 });
 
 test('malformed storage and storage failures never prevent loading or changing settings', () => {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gzipSync} from 'node:zlib';
 import {readHistory} from '../js/import.mjs';
-import {parseHistory} from '../js/data.mjs';
+import {parseHistory, preparePoints} from '../js/data.mjs';
 
 const record = (timestampMs = '0') => ({latitudeE7: 525000000, longitudeE7: 134000000, timestampMs});
 function chunked(input, size = 7, cancel = () => {}) {
@@ -96,4 +96,25 @@ test('metadata-heavy records are normalized before a large batch can accumulate'
   const file = new Blob([JSON.stringify({locations: Array.from({length: 3}, (_, i) => ({...record(String(i)), padding}))})]);
   await readHistory(file, points => batches.push(points.length));
   assert.deepEqual(batches, [2, 1]);
+});
+
+test('phone exports stream semantic and raw positions in either order and merge their metadata', async () => {
+  const semantic = [{startTime: '2026-01-01T00:00:00Z', timelinePath: [{point: 'geo:52.5,13.4', time: '2026-01-01T00:00:00Z'}]}];
+  const raw = [{activityRecord: {timestamp: 'ignored'}}, {position: {LatLng: '52.5°, 13.4°', timestamp: '2026-01-01T00:00:00Z', accuracyMeters: 5, altitudeMeters: 0, speedMetersPerSecond: 2}}, {position: {LatLng: '52.5°, 13.401°', timestamp: '2026-01-01T00:01:00Z', accuracyMeters: 10}}];
+  for (const data of [{semanticSegments: semantic, rawSignals: raw}, {rawSignals: raw, semanticSegments: semantic}]) {
+    const streamed = await read(chunked(JSON.stringify(data), 3));
+    const prepared = preparePoints(streamed.points);
+    assert.equal(prepared.points.length, 2); assert.equal(prepared.duplicates, 1);
+    assert.equal(prepared.points[0].accuracy, 5); assert.equal(prepared.points[0].altitude, 0);
+    assert.equal(prepared.points[0].recordedSpeed, 7.2);
+    assert.deepEqual(prepared.points, preparePoints(parseHistory(data).points).points);
+  }
+});
+
+test('recognized empty phone exports can participate in a combined import without accepting unknown JSON', async () => {
+  const points = [];
+  await readHistory(chunked('{"rawSignals":[],"userLocationProfile":{}}'), batch => points.push(...batch), () => {}, {allowEmpty: true});
+  assert.equal(points.length, 0);
+  await assert.rejects(read(chunked('{"rawSignals":[]}')), /No valid timestamped/);
+  await assert.rejects(readHistory(chunked('{"unknown":[]}'), () => {}, () => {}, {allowEmpty: true}), /Unsupported/);
 });

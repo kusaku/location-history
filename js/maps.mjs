@@ -1,5 +1,5 @@
 import {MAP_CONFIG} from './map-config.mjs?v=4';
-import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=19';
+import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=20';
 
 // Keep every provider's attribution with its documented endpoint.
 const osm = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
@@ -238,10 +238,13 @@ export function paintHistory(map, state, changed) {
   if (colour) {
     map.setPaintProperty('history-heat', 'heatmap-color', colourExpression(state.palette, ['heatmap-density'], true));
   }
-  if (colour || changed === 'time' || changed === 'colorBy') {
+  if (colour || changed === 'time' || changed === 'colorBy' || changed === 'altitude') {
     const position = ['max', 0, ['min', 1, ['/', ['-', ['get', 'time'], state.start ?? 0], Math.max(1, (state.end ?? 0) - (state.start ?? 0))]]];
     const speed = ['interpolate', ['linear'], ['coalesce', ['get', 'speed'], 0], ...SPEED_STOPS.flatMap((stop, i) => [stop, PALETTES[state.palette].colors[i]])];
-    const color = state.colorBy === 'speed' ? ['case', ['==', ['get', 'speed'], null], SPEED_UNKNOWN, speed] : colourExpression(state.palette, position);
+    const [low, high] = state.altitudeRange ?? [0, 1];
+    const height = low === high ? .5 : ['max', 0, ['min', 1, ['/', ['-', ['coalesce', ['get', 'altitude'], low], low], high - low]]];
+    const altitude = ['case', ['==', ['get', 'altitude'], null], SPEED_UNKNOWN, colourExpression(state.palette, height)];
+    const color = state.colorBy === 'speed' ? ['case', ['==', ['get', 'speed'], null], SPEED_UNKNOWN, speed] : state.colorBy === 'altitude' ? altitude : colourExpression(state.palette, position);
     map.setPaintProperty('history-dots', 'circle-color', color);
     map.setPaintProperty('history-route', 'line-color', color);
   }

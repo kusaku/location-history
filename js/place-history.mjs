@@ -1,4 +1,4 @@
-import {DAY, placePolygon} from './data.mjs?v=20';
+import {DAY, placePolygon} from './data.mjs?v=21';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});

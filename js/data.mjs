@@ -521,11 +521,11 @@ export function createHistoryQuery(points) {
     };
     const add = i => {
       const p = points[i], observed = p.t >= start && p.t <= end && filter.mask[i];
-      const next = points[i + 1], nextInside = next && quality(i + 1, options) && contains(i + 1);
-      // An explicit interval can span days. Short consecutive recordings also
-      // establish time in the area, but never across an exit or rejected record.
+      const next = points[i + 1], nextAccepted = next && quality(i + 1, options), nextInside = nextAccepted && contains(i + 1);
+      // Explicit intervals can span days; a rejected fix is not evidence of an exit.
+      // Short consecutive recordings only establish time across accepted inside fixes.
       const interval = nextInside && next.t > p.t && next.t - p.t < 15 * 60_000 ? next.t - p.t : 0;
-      const until = Math.min(p.t + Math.max(p.duration, interval), end + 1, next && !nextInside ? next.t : Infinity);
+      const until = Math.min(p.t + Math.max(p.duration, interval), end + 1, nextAccepted && !nextInside ? next.t : Infinity);
       const from = Math.max(p.t, start);
       let currentVisit = null;
       const ensureVisit = at => {

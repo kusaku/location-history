@@ -216,3 +216,10 @@ test('long overlapping visits count their union, respect accuracy and do not cre
   assert.equal(poor.place(box, {start: DAY, end: 2 * DAY - 1, accuracy: 100}).minutes, 0);
   assert.equal(poor({metric: 'time', start: DAY, end: 2 * DAY - 1, accuracy: 100}).density.features.length, 0);
 });
+
+test('a rejected inaccurate observation is not treated as an exit from a known long visit', () => {
+  const start = 18 * 60 * minute;
+  const query = createHistoryQuery([point(start, 13, 52, 40 * 60 * minute), point(start + 5000, 13.001, 52, 0, 1799), point(start + 10000, 13.002)]);
+  assert.equal(query.place(box, {accuracy: 10}).minutes, 2400);
+  assert.equal(query.place(box, {accuracy: 10, start: DAY, end: 2 * DAY - 1}).minutes, 1440);
+});

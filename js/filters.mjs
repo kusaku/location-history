@@ -48,6 +48,7 @@ export function createFilters(root, initial, changed, committed) {
       <div class="filter-values"><label>From<input data-bound="0" aria-label="Minimum ${name.toLowerCase()}" ${hours ? 'type="text" inputmode="numeric"' : 'type="number" step="any"'}></label><label>To<input data-bound="1" aria-label="Maximum ${name.toLowerCase()}" ${hours ? 'type="text" inputmode="numeric"' : 'type="number" step="any"'}></label></div>
       <div class="dual-range"><input type="range" min="0" max="1000" step="1" aria-label="Minimum ${name.toLowerCase()} slider"><input type="range" min="0" max="1000" step="1" aria-label="Maximum ${name.toLowerCase()} slider"></div>`;
     const fields = [...panel.querySelectorAll('[data-bound]')], sliders = [...panel.querySelectorAll('input[type=range]')], track = panel.querySelector('.dual-range');
+    if (hours) for (const slider of sliders) slider.max = 24;
     let toggle;
     if (unknown) {
       toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'filter-toggle'; toggle.textContent = 'Include unknown';
@@ -60,27 +61,26 @@ export function createFilters(root, initial, changed, committed) {
     }
     function paint() {
       const [min, max] = bounds(), pair = [values[minKey] ?? min, values[maxKey] ?? max];
-      fields.forEach((field, i) => { field.value = hours ? clock(pair[i]) : values[keys[i]] === null ? '' : pair[i]; field.placeholder = 'Any'; });
-      sliders.forEach((slider, i) => { slider.value = rangePosition(pair[i], min, max, config.logarithmic); slider.setAttribute('aria-valuetext', `${hours ? clock(pair[i]) : number.format(pair[i])} ${config.unit}`); });
+      fields.forEach((field, i) => { field.value = hours ? clock(pair[i]) : values[keys[i]] === null ? '' : Math.round(pair[i] * 100) / 100; field.placeholder = 'Any'; });
+      sliders.forEach((slider, i) => { slider.value = hours ? pair[i] : rangePosition(pair[i], min, max, config.logarithmic); slider.setAttribute('aria-valuetext', `${hours ? clock(pair[i]) : number.format(pair[i])} ${config.unit}`); });
       paintRange(track);
       const active = hours ? pair[0] !== 0 || pair[1] !== 24 : values[minKey] !== null || values[maxKey] !== null || values[unknown] === false;
-      const format = value => value === null ? 'any' : hours ? clock(value) : number.format(value);
-      button.textContent = !active ? `${name} · All` : `${name} · ${format(values[minKey])}–${format(values[maxKey])}`;
-      if (!hours && values[unknown] === false) button.textContent += ' *';
+      const low = values[minKey], high = values[maxKey], format = value => hours ? clock(value) : number.format(value);
+      const caption = hours ? `${clock(low)}–${clock(high)}` : low === null && high === null ? 'All' : low === null ? `${id === 'accuracy' ? '<' : '≤'}${format(high)} ${config.unit}` : high === null ? `≥${format(low)} ${config.unit}` : `${format(low)}–${format(high)} ${config.unit}`;
+      button.textContent = `${name} · ${active ? caption : 'All'}${!hours && values[unknown] === false ? ' · known' : ''}`;
       button.classList.toggle('active', active);
-      button.title = `${name} range${unknown ? '. * means unknown values are excluded.' : ''}`;
+      button.title = `${name} range${unknown ? '. Unknown values are included unless disabled in this filter.' : ''}`;
       toggle?.setAttribute('aria-pressed', String(values[unknown]));
     }
     function set(i, value, slider = false) {
       const [min, max] = bounds(), other = values[keys[1 - i]] ?? (i ? min : max);
       if (hours) value = Math.max(0, Math.min(24, Math.round(value)));
-      else if (slider) value = Math.round(value * 10) / 10;
       if (value !== null) value = i ? Math.max(other + (hours ? 1 : 0), value) : Math.min(other - (hours ? 1 : 0), value);
       values[keys[i]] = !hours && slider && (i ? value >= max : value <= min) ? null : value;
       paint(); changed();
     }
     sliders.forEach((slider, i) => {
-      slider.oninput = () => { const [min, max] = bounds(); set(i, rangeValue(Number(slider.value), min, max, config.logarithmic), true); };
+      slider.oninput = () => { const [min, max] = bounds(); set(i, hours ? Number(slider.value) : rangeValue(Number(slider.value), min, max, config.logarithmic), true); };
       slider.onchange = committed;
     });
     fields.forEach((field, i) => { field.onchange = () => {

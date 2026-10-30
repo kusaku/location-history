@@ -61,11 +61,11 @@ export function createFilters(root, initial, changed, committed) {
     }
     function paint() {
       const [min, max] = bounds(), pair = [values[minKey] ?? min, values[maxKey] ?? max];
-      fields.forEach((field, i) => { field.value = hours ? clock(pair[i]) : values[keys[i]] === null ? '' : Math.round(pair[i] * 100) / 100; field.placeholder = 'Any'; });
+      fields.forEach((field, i) => { field.value = hours ? clock(pair[i]) : values[keys[i]] === null ? '' : Number(pair[i].toPrecision(6)); field.placeholder = 'Any'; });
       sliders.forEach((slider, i) => { slider.value = hours ? pair[i] : rangePosition(pair[i], min, max, config.logarithmic); slider.setAttribute('aria-valuetext', `${hours ? clock(pair[i]) : number.format(pair[i])} ${config.unit}`); });
       paintRange(track);
       const active = hours ? pair[0] !== 0 || pair[1] !== 24 : values[minKey] !== null || values[maxKey] !== null || values[unknown] === false;
-      const low = values[minKey], high = values[maxKey], format = value => hours ? clock(value) : number.format(value);
+      const low = values[minKey], high = values[maxKey], format = value => hours ? clock(value) : value !== 0 && Math.abs(value) < 1 ? new Intl.NumberFormat('en', {maximumSignificantDigits: 3}).format(value) : number.format(value);
       const caption = hours ? `${clock(low)}–${clock(high)}` : low === null && high === null ? 'All' : low === null ? `${id === 'accuracy' ? '<' : '≤'}${format(high)} ${config.unit}` : high === null ? `≥${format(low)} ${config.unit}` : `${format(low)}–${format(high)} ${config.unit}`;
       button.textContent = `${name} · ${active ? caption : 'All'}${!hours && values[unknown] === false ? ' · known' : ''}`;
       button.classList.toggle('active', active);

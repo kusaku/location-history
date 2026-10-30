@@ -25,6 +25,8 @@ test('short device-speed intervals retain a small walk and stationary fixes cont
 test('jump detection preserves neighbours around speed and acceleration spikes', () => {
   assert.deepEqual([...jumpFlags([point(0), point(5000, 5000), point(10000, 10)])], [0, 1, 0]);
   assert.deepEqual([...jumpFlags([point(0), point(5000, 400), point(10000, 10)])], [0, 1, 0]);
+  assert.deepEqual([...jumpFlags([point(0), point(600000, 1e6), point(1200000, 10)])], [0, 1, 0]);
+  assert.deepEqual([...jumpFlags([point(0), point(0, 1e6), point(60000, 10)])], [0, 1, 0]);
   const normal = Array.from({length: 100}, (_, i) => point(i * 5000, i * 7));
   assert.ok(jumpFlags(normal).every(value => value === 0));
   const flight = Array.from({length: 20}, (_, i) => point(i * 60000, i * 15000));

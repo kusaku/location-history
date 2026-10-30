@@ -1,9 +1,9 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=17';
-import {createPlaceHistory} from './place-history.mjs?v=21';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=18';
+import {createPlaceHistory} from './place-history.mjs?v=22';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=22';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=19';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=22';
+import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=23';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=20';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=23';
 import {createFilters, bindRange, paintRange} from './filters.mjs?v=3';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
@@ -283,7 +283,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=22', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=23', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

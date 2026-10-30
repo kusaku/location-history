@@ -216,12 +216,15 @@ export function jumpFlags(points) {
     if (flags[i - 1]) continue;
     const a = points[i - 1], b = points[i], c = points[i + 1];
     const dt1 = (b.t - a.t) / 1000, dt2 = (c.t - b.t) / 1000;
-    if (dt1 <= 0 || dt2 <= 0 || dt1 > 120 || dt2 > 120) continue;
-    const ab = distance(a, b), bc = distance(b, c), ac = distance(a, c);
+    if (dt1 < 0 || dt2 < 0 || dt1 + dt2 === 0 || dt1 > 21600 || dt2 > 21600) continue;
+    const ab = distance(a, b), bc = distance(b, c), speedSpike = impossible(a, b, ab) && impossible(b, c, bc);
+    if (!speedSpike && (dt1 <= 0 || dt2 <= 0 || dt1 > 120 || dt2 > 120)) continue;
+    const ac = distance(a, c);
     if (impossible(a, c, ac)) continue;
+    if (speedSpike) { flags[i] = 1; continue; }
     const excess = ab + bc - ac;
     const deltaV = Math.sqrt(Math.max(0, ab * ab / (dt1 * dt1) + bc * bc / (dt2 * dt2) - (ac * ac - ab * ab - bc * bc) / (dt1 * dt2))) * 1000;
-    if (impossible(a, b, ab) && impossible(b, c, bc) || excess > Math.max(.05, 2 * (uncertainty(a, b) + uncertainty(b, c))) && deltaV * 2 / (dt1 + dt2) > 15) flags[i] = 1;
+    if (excess > Math.max(.05, 2 * (uncertainty(a, b) + uncertainty(b, c))) && deltaV * 2 / (dt1 + dt2) > 15) flags[i] = 1;
   }
   let previous = -1;
   for (let i = 1; i < points.length; i++) {

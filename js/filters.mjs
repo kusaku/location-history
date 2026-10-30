@@ -1,3 +1,5 @@
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=24';
+
 // Native range inputs share one track. Each thumb keeps its keyboard and
 // accessibility behaviour; the same small control serves filters and dates.
 export function paintRange(root) {
@@ -24,17 +26,62 @@ export function bindRange(root) {
 export const rangePosition = (value, min, max, logarithmic = false) => max === min ? 0 : (logarithmic ? Math.log1p(value - min) / Math.log1p(max - min) : (value - min) / (max - min)) * 1000;
 export const rangeValue = (position, min, max, logarithmic = false) => min + (logarithmic ? Math.expm1(position / 1000 * Math.log1p(max - min)) : position / 1000 * (max - min));
 
+function bindPopover(root, button, panel) {
+  panel.addEventListener('toggle', event => {
+    if (event.newState !== 'open') return;
+    const rect = button.getBoundingClientRect(), width = panel.offsetWidth, height = panel.offsetHeight;
+    panel.style.left = `${Math.max(8, Math.min(innerWidth - width - 8, rect.left))}px`;
+    panel.style.top = `${Math.max(8, rect.top >= height + 8 ? rect.top - height - 6 : Math.min(innerHeight - height - 8, rect.bottom + 6))}px`;
+  });
+  root.append(button, panel);
+}
+
 export function createFilters(root, initial, changed, committed) {
   const configs = [
     {id: 'hours', name: 'Hours', unit: 'UTC', minKey: 'hourStart', maxKey: 'hourEnd', bounds: [0, 24], hours: true},
     {id: 'accuracy', name: 'Accuracy', unit: 'm', minKey: 'accuracyMin', maxKey: 'accuracy', unknown: 'accuracyUnknown', bounds: [0, 1000], logarithmic: true},
+    {id: 'track', name: 'Track quality'},
     {id: 'speed', name: 'Speed', unit: 'km/h', minKey: 'speedMin', maxKey: 'speedMax', unknown: 'speedUnknown', bounds: [0, 1000], logarithmic: true},
     {id: 'altitude', name: 'Altitude', unit: 'm', minKey: 'altitudeMin', maxKey: 'altitudeMax', unknown: 'altitudeUnknown', bounds: [-500, 9000]},
   ];
   const values = {};
   const number = new Intl.NumberFormat('en', {maximumFractionDigits: 1});
   const clock = value => `${String(value).padStart(2, '0')}:00`;
+  function trackQuality(config) {
+    values.excludeJumps = initial.excludeJumps === true;
+    values.jumpTolerance = initial.jumpTolerance ?? DEFAULT_JUMP_TOLERANCE;
+    const button = document.createElement('button'), panel = document.createElement('div');
+    button.type = 'button'; button.className = 'filter-toggle'; button.id = 'filter-track'; button.setAttribute('popovertarget', 'filter-track-panel');
+    button.title = 'Filter isolated location outliers using nearby movement and track geometry';
+    panel.id = 'filter-track-panel'; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto');
+    panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Track quality');
+    panel.innerHTML = `<div class="filter-title"><strong>Track quality</strong><button type="button" data-reset>Reset</button></div>
+      <button class="filter-toggle" type="button" data-enabled aria-pressed="false">Remove outliers</button>
+      <div class="filter-values"><label>Allowed speed spike · km/h<input type="number" min="0" max="200" step="any" aria-label="Allowed speed spike"></label></div>
+      <input class="quality-slider" type="range" min="0" max="200" step="1" aria-label="Allowed speed spike slider">
+      <p class="hint">Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.</p>`;
+    const toggle = panel.querySelector('[data-enabled]'), field = panel.querySelector('input[type=number]'), slider = panel.querySelector('input[type=range]');
+    function paint() {
+      button.textContent = `Track quality · ${values.excludeJumps ? `+${number.format(values.jumpTolerance)} km/h` : 'Off'}`;
+      button.classList.toggle('active', values.excludeJumps);
+      toggle.setAttribute('aria-pressed', String(values.excludeJumps));
+      field.value = slider.value = values.jumpTolerance;
+      slider.setAttribute('aria-valuetext', `${values.jumpTolerance} km/h above nearby movement`);
+    }
+    const apply = () => { paint(); changed(); committed(); };
+    toggle.onclick = () => { values.excludeJumps = !values.excludeJumps; apply(); };
+    slider.oninput = () => { values.jumpTolerance = Number(slider.value); values.excludeJumps = true; paint(); };
+    slider.onchange = () => { changed(); committed(); };
+    field.onchange = () => {
+      if (!field.value.trim() || !Number.isFinite(Number(field.value))) { paint(); return; }
+      values.jumpTolerance = Math.max(0, Math.min(200, Number(field.value))); values.excludeJumps = true; apply();
+    };
+    panel.querySelector('[data-reset]').onclick = () => { values.excludeJumps = false; values.jumpTolerance = DEFAULT_JUMP_TOLERANCE; apply(); };
+    bindPopover(root, button, panel); paint();
+    return {config, paint};
+  }
   const controls = configs.map(config => {
+    if (config.id === 'track') return trackQuality(config);
     const {id, name, minKey, maxKey, unknown, hours} = config;
     values[minKey] = initial[minKey] ?? (hours ? 0 : null);
     values[maxKey] = initial[maxKey] ?? (hours ? 24 : null);
@@ -91,13 +138,7 @@ export function createFilters(root, initial, changed, committed) {
       set(i, value); committed();
     }; });
     panel.querySelector('[data-reset]').onclick = () => { values[minKey] = hours ? 0 : null; values[maxKey] = hours ? 24 : null; if (unknown) values[unknown] = true; paint(); changed(); committed(); };
-    panel.addEventListener('toggle', event => {
-      if (event.newState !== 'open') return;
-      const rect = button.getBoundingClientRect(), width = panel.offsetWidth, height = panel.offsetHeight;
-      panel.style.left = `${Math.max(8, Math.min(innerWidth - width - 8, rect.left))}px`;
-      panel.style.top = `${Math.max(8, rect.top >= height + 8 ? rect.top - height - 6 : Math.min(innerHeight - height - 8, rect.bottom + 6))}px`;
-    });
-    root.append(button, panel); bindRange(track); paint();
+    bindPopover(root, button, panel); bindRange(track); paint();
     return {config, paint};
   });
   return {

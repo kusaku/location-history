@@ -3,6 +3,7 @@ export const DAY = 86_400_000;
 export const HISTOGRAM_BINS = 64;
 export const SPEED_STOPS = Object.freeze([0, 5, 20, 50, 130, 1000]);
 export const SPEED_UNKNOWN = '#8b929a';
+export const DEFAULT_JUMP_TOLERANCE = 15;
 // Date windows have inclusive endpoints. Keep their width when reaching a data boundary.
 export function shiftPeriod(start, end, min, max, direction) {
   const shift = Math.max(min - start, Math.min(max - end, direction * (end - start + 1)));
@@ -144,13 +145,16 @@ export function intervalSpeed(a, b) {
   return a.recordedSpeed != null && b.recordedSpeed != null ? (a.recordedSpeed + b.recordedSpeed) / 2 : speed;
 }
 // Device measurements are independent of display filters. Estimate missing speed
-// from immediate temporal neighbours, without retaining another per-point column.
-export function pointSpeed(points, i) {
+// from temporal neighbours, skipping quality outliers without a per-point column.
+export function pointSpeed(points, i, excluded) {
   const p = points[i];
   if (p.recordedSpeed != null) return p.recordedSpeed;
-  const before = i > 0 ? intervalSpeed(points[i - 1], p) : null;
-  const after = i + 1 < points.length ? intervalSpeed(p, points[i + 1]) : null;
-  const dt1 = before === null ? 0 : p.t - points[i - 1].t, dt2 = after === null ? 0 : points[i + 1].t - p.t;
+  let left = i - 1, right = i + 1;
+  while (left >= 0 && excluded?.[left]) left--;
+  while (right < points.length && excluded?.[right]) right++;
+  const before = left >= 0 ? intervalSpeed(points[left], p) : null;
+  const after = right < points.length ? intervalSpeed(p, points[right]) : null;
+  const dt1 = before === null ? 0 : p.t - points[left].t, dt2 = after === null ? 0 : points[right].t - p.t;
   return dt1 + dt2 ? ((before ?? 0) * dt1 + (after ?? 0) * dt2) / (dt1 + dt2) : null;
 }
 function projectY(lat) {
@@ -210,7 +214,8 @@ const uncertainty = (a, b) => Math.max(.006, ((a.accuracy ?? 0) + (b.accuracy ??
 const impossible = (a, b, km = distance(a, b)) => b.t >= a.t && b.t - a.t <= 6 * 3_600_000 && km - uncertainty(a, b) > (b.t - a.t) / 3_600_000 * 1000;
 // One byte per observation. First identify isolated spikes, preserving their
 // neighbours. Unresolvable two-point conflicts are conservatively excluded.
-export function jumpFlags(points) {
+export function jumpFlags(points, {tolerance = DEFAULT_JUMP_TOLERANCE} = {}) {
+  tolerance = Number.isFinite(tolerance) ? Math.max(0, Math.min(200, tolerance)) : DEFAULT_JUMP_TOLERANCE;
   const flags = new Uint8Array(points.length);
   for (let i = 1; i < points.length - 1; i++) {
     if (flags[i - 1]) continue;
@@ -238,6 +243,49 @@ export function jumpFlags(points) {
       else flags[i - 1] = flags[i] = 1;
     }
     if (!flags[i - 1]) previous = i - 1;
+  }
+  // Compare original neighbouring segments, before any display filters. A tiny
+  // ring reuses distances; the two scratch arrays hold at most eight samples.
+  // Soft decisions never alter the context, so raising the allowance can only
+  // retain more observations, without adding a score/property to each point.
+  const km = new Float64Array(16), samples = new Float64Array(8), deviations = new Float64Array(8);
+  const context = 15 * 60_000;
+  let loaded = 0;
+  const median = (values, count) => count % 2 ? values[count >>> 1] : (values[count / 2 - 1] + values[count / 2]) / 2;
+  for (let i = 1; i < points.length - 1; i++) {
+    while (loaded < Math.min(points.length - 1, i + 5)) { loaded++; km[loaded & 15] = distance(points[loaded - 1], points[loaded]); }
+    if (flags[i]) continue;
+    const a = points[i - 1], b = points[i], c = points[i + 1], dt1 = b.t - a.t, dt2 = c.t - b.t;
+    if (dt1 <= 0 || dt2 <= 0 || dt1 > context || dt2 > context) continue;
+    const ab = km[i & 15], bc = km[(i + 1) & 15], speed = Math.min(ab * 3_600_000 / dt1, bc * 3_600_000 / dt2);
+    if (speed <= tolerance) continue;
+    let count = 0, before = 0;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let offset = 0; offset < 4; offset++) {
+        const j = side < 0 ? i - 1 - offset : i + 2 + offset;
+        if (j < 1 || j >= points.length) break;
+        const first = points[j - 1], last = points[j], elapsed = last.t - first.t;
+        if (elapsed > context || Math.max(Math.abs(b.t - first.t), Math.abs(last.t - b.t)) > context) break;
+        if (elapsed <= 0) continue;
+        const value = km[j & 15] * 3_600_000 / elapsed;
+        if (value <= 1000) { samples[count++] = value; if (side < 0) before++; }
+      }
+    }
+    if (count < 4 || !before || before === count) continue;
+    samples.fill(Infinity, count); samples.sort();
+    const typical = median(samples, count);
+    if (speed <= typical + tolerance) continue;
+    for (let j = 0; j < count; j++) deviations[j] = Math.abs(samples[j] - typical);
+    deviations.fill(Infinity, count); deviations.sort();
+    const spread = 3 * 1.4826 * median(deviations, count);
+    const limit = typical + Math.max(tolerance, spread);
+    if (speed <= limit) continue;
+    const ac = distance(a, c), bypass = Math.max(0, ac - uncertainty(a, c)) * 3_600_000 / (dt1 + dt2);
+    const precision = Math.min(a.accuracy ?? Infinity, b.accuracy ?? Infinity, c.accuracy ?? Infinity);
+    const resolution = Math.max(.01, Number.isFinite(precision) ? precision / 1000 : 0);
+    // The bypass check has its own fixed noise allowance. Reusing the adjustable
+    // limit here could make a looser setting accept a bypass and remove more fixes.
+    if (bypass <= typical + Math.max(DEFAULT_JUMP_TOLERANCE, spread) && ab + bc - ac > resolution) flags[i] = 1;
   }
   return flags;
 }
@@ -292,14 +340,14 @@ export function createHistoryQuery(points) {
   const min = points[0]?.t ?? 0, max = points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1)?.t ?? 0);
   const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
-  const jumps = jumpFlags(points);
+  let jumps = new Uint8Array(0), jumpTolerance;
   const quality = (i, options) => {
     const {accuracy = 0, accuracyMin = 0, accuracyUnknown = true, excludeJumps = false, altitudeMin = null, altitudeMax = null, altitudeUnknown = true, speedMin = null, speedMax = null, speedUnknown = true} = options;
     const p = points[i];
     if (excludeJumps && jumps[i] || !accepts(p, accuracy, 0, 24, accuracyMin, accuracyUnknown)) return false;
     if (p.altitude == null ? !altitudeUnknown : altitudeMin !== null && p.altitude < altitudeMin || altitudeMax !== null && p.altitude > altitudeMax) return false;
     if (speedMin !== null || speedMax !== null || !speedUnknown) {
-      const speed = pointSpeed(points, i);
+      const speed = pointSpeed(points, i, excludeJumps ? jumps : null);
       if (speed === null ? !speedUnknown : speedMin !== null && speed < speedMin || speedMax !== null && speed > speedMax) return false;
     }
     return true;
@@ -312,7 +360,9 @@ export function createHistoryQuery(points) {
 
   function ensureFilter(options) {
     const {accuracy = 0, hourStart = 0, hourEnd = 24, excludeJumps = false} = options;
-    const nextFilterKey = JSON.stringify([accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
+    const tolerance = Number.isFinite(options.jumpTolerance) ? Math.max(0, Math.min(200, options.jumpTolerance)) : DEFAULT_JUMP_TOLERANCE;
+    if (excludeJumps && jumpTolerance !== tolerance) { jumps = jumpFlags(points, {tolerance}); jumpTolerance = tolerance; }
+    const nextFilterKey = JSON.stringify([accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
     if (filterKey !== nextFilterKey) {
       const bridge = accuracy || options.accuracyMin || options.altitudeMin != null || options.altitudeMax != null || options.speedMin != null || options.speedMax != null || options.accuracyUnknown === false || options.altitudeUnknown === false || options.speedUnknown === false;
       const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0), barriers = bridge ? new Uint32Array(points.length + 1) : null;
@@ -418,7 +468,7 @@ export function createHistoryQuery(points) {
       const stride = Math.max(1, Math.ceil(visibleCount / 20_000)), features = [];
       for (let j = 0; j < visibleCount; j += stride) {
         const p = points[visible[j]];
-        const speed = pointSpeed(points, visible[j]);
+        const speed = pointSpeed(points, visible[j], options.excludeJumps ? jumps : null);
         features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy, speed: Number.isFinite(speed) ? speed : null, speedRecorded: p.recordedSpeed != null, altitude: p.altitude ?? null}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
       }
       dots = collection(features); drawn = features.length;

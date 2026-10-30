@@ -15,6 +15,17 @@ test('new visitors default to OpenFreeMap Midnight, with an available-provider f
   assert.equal(loadSettings(['osm'], memoryStorage()).basemap, 'osm');
 });
 
+test('track quality migrates the old toggle, persists its allowance and rejects invalid thresholds', () => {
+  const storage = memoryStorage();
+  for (const jumpTolerance of [0, 5, 15, 35.5, 200]) {
+    saveSettings({excludeJumps: true, jumpTolerance}, maps, storage);
+    const result = loadSettings(maps, storage);
+    assert.equal(result.excludeJumps, true); assert.equal(result.jumpTolerance, jumpTolerance);
+  }
+  for (const jumpTolerance of [-1, 201, '15', null, Infinity, NaN]) assert.equal(saveSettings({jumpTolerance}, maps, storage).jumpTolerance, 15);
+  assert.equal(saveSettings({excludeJumps: true}, maps, storage).jumpTolerance, 15);
+});
+
 test('display, map and filter preferences survive a storage round trip', () => {
   const storage = memoryStorage();
   const input = {...loadSettings(maps, storage), basemap: 'google-satellite', mode: 'hex', hourStart: 8, hourEnd: 19, accuracy: 500, period: '1', periodDay: null, dateRange: [4 * DAY, 5 * DAY - 1]};

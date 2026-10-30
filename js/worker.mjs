@@ -1,5 +1,5 @@
-import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=23';
-import {readHistory} from './import.mjs?v=22';
+import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=24';
+import {readHistory} from './import.mjs?v=23';
 let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;

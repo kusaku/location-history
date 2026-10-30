@@ -2263,6 +2263,11 @@ dialog p {
 .filter-popover>.filter-toggle {
   margin-top: 7px;
 }
+.quality-slider {
+  width: 100%;
+  margin: 12px 0 4px;
+  accent-color: var(--accent);
+}
 @media(max-width:700px) {
   .timeline-inputs {
     display: grid;

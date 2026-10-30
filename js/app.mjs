@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=18';
-import {createPlaceHistory} from './place-history.mjs?v=22';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=19';
+import {createPlaceHistory} from './place-history.mjs?v=23';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=23';
-import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=20';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=23';
-import {createFilters, bindRange, paintRange} from './filters.mjs?v=4';
+import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=24';
+import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=21';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=24';
+import {createFilters, bindRange, paintRange} from './filters.mjs?v=5';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -69,7 +69,7 @@ function currentOptions() {
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
   const {start, end, mode, period} = state, {metric, radius, colorBy} = state.views[mode];
-  return {start, end, mode, period, metric, radius, colorBy, excludeJumps: state.excludeJumps, ...filters.values(), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  return {start, end, mode, period, metric, radius, colorBy, ...filters.values(), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -283,7 +283,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=23', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=24', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -375,12 +375,6 @@ function bindControls() {
   }
   filters = createFilters($('window-filters'), preferences, () => { stopPlayback(); popup?.remove(); refresh(); }, rememberSettings);
   bindRange($('date-range'));
-  $('exclude-jumps').setAttribute('aria-pressed', String(state.excludeJumps));
-  $('exclude-jumps').onclick = () => {
-    stopPlayback(); state.excludeJumps = !state.excludeJumps;
-    $('exclude-jumps').setAttribute('aria-pressed', String(state.excludeJumps));
-    rememberSettings(); refresh();
-  };
   $('metric').onchange = event => { state.views[state.mode].metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };
   for (const button of $('color-by').children) button.onclick = () => {
     state.views[state.mode].colorBy = button.dataset.colorBy;

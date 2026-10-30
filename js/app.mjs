@@ -4,7 +4,7 @@ import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=24';
 import {resizeWindow, shiftWindow, histogramWindow} from './timeline.mjs?v=21';
 import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=24';
-import {createFilters, bindRange, paintRange} from './filters.mjs?v=5';
+import {createFilters, bindRange, paintRange} from './filters.mjs?v=6';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);

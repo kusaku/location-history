@@ -57,7 +57,7 @@ export function createFilters(root, initial, changed, committed) {
     panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Track quality');
     panel.innerHTML = `<div class="filter-title"><strong>Track quality</strong><button type="button" data-reset>Reset</button></div>
       <button class="filter-toggle" type="button" data-enabled aria-pressed="false">Remove outliers</button>
-      <div class="filter-values"><label>Allowed speed spike · km/h<input type="number" min="0" max="200" step="any" aria-label="Allowed speed spike"></label></div>
+      <div class="filter-values quality-values"><label>Allowed speed spike<input type="number" min="0" max="200" step="any" aria-label="Allowed speed spike">km/h</label></div>
       <input class="quality-slider" type="range" min="0" max="200" step="1" aria-label="Allowed speed spike slider">
       <p class="hint">Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.</p>`;
     const toggle = panel.querySelector('[data-enabled]'), field = panel.querySelector('input[type=number]'), slider = panel.querySelector('input[type=range]');

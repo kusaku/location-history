@@ -5,7 +5,8 @@ export function paintRange(root) {
   const percent = input => (Number(input.value) - Number(input.min)) / Math.max(1, input.max - input.min) * 100;
   root.style.setProperty('--low', `${percent(low)}%`);
   root.style.setProperty('--high', `${percent(high)}%`);
-  low.style.zIndex = Number(low.value) > (Number(low.min) + Number(low.max)) / 2 ? '2' : '1';
+  low.style.zIndex = Number(low.value) > (Number(low.min) + Number(low.max)) / 2 ? '3' : '1';
+  high.style.zIndex = '2';
 }
 export function bindRange(root) {
   root.onpointerdown = event => {
@@ -14,7 +15,8 @@ export function bindRange(root) {
     if (inputs.some(input => input.disabled)) return;
     const rect = root.getBoundingClientRect(), position = Math.max(0, Math.min(1, (event.clientX - rect.left - 8) / (rect.width - 16)));
     const value = Number(inputs[0].min) + position * (inputs[0].max - inputs[0].min);
-    const input = Math.abs(inputs[0].value - value) < Math.abs(inputs[1].value - value) ? inputs[0] : inputs[1];
+    const left = Math.abs(inputs[0].value - value), right = Math.abs(inputs[1].value - value);
+    const input = left < right || left === right && value < Number(inputs[0].value) ? inputs[0] : inputs[1];
     input.value = value; input.focus(); input.dispatchEvent(new Event('input', {bubbles: true})); input.dispatchEvent(new Event('change', {bubbles: true}));
   };
   paintRange(root);

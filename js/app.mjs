@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=30';
-import {createPlaceHistory} from './place-history.mjs?v=36';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=31';
+import {createPlaceHistory} from './place-history.mjs?v=37';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=35';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=35';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=37';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=18';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=36';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=36';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=38';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=19';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -390,7 +390,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=35', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=36', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

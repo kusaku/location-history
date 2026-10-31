@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=35';
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=36';
 
 // ISO text remains editable independently of browser locale. The companion date
 // input supplies the native calendar without another calendar implementation.

@@ -1,4 +1,4 @@
-import {DAY, shiftPeriod} from './data.mjs?v=35';
+import {DAY, shiftPeriod} from './data.mjs?v=36';
 
 // Visible dates are ISO in every browser; all calendar arithmetic stays in UTC.
 const weekday = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'});

@@ -135,15 +135,35 @@ test('cubic journeys bound visual rounding and preserve measurements and colour 
   assert.equal(JSON.stringify(points), snapshot);
 });
 
-test('smooth display falls back exactly to straight paths at overview zooms and for large visible tracks', () => {
+test('smooth display falls back exactly for subpixel and large visible tracks, with cached repeat queries', () => {
   const query = createHistoryQuery(corners());
   for (const zoom of [2, 10.8, 11.9]) {
     const straight = query({mode: 'route', zoom});
-    assert.equal(query({mode: 'route', zoom, smooth: true}).routes, straight.routes);
+    const options = {mode: 'route', zoom, smooth: true}, result = query(options);
+    assert.deepEqual(result.routes, straight.routes);
+    assert.equal(query(options).routes, result.routes);
   }
   const dense = createHistoryQuery(Array.from({length: 10002}, (_, i) => point(i * 1000, i % 2 * .00003, i * .0000001)));
   const straight = dense({mode: 'route', colorBy: 'speed', zoom: 18});
   assert.equal(dense({mode: 'route', colorBy: 'speed', zoom: 18, smooth: true}).routes, straight.routes);
+});
+
+test('visible regional curves keep their shape when zooming out across level twelve', () => {
+  const points = corners().map((p, i) => ({...p, lon: p.lon * 100, lat: p.lat * 100, t: i * 3600000, accuracy: null}));
+  const query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) {
+    let previousBend;
+    for (const zoom of [12.5, 11.5, 10.5]) {
+      const options = {mode: 'route', colorBy, zoom}, straight = query(options), smooth = query({...options, smooth: true});
+      const bend = Math.min(...vertices(smooth).map(c => c[1]));
+      assert.ok(bend < -.005, `${colorBy} lost its visible bend at zoom ${zoom}`);
+      if (previousBend !== undefined) assert.ok(Math.abs(bend - previousBend) < .0002);
+      previousBend = bend;
+      assert.notDeepEqual(smooth.routes, straight.routes);
+      assert.equal(smooth.count, straight.count); assert.equal(smooth.km, straight.km);
+      assert.equal(query({...options, smooth: true}).routes, smooth.routes);
+    }
+  }
 });
 
 test('closely spaced and straight edges do not acquire unnecessary curve vertices', () => {

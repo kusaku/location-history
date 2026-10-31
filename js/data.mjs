@@ -630,7 +630,7 @@ export function createHistoryQuery(points) {
     const level = Number.isFinite(zoom) ? Math.floor(Math.max(0, Math.min(20, zoom))) : 10;
     const scale = 512 * 2 ** level, parts = selection.routeParts, visible = [];
     const viewLeft = (viewport[0] + 180) / 360, viewRight = (viewport[2] + 180) / 360, viewTop = projectY(viewport[3]), viewBottom = projectY(viewport[1]);
-    let smooth = options.smooth === true && level >= 12, segments;
+    let smooth = options.smooth === true, segments;
     const collect = curved => {
       visible.length = 0; segments = 0;
       for (let i = 0; i < parts.length; i++) {
@@ -655,7 +655,7 @@ export function createHistoryQuery(points) {
       }
     };
     collect(false);
-    // Avoid multiplying large/dense geometry. Overview and disabled smoothing
+    // Avoid multiplying large/dense geometry. Subpixel and disabled smoothing
     // reuse the original line cache, without generating any curve vertices.
     if (smooth && segments <= 10_000) collect(true);
     if (smooth && segments > 10_000) { smooth = false; collect(false); }

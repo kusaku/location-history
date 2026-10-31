@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/styles.css?v=52">
-    <script type="module" src="js/app.mjs?v=74">
+    <script type="module" src="js/app.mjs?v=75">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -204,7 +204,7 @@
             <span>Path</span>
             <div id="route-shape" class="presets" role="group" aria-label="Journey path shape">
               <button type="button" data-smooth="false" aria-pressed="true">Straight</button>
-              <button type="button" data-smooth="true" aria-pressed="false" title="Continuous smooth curves. Uncertain locations may shift within their recorded accuracy. Overview and dense tracks stay straight; measurements use original locations.">Smooth</button>
+              <button type="button" data-smooth="true" aria-pressed="false" title="Continuous smooth curves. Uncertain locations may shift within their recorded accuracy. Dense tracks may use straight lines to keep the map responsive; measurements use original locations.">Smooth</button>
             </div>
           </div>
           <div id="density-controls">
@@ -632,7 +632,7 @@
         Transfer the exported JSON to the device where you use this site, then choose <b>Open location history</b>. Extract ZIP archives first. Select all the JSON files you want to merge together in the same import.
       </p>
       <h3>Journeys</h3>
-      <p>Choose <b>Straight</b> or <b>Smooth</b> under Path. Smooth draws flowing curves with matching tangents at their joins. Uncertain locations may shift within their reported accuracy; the original locations, speed, distance and place-history calculations stay the same. Overview maps and dense tracks use straight geometry automatically. Device boundaries, recording gaps and excluded jumps remain disconnected.</p>
+      <p>Choose <b>Straight</b> or <b>Smooth</b> under Path. Smooth draws flowing curves with matching tangents at their joins. Uncertain locations may shift within their reported accuracy; the original locations, speed, distance and place-history calculations stay the same. Dense tracks may use straight geometry automatically to keep the map responsive. Device boundaries, recording gaps and excluded jumps remain disconnected.</p>
       <h3>Place history</h3>
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
       <p>Choose the current window or <b>All dates</b>. Hour, accuracy, speed, altitude and jump filters still apply. Known visit intervals contribute time on every covered UTC day and hour, including days without a new GPS observation; no extra GPS points are invented. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>

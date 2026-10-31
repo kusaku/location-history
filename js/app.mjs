@@ -43,9 +43,16 @@ function showPoint({feature, previous, next}, longitude, focus) {
   const zone = document.createElement('span'); zone.className = 'point-zone'; zone.textContent = 'UTC'; when.append(zone);
   const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
   const measurements = document.createElement('dl'); measurements.className = 'point-measurements';
-  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unavailable' : `${number.format(p.altitude)} m`], ['Coordinates', `${lat.toFixed(6)}, ${lon.toFixed(6)}`]]) {
+  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unavailable' : `${number.format(p.altitude)} m`], ['Coordinates', [lat.toFixed(6), lon.toFixed(6)]]]) {
     const term = document.createElement('dt'), detail = document.createElement('dd');
-    term.textContent = label; detail.textContent = value; measurements.append(term, detail);
+    term.textContent = label;
+    if (Array.isArray(value)) {
+      detail.className = 'point-coordinates';
+      value.forEach((coordinate, i) => {
+        const span = document.createElement('span'); span.textContent = coordinate; span.title = i ? 'Longitude' : 'Latitude'; detail.append(span);
+      });
+    } else detail.textContent = value;
+    measurements.append(term, detail);
   }
   const navigation = document.createElement('div'); navigation.className = 'period-navigation point-navigation';
   navigation.setAttribute('role', 'group'); navigation.setAttribute('aria-label', 'Point navigation');

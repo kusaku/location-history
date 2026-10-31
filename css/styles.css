@@ -910,6 +910,23 @@ select {
   margin: 0;
   text-align: right;
 }
+.point-coordinates {
+  display: flex;
+  justify-content: flex-end;
+  gap: .35em;
+}
+.point-coordinates>span:first-child::after {
+  content: ',';
+}
+@media(max-width:480px) {
+  .point-coordinates {
+    flex-direction: column;
+    gap: 0;
+  }
+  .point-coordinates>span:first-child::after {
+    content: none;
+  }
+}
 
 .color-controls {
   display: flex;

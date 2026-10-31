@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=24';
-import {createPlaceHistory} from './place-history.mjs?v=29';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=25';
+import {createPlaceHistory} from './place-history.mjs?v=30';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=29';
-import {resizeWindow, shiftWindow, dragWindow, histogramWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=28';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=30';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=12';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=30';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=29';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=31';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=13';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -15,6 +15,7 @@ const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locat
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let dateFields = [];
 let currentAttribution = '', filters, selectedPoint, pointPending, pointRequest = 0;
+let histogramWidth = 1024;
 function closePoint() {
   pointRequest++; pointPending = null;
   popup?.remove();
@@ -140,7 +141,7 @@ function currentOptions() {
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
   const {start, end, mode, period} = state, {metric, radius, colorBy} = state.views[mode];
-  return {start, end, mode, period, metric, radius, colorBy, ...filters.values(), zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  return {start, end, mode, period, metric, radius, colorBy, ...filters.values(), histogramWidth, zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -266,7 +267,7 @@ function createHistogram(count) {
     bar.tabIndex = i === 0 ? 0 : -1;
     bar.onclick = () => {
       stopPlayback();
-      const range = histogramWindow(state.report.min, state.report.max, i, $('histogram').children.length);
+      const range = state.result?.histogramRanges[i];
       if (!range) return;
       setDates(range.start, range.end); rememberSettings();
     };
@@ -287,19 +288,20 @@ function showResult(result) {
   $('stat-days').textContent = number.format(result.days);
   $('stat-distance').textContent = new Intl.NumberFormat('en', {maximumFractionDigits: result.km < 1 ? 3 : 1}).format(result.km);
   $('range-summary').textContent = result.count || result.drawn ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
-  $('render-note').textContent = !result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`;
+  const unit = {day: 'Day', week: 'Week', month: 'Month', quarter: 'Quarter', year: 'Year'}[result.histogramUnit] ?? result.histogramUnit;
+  $('render-note').textContent = `${unit} / bar · ${!result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`}`;
   $('fit').disabled = !result.bounds;
   if ($('histogram').children.length !== result.histogram.length) createHistogram(result.histogram.length);
   const max = Math.max(1, ...result.histogram);
   [...$('histogram').children].forEach((bar, i) => {
-    const range = histogramWindow(state.report.min, state.report.max, i, result.histogram.length);
+    const range = result.histogramRanges[i];
     bar.style.setProperty('--bar-height', `${Math.max(3, Math.sqrt(result.histogram[i] / max) * 100)}%`);
-    bar.disabled = !range;
-    bar.className = range && range.end >= state.start && range.start <= state.end ? 'selected' : 'outside';
-    bar.title = range ? `${formatDate(range.start)} — ${formatDate(range.end)} · ${number.format(result.histogram[i])} locations` : 'No dates in this interval';
+    bar.disabled = false;
+    bar.className = range.end >= state.start && range.start <= state.end ? 'selected' : 'outside';
+    const dates = `${formatDate(range.start)}${Math.floor(range.start / DAY) === Math.floor(range.end / DAY) ? '' : ` — ${formatDate(range.end)}`}`;
+    bar.title = `${unit} · ${dates} · ${number.format(result.histogram[i])} ${result.histogram[i] === 1 ? 'location' : 'locations'}`;
     bar.setAttribute('aria-label', bar.title);
-    bar.setAttribute('aria-pressed', String(!!range && state.start === range.start && state.end === range.end));
-    if (!range) bar.tabIndex = -1;
+    bar.setAttribute('aria-pressed', String(state.start === range.start && state.end === range.end));
   });
   if (!$('histogram').querySelector('button:not(:disabled)[tabindex="0"]')) $('histogram').querySelector('button:not(:disabled)')?.setAttribute('tabindex', '0');
   paintSources(result);
@@ -387,7 +389,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=29', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=30', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -547,6 +549,10 @@ async function init() {
     attributionControl = new maplibre.AttributionControl({compact: false});
     map.addControl(attributionControl, 'bottom-right');
     new ResizeObserver(entries => $('workspace').style.setProperty('--attribution-space', `${entries[0].contentRect.height + 10}px`)).observe(map.getContainer().querySelector('.maplibregl-ctrl-bottom-right'));
+    new ResizeObserver(([entry]) => {
+      const width = Math.floor(entry.contentRect.width);
+      if (width > 0 && width !== histogramWidth) { histogramWidth = width; refresh(); }
+    }).observe($('histogram'));
     map.on('style.load', installLayers); map.on('moveend', refresh); map.on('moveend', refreshAttribution); map.on('zoomend', paintAccuracy);
     map.on('mouseenter', 'history-dots', () => { if (state.mode === 'points' && !state.importing && map.getCanvas().style.cursor !== 'crosshair') map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'history-dots', () => { if (map.getCanvas().style.cursor === 'pointer') map.getCanvas().style.cursor = ''; });

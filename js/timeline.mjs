@@ -1,4 +1,4 @@
-import {DAY, shiftPeriod} from './data.mjs?v=29';
+import {DAY, shiftPeriod} from './data.mjs?v=30';
 
 // Visible dates are ISO in every browser; all calendar arithmetic stays in UTC.
 const weekday = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'});
@@ -51,12 +51,4 @@ export function dragWindow(start, end, min, max, target, edge, period) {
   const wanted = edge === 'start' ? day - start : day + DAY - 1 - end;
   const delta = Math.max(min - start, Math.min(max - end, wanted));
   return {start: start + delta, end: end + delta};
-}
-
-// Match the worker's UTC-day bins exactly: selecting a bar must reproduce its
-// count. The bar count is capped at the number of days in the imported history.
-export function histogramWindow(min, max, index, count) {
-  const firstDay = Math.floor(min / DAY), days = Math.floor(max / DAY) - firstDay + 1;
-  const start = Math.ceil(index * days / count), end = Math.ceil((index + 1) * days / count);
-  return start === end ? null : {start: (firstDay + start) * DAY, end: (firstDay + end) * DAY - 1};
 }

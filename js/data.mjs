@@ -1,7 +1,6 @@
 // Pure import and geospatial functions shared by the worker and Node tests.
 import {createDeviceIndex, createMotionQuery, deviceKey, SOURCE_NAMES} from './motion.mjs?v=1';
 export const DAY = 86_400_000;
-export const HISTOGRAM_BINS = 64;
 export const SPEED_STOPS = Object.freeze([0, 5, 20, 50, 130, 1000]);
 export const SPEED_UNKNOWN = '#8b929a';
 export const DEFAULT_JUMP_TOLERANCE = 15;
@@ -225,6 +224,37 @@ function lowerBound(points, time, inclusive = false) {
   while (lo < hi) { const m = (lo + hi) >>> 1; if (points[m].t < time || (inclusive && points[m].t === time)) lo = m + 1; else hi = m; }
   return lo;
 }
+
+// Calendar-aligned overview bins. Keep roughly 10px per bar; unusually long
+// histories fall back to years rather than allocating unbounded quarter bins.
+function histogramPlan(min, max, budget) {
+  const firstDay = Math.floor(min / DAY), lastDay = Math.floor(max / DAY);
+  const month = t => { const d = new Date(t); return d.getUTCFullYear() * 12 + d.getUTCMonth(); };
+  const monthStart = m => { const d = new Date(0); d.setUTCFullYear(Math.floor(m / 12), (m % 12 + 12) % 12, 1); return d.getTime(); };
+  const firstMonth = month(min), lastMonth = month(max);
+  const periods = [
+    ['day', firstDay, lastDay, i => i * DAY],
+    ['week', Math.floor((firstDay + 3) / 7), Math.floor((lastDay + 3) / 7), i => (i * 7 - 3) * DAY],
+    ['month', firstMonth, lastMonth, monthStart],
+    ['quarter', Math.floor(firstMonth / 3), Math.floor(lastMonth / 3), i => monthStart(i * 3)],
+  ];
+  let period = periods.find(([, first, last]) => last - first + 1 <= budget);
+  if (!period) {
+    const firstYear = Math.floor(firstMonth / 12), lastYear = Math.floor(lastMonth / 12);
+    // 1, 2, 5, 10… calendar years, including histories with widely separated dates.
+    let step;
+    for (let power = 1; !step; power *= 10) step = [1, 2, 5].map(n => n * power).find(n => Math.floor(lastYear / n) - Math.floor(firstYear / n) + 1 <= budget);
+    period = [step === 1 ? 'year' : `${step} years`, Math.floor(firstYear / step), Math.floor(lastYear / step), i => monthStart(i * step * 12)];
+  }
+  const [unit, first, last, boundary] = period, ranges = [];
+  for (let i = first; i <= last; i++) {
+    // Clip only the outer bins to the imported UTC dates, preserving empty bins.
+    const start = i === first ? firstDay * DAY : boundary(i);
+    const end = i === last ? lastDay * DAY + DAY - 1 : boundary(i + 1) - 1;
+    ranges.push({start, end});
+  }
+  return {unit, ranges};
+}
 function hexRound(q, r) {
   const s = -q - r;
   let x = Math.round(q), y = Math.round(r), z = Math.round(s);
@@ -418,8 +448,7 @@ export function createHistoryQuery(points) {
   const cursors = offsets.slice();
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
   const min = points[0]?.t ?? 0, max = points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1)?.t ?? 0);
-  const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
-  const histogramBins = Math.min(HISTOGRAM_BINS, historyDays);
+  let histogramBudget, plan;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
   let jumps = new Uint8Array(0), jumpTolerance, motion = null, drift = false;
   const speedAt = (i, options) => drift ? Number.isFinite(motion.speeds[i]) ? motion.speeds[i] : null : pointSpeed(points, i, options.excludeJumps ? jumps : null, devices);
@@ -450,20 +479,44 @@ export function createHistoryQuery(points) {
     const nextFilterKey = JSON.stringify([options.device, options.trackMode, drift ? options.driftWindow : null, accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
     if (filterKey !== nextFilterKey) {
       const bridge = accuracy || options.device != null || options.accuracyMin || options.altitudeMin != null || options.altitudeMax != null || options.speedMin != null || options.speedMax != null || options.accuracyUnknown === false || options.altitudeUnknown === false || options.speedUnknown === false;
-      const mask = new Uint8Array(points.length), histogram = Array(histogramBins).fill(0), barriers = bridge ? new Uint32Array(points.length + 1) : null;
+      const mask = new Uint8Array(points.length), totals = new Uint32Array(Math.ceil(points.length / 256) + 1), barriers = bridge ? new Uint32Array(points.length + 1) : null;
+      let total = 0;
       for (let i = 0; i < points.length; i++) {
+        if ((i & 255) === 0) totals[i >>> 8] = total;
         const blocked = excludeJumps && jumps[i] || !accepts(points[i], 0, hourStart, hourEnd);
         if (barriers && !devices.order) barriers[i + 1] = barriers[i] + (blocked ? 1 : 0);
         if (!blocked && quality(i, options)) {
           mask[i] = 1;
-          histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) * histogramBins / historyDays)]++;
+          total++;
         }
       }
+      totals[totals.length - 1] = total;
       if (barriers && devices.order) for (let at = 0; at < devices.order.length; at++) {
         const i = devices.order[at], blocked = excludeJumps && jumps[i] || !accepts(points[i], 0, hourStart, hourEnd);
         barriers[at + 1] = barriers[at] + (blocked ? 1 : 0);
       }
-      filter = {mask, histogram, barriers}; filterKey = nextFilterKey;
+      filter = {mask, totals, barriers}; filterKey = nextFilterKey;
+    }
+  }
+  function ensureHistogram(width = 1024) {
+    const budget = Math.max(2, Math.min(512, Math.floor((Number.isFinite(width) ? width : 1024) / 10)));
+    if (histogramBudget !== budget) {
+      const next = histogramPlan(min, max, budget);
+      if (plan?.unit !== next.unit) plan = next;
+      histogramBudget = budget;
+    }
+    if (filter.histogramRanges !== plan.ranges) {
+      // One prefix count per 256 observations: resizing reads at most 255 mask
+      // bytes per boundary instead of filtering or copying all the points again.
+      let previous = 0;
+      filter.histogram = plan.ranges.map(({end}) => {
+        const index = lowerBound(points, end, true), block = index >>> 8;
+        let total = filter.totals[block];
+        for (let i = block * 256; i < index; i++) total += filter.mask[i];
+        const count = total - previous; previous = total;
+        return count;
+      });
+      filter.histogramRanges = plan.ranges;
     }
   }
   function pointFeature(index, options) {
@@ -571,6 +624,7 @@ export function createHistoryQuery(points) {
     options = motionOptions(options);
     const {start = -Infinity, end = Infinity, hourEnd = 24, metric = 'records', mode = 'heat', colorBy = 'time', zoom = 10, radius = 24, viewport = [-180, -90, 180, 90]} = options;
     ensureFilter(options);
+    ensureHistogram(options.histogramWidth);
     const nextSelectionKey = `${filterKey}:${start}:${end}`;
     if (selectionKey !== nextSelectionKey) {
       const from = lowerBound(points, start), to = lowerBound(points, end, true);
@@ -703,7 +757,7 @@ export function createHistoryQuery(points) {
       if (selection.routeCount === selection.count) selection.bounds = selection.routeBounds = selection[boundsKey];
     }
     const bounds = selection[boundsKey] ?? (mode !== 'route' && metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null);
-    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds, histogram: filter.histogram, altitudeRange: selection.altitudeRange, peak, drawn};
+    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds, histogram: filter.histogram, histogramRanges: plan.ranges, histogramUnit: plan.unit, altitudeRange: selection.altitudeRange, peak, drawn};
   };
   // Navigate the complete filtered window, independent of viewport and drawing stride.
   query.point = (index, options = {}) => {

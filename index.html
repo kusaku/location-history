@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/styles.css?v=50">
-    <script type="module" src="js/app.mjs?v=67">
+    <script type="module" src="js/app.mjs?v=68">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -632,7 +632,7 @@
       <p><b>Track quality</b>, after Accuracy, has three modes. <b>Off</b> keeps all observations. <b>Outliers</b> removes isolated spikes and short bursts of impossible travel relative to nearby movement; its +15 km/h default is an allowance above the local pattern, not a speed limit. <b>GPS drift</b> estimates movement over an adjustable 15–600 second window, allowing for accuracy and noisy coordinates. Grey speed means movement is unconfirmed. Device-reported speed remains available in the point popup. Neither mode deletes original data; both estimate each device and recording source separately.</p>
       <p><b>Devices</b> appears when an export identifies several devices. Select one or <b>All devices</b>; the map, distance, filters and Place history use that choice. Tracks never connect different devices. Labels are anonymous and the selection resets on import. Files without a device identifier are grouped as <b>Unknown device</b>; their devices cannot be reliably inferred from coordinates.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
-      <p>Select any histogram bar to use its UTC dates. The 64 bars span the entire history, so their date ranges depend on the imported history. Short histories have disabled intervals without dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
+      <p>Each histogram bar is a UTC day, week (Monday–Sunday), calendar month or quarter. The interval adapts to the full history and panel width; very long histories use years. First and last bars stop at the history’s dates. Hover for dates and counts, or select a bar to use its dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
       <h3>
         Visualization modes
       </h3>

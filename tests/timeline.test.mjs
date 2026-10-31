@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from '../js/timeline.mjs';
+import {resizeWindow, shiftWindow, dragWindow} from '../js/timeline.mjs';
 import {DAY, preparePoints, createHistoryQuery} from '../js/data.mjs';
 
 const time = date => Date.parse(`${date}T00:00:00Z`);
@@ -73,17 +73,17 @@ test('quarters step three calendar months and preserve month-end anchors in both
   assert.deepEqual(shiftWindow(april.start, april.end, min, max, -1, '90', 31), january);
 });
 
-test('histogram windows partition UTC dates and exactly reproduce counts, including short histories', () => {
-  for (const [min, max, bins] of [[1234, 1234, 1], [DAY - 1, DAY - 1, 1], [-5000, 5000, 2], [0, 6 * DAY, 7], [0, 62 * DAY, 63], [0, 63 * DAY, 64], [0, 64 * DAY, 64], [time('2013-06-02') + 3600000, time('2022-09-18') + 7200000, 64]]) {
+test('calendar histogram windows partition UTC dates and exactly reproduce filtered counts', () => {
+  for (const [min, max] of [[1234, 1234], [DAY - 1, DAY - 1], [-5000, 5000], [0, 6 * DAY], [0, 62 * DAY], [0, 63 * DAY], [0, 64 * DAY], [time('2013-06-02') + 3600000, time('2022-09-18') + 7200000]]) {
     const points = preparePoints(Array.from({length: 257}, (_, i) => ({t: min + (max - min) * i / 256, lat: 52, lon: 13, accuracy: null, duration: 0}))).points;
     const query = createHistoryQuery(points);
-    for (const filters of [{}, {hourStart: 1, hourEnd: 3}, {accuracyUnknown: false}]) {
-      const {histogram, count} = query(filters);
-      assert.equal(histogram.length, bins);
+    for (const histogramWidth of [96, 320, 1200]) for (const filter of [{}, {hourStart: 1, hourEnd: 3}, {accuracyUnknown: false}]) {
+      const filters = {...filter, histogramWidth};
+      const {histogram, histogramRanges, count} = query(filters);
+      assert.equal(histogram.length, histogramRanges.length);
       let previousEnd = Math.floor(min / DAY) * DAY - 1, total = 0;
       for (let i = 0; i < histogram.length; i++) {
-        const window = histogramWindow(min, max, i, histogram.length);
-        assert.ok(window);
+        const window = histogramRanges[i];
         assert.ok(window.start % DAY === 0);
         assert.ok((window.end + 1) % DAY === 0);
         assert.equal(window.start, previousEnd + 1);
@@ -96,13 +96,84 @@ test('histogram windows partition UTC dates and exactly reproduce counts, includ
   }
 });
 
-test('every short history keeps each UTC day in its own bar, including days without records', () => {
+test('daily bars are not capped at 64, fill the history and preserve empty days', () => {
   const point = t => ({t, lat: 52, lon: 13, accuracy: null, duration: 0});
-  for (let days = 1; days <= 64; days++) {
+  for (let days = 1; days <= 100; days++) {
     const points = Array.from({length: days}, (_, day) => point(day * DAY + 3600000));
-    assert.deepEqual(createHistoryQuery(points)().histogram, Array(days).fill(1), `${days} days`);
+    assert.deepEqual(createHistoryQuery(points)({histogramWidth: 1200}).histogram, Array(days).fill(1), `${days} days`);
   }
   assert.deepEqual(createHistoryQuery([point(0), point(3 * DAY)])().histogram, [1, 0, 0, 1]);
+});
+
+const histogramQuery = (start, end) => createHistoryQuery([
+  {t: time(start), lat: 52, lon: 13, accuracy: null, duration: 0},
+  {t: time(end), lat: 52, lon: 13, accuracy: null, duration: 0},
+]);
+
+test('weekly bars start on Monday and clip only the history edges across New Year', () => {
+  const result = histogramQuery('2023-12-31', '2024-01-09')({histogramWidth: 96});
+  assert.equal(result.histogramUnit, 'week');
+  assert.deepEqual(result.histogramRanges, [range('2023-12-31', '2023-12-31'), range('2024-01-01', '2024-01-07'), range('2024-01-08', '2024-01-09')]);
+  assert.deepEqual(result.histogram, [1, 0, 1]);
+});
+
+test('monthly and quarterly bars use real UTC calendar boundaries, including leap February', () => {
+  const month = histogramQuery('2024-01-10', '2024-12-11')({histogramWidth: 144});
+  assert.equal(month.histogramUnit, 'month');
+  assert.equal(month.histogram.length, 12);
+  assert.deepEqual(month.histogramRanges[0], range('2024-01-10', '2024-01-31'));
+  assert.deepEqual(month.histogramRanges[1], range('2024-02-01', '2024-02-29'));
+  assert.deepEqual(month.histogramRanges.at(-1), range('2024-12-01', '2024-12-11'));
+  const quarter = histogramQuery('2023-09-14', '2024-05-11')({histogramWidth: 48});
+  assert.equal(quarter.histogramUnit, 'quarter');
+  assert.deepEqual(quarter.histogramRanges, [range('2023-09-14', '2023-09-30'), range('2023-10-01', '2023-12-31'), range('2024-01-01', '2024-03-31'), range('2024-04-01', '2024-05-11')]);
+});
+
+test('panel resizing changes resolution without invalidating selection, geometry or same-unit bins', () => {
+  const query = histogramQuery('2023-01-01', '2026-12-31');
+  const wide = query({mode: 'route', histogramWidth: 1200});
+  assert.equal(wide.histogramUnit, 'month'); assert.equal(wide.histogram.length, 48);
+  const same = query({mode: 'route', histogramWidth: 1100});
+  assert.equal(same.histogram, wide.histogram); assert.equal(same.histogramRanges, wide.histogramRanges);
+  const narrow = query({mode: 'route', histogramWidth: 320});
+  assert.equal(narrow.histogramUnit, 'quarter'); assert.equal(narrow.histogram.length, 16);
+  assert.equal(narrow.routes, wide.routes); assert.equal(narrow.bounds, wide.bounds);
+  assert.equal(narrow.count, wide.count); assert.equal(narrow.km, wide.km);
+  const selected = query({...range('2023-01-01', '2023-01-01'), mode: 'route', histogramWidth: 320});
+  assert.equal(selected.histogram, narrow.histogram); assert.equal(selected.histogramRanges, narrow.histogramRanges);
+  assert.equal(selected.count, 1); assert.equal(selected.histogram.reduce((n, v) => n + v, 0), 2);
+});
+
+test('block-prefix counts stay exact at partial/full blocks and repeated boundary timestamps', () => {
+  for (const length of [0, 1, 255, 256, 257, 511, 512, 513, 1025]) {
+    const points = Array.from({length}, (_, i) => ({t: Math.floor(i / 3) * DAY, lat: 52, lon: 13, accuracy: i % 3 ? 20 : 100, duration: 0}));
+    const query = createHistoryQuery(points);
+    for (const histogramWidth of [96, 320, 1200]) for (const accuracy of [0, 50]) {
+      const result = query({accuracy, histogramWidth});
+      assert.equal(result.histogram.reduce((n, v) => n + v, 0), points.filter(p => !accuracy || p.accuracy <= accuracy).length);
+      result.histogramRanges.forEach(({start, end}, i) => assert.equal(result.histogram[i], points.filter(p => p.t >= start && p.t <= end && (!accuracy || p.accuracy <= accuracy)).length));
+    }
+  }
+});
+
+test('calendar bins cover visit end dates without inventing new observations', () => {
+  const query = createHistoryQuery([{t: time('2024-01-01'), lat: 52, lon: 13, accuracy: null, duration: 40 * DAY}]);
+  const result = query({histogramWidth: 1200});
+  assert.equal(result.histogramUnit, 'day'); assert.equal(result.histogram.length, 40);
+  assert.deepEqual(result.histogram, [1, ...Array(39).fill(0)]);
+  assert.deepEqual(result.histogramRanges.at(-1), range('2024-02-09', '2024-02-09'));
+});
+
+test('very long and extreme valid histories keep a bounded number of calendar-year bins', () => {
+  for (const [start, end] of [[time('1800-04-01'), time('2026-10-31')], [-8.64e15, 8.64e15]]) {
+    const query = createHistoryQuery([start, end].map(t => ({t, lat: 52, lon: 13, accuracy: null, duration: 0})));
+    const result = query({histogramWidth: 320});
+    assert.match(result.histogramUnit, /year/);
+    assert.ok(result.histogram.length <= 32);
+    assert.equal(result.histogram.reduce((n, v) => n + v, 0), 2);
+    assert.equal(result.histogramRanges[0].start, start);
+    assert.ok(result.histogramRanges.every(({start, end}) => Number.isFinite(start) && Number.isFinite(end) && end >= start));
+  }
 });
 
 test('Week resizes the current window to seven UTC days and steps by the whole week', () => {

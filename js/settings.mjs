@@ -1,5 +1,5 @@
 import {DAY, DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=24';
-import {resizeWindow} from './timeline.mjs?v=21';
+import {resizeWindow} from './timeline.mjs?v=22';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
@@ -43,7 +43,7 @@ function validatedSettings(input, availableMaps) {
   if (Number.isFinite(input.jumpTolerance) && input.jumpTolerance >= 0 && input.jumpTolerance <= 200) settings.jumpTolerance = input.jumpTolerance;
   if (settings.hourStart >= settings.hourEnd) { settings.hourStart = 0; settings.hourEnd = 24; }
   const range = input.dateRange;
-  if (settings.period !== 'all' && Array.isArray(range) && range.length === 2 && range.every(value => Number.isInteger(value) && Math.abs(value) < 8.64e15) && range[0] <= range[1] && range[0] % DAY === 0 && (range[1] + 1) % DAY === 0) settings.dateRange = [...range];
+  if (Array.isArray(range) && range.length === 2 && range.every(value => Number.isInteger(value) && Math.abs(value) < 8.64e15) && range[0] <= range[1] && range[0] % DAY === 0 && (range[1] + 1) % DAY === 0) settings.dateRange = [...range];
   if (settings.period === null && !settings.dateRange) settings.period = 'all';
   if (['30', '90', '365'].includes(settings.period) && Number.isInteger(input.periodDay) && input.periodDay >= 1 && input.periodDay <= 31) settings.periodDay = input.periodDay;
   return settings;

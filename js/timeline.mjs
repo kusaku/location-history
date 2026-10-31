@@ -30,6 +30,20 @@ export function shiftWindow(start, end, min, max, direction, period, day) {
   return {start: nextStart, end: nextEnd};
 }
 
+// Dragging a fixed window translates its existing duration, including across
+// short months/leap years. Only All time lets either endpoint resize it.
+export function dragWindow(start, end, min, max, target, edge, period) {
+  const day = Math.floor(target / DAY) * DAY;
+  if (period === 'all') {
+    return edge === 'start'
+      ? {start: Math.max(min, Math.min(Math.floor(end / DAY) * DAY, day)), end}
+      : {start, end: Math.min(max, Math.max(start + DAY - 1, day + DAY - 1))};
+  }
+  const wanted = edge === 'start' ? day - start : day + DAY - 1 - end;
+  const delta = Math.max(min - start, Math.min(max - end, wanted));
+  return {start: start + delta, end: end + delta};
+}
+
 // Match the worker's UTC-day bins exactly: selecting a bar must reproduce its
 // count. Histories shorter than the bar count have empty, disabled intervals.
 export function histogramWindow(min, max, index, count) {

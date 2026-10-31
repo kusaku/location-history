@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resizeWindow, shiftWindow, histogramWindow} from '../js/timeline.mjs';
+import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from '../js/timeline.mjs';
 import {DAY, preparePoints, createHistoryQuery} from '../js/data.mjs';
 
 const time = date => Date.parse(`${date}T00:00:00Z`);
@@ -103,4 +103,50 @@ test('Week resizes the current window to seven UTC days and steps by the whole w
   assert.deepEqual(next, range('2024-03-04', '2024-03-10'));
   assert.deepEqual(shiftWindow(next.start, next.end, min, max, -1, '7'), week);
   assert.deepEqual(resizeWindow(time('2024-03-10'), '7', time('2024-03-01'), time('2024-03-10') + DAY - 1), range('2024-03-04', '2024-03-10'));
+});
+
+test('both thumbs translate every fixed preset by whole UTC days without changing its duration', () => {
+  for (const period of ['1', '7', '30', '90', '365', null]) {
+    const window = period === null ? range('2024-02-10', '2024-02-21') : resizeWindow(time('2024-02-10'), period, min, max);
+    const shifted = {start: window.start + 45 * DAY, end: window.end + 45 * DAY};
+    assert.deepEqual(dragWindow(window.start, window.end, min, max, shifted.start, 'start', period), shifted);
+    assert.deepEqual(dragWindow(window.start, window.end, min, max, shifted.end, 'end', period), shifted);
+    assert.deepEqual(dragWindow(shifted.start, shifted.end, min, max, window.start, 'start', period), window);
+  }
+});
+
+test('dragging fixed windows clamps both ends to history bounds, including overshooting the opposite thumb', () => {
+  const min = time('2024-01-01'), max = time('2024-12-31') + DAY - 1;
+  for (const period of ['1', '7', '30', '90', '365']) {
+    const window = resizeWindow(time('2024-04-15'), period, min, max), width = window.end - window.start;
+    for (const edge of ['start', 'end']) {
+      assert.deepEqual(dragWindow(window.start, window.end, min, max, min - DAY, edge, period), {start: min, end: min + width});
+      assert.deepEqual(dragWindow(window.start, window.end, min, max, max + DAY, edge, period), {start: max - width, end: max});
+    }
+  }
+});
+
+test('calendar-preset dragging preserves actual day count through February and leap-year boundaries', () => {
+  const month = range('2024-01-31', '2024-02-28');
+  assert.deepEqual(dragWindow(month.start, month.end, min, max, time('2024-02-29'), 'start', '30'), range('2024-02-29', '2024-03-28'));
+  const year = range('2024-01-01', '2024-12-31');
+  assert.deepEqual(dragWindow(year.start, year.end, min, max, time('2025-01-01'), 'start', '365'), range('2025-01-01', '2026-01-01'));
+  const dragged = dragWindow(month.start, month.end, min, max, time('2024-03-10'), 'start', '30');
+  assert.deepEqual(shiftWindow(dragged.start, dragged.end, min, max, 1, '30', new Date(dragged.start).getUTCDate()), range('2024-04-10', '2024-05-09'));
+});
+
+test('All time thumbs resize independently, stay ordered and can expand again after meeting', () => {
+  const window = range('2024-04-10', '2024-04-20');
+  assert.deepEqual(dragWindow(window.start, window.end, min, max, time('2024-04-15'), 'start', 'all'), range('2024-04-15', '2024-04-20'));
+  assert.deepEqual(dragWindow(window.start, window.end, min, max, time('2024-04-15'), 'end', 'all'), range('2024-04-10', '2024-04-15'));
+  assert.deepEqual(dragWindow(window.start, window.end, min, max, max, 'start', 'all'), range('2024-04-20', '2024-04-20'));
+  assert.deepEqual(dragWindow(window.start, window.end, min, max, min, 'end', 'all'), range('2024-04-10', '2024-04-10'));
+  const day = range('2024-04-10', '2024-04-10');
+  assert.deepEqual(dragWindow(day.start, day.end, min, max, time('2024-04-20'), 'end', 'all'), window);
+});
+
+test('a fixed preset larger than the history stays fixed at that complete history', () => {
+  const min = time('2024-01-01'), max = time('2024-01-03') + DAY - 1;
+  const window = resizeWindow(min, '365', min, max);
+  for (const edge of ['start', 'end']) for (const target of [min - DAY, max + DAY]) assert.deepEqual(dragWindow(window.start, window.end, min, max, target, edge, '365'), window);
 });

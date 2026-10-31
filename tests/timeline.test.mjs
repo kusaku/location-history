@@ -233,10 +233,13 @@ test('a fixed preset larger than the history stays fixed at that complete histor
 
 
 test('ISO date entry rejects invalid dates and keeps UTC day labels independent of locale', async () => {
-  const {parseDay, formatDay} = await import('../js/timeline.mjs');
+  const {parseDay, formatDay, formatDateTime} = await import('../js/timeline.mjs');
   assert.equal(parseDay('2024-02-29'), Date.UTC(2024, 1, 29));
   assert.equal(parseDay('2019-11-30'), Date.UTC(2019, 10, 30));
   assert.equal(formatDay(parseDay('2019-11-30')), 'Sat, 2019-11-30');
   assert.equal(formatDay(Date.UTC(2024, 2, 31, 23, 59)), 'Sun, 2024-03-31');
+  assert.equal(formatDateTime(Date.UTC(2016, 6, 18, 5, 10)), 'Mon, 2016-07-18, 05:10');
+  assert.equal(formatDateTime(Date.UTC(2024, 1, 29)), 'Thu, 2024-02-29, 00:00');
+  assert.equal(formatDateTime(Date.parse('2024-03-31T00:30:00+02:00')), 'Sat, 2024-03-30, 22:30');
   for (const value of ['', '2023-02-29', '2024-02-30', '2024-04-31', '2024-13-01', '2024-00-01', '2024-01-00', '30/11/2019', '2019-1-01', '2019-11-30T00:00:00Z', '0000-01-01', null]) assert.ok(Number.isNaN(parseDay(value)));
 });

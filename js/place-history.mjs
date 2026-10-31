@@ -1,13 +1,11 @@
 import {DAY, placePolygon} from './data.mjs?v=31';
-import {parseDay, formatDay} from './timeline.mjs?v=30';
+import {parseDay, formatDay, formatDateTime} from './timeline.mjs?v=31';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
 const number = new Intl.NumberFormat('en');
-const timestamp = new Intl.DateTimeFormat('en', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC'});
-const time = value => value === null ? '—' : timestamp.format(value);
+const time = value => value === null ? '—' : formatDateTime(value);
 const utcDate = value => new Date(value).toISOString().slice(0, 10);
-const utcTime = value => new Date(value).toISOString().slice(0, 16).replace('T', ' ');
 const duration = minutes => {
   const rounded = Math.round(minutes);
   return minutes === 0 ? '0 min' : minutes < 1 ? '<1 min' : rounded < 60 ? `${rounded} min` : `${number.format(Math.floor(rounded / 60))} h ${rounded % 60} min`;
@@ -287,11 +285,11 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
   };
   const calendar = createPlaceCalendar(selectRow, ({id, start, end}) => send({type: 'place-hours', id, area, options: {...options(), start, end}}), () => options().start);
   const stays = createPlaceTable('place-visits', [
-    {key: 'start', label: 'From (UTC)', format: utcTime}, {key: 'end', label: 'To (UTC)', format: utcTime},
+    {key: 'start', label: 'From (UTC)', format: formatDateTime}, {key: 'end', label: 'To (UTC)', format: formatDateTime},
     {key: 'count', label: 'Locations', format: value => number.format(value)}, {key: 'minutes', label: 'Duration', format: duration},
   ], selectRow);
   const daily = createPlaceTable('place-daily', [
-    {key: 'start', label: 'Date (UTC)', format: utcDate}, {key: 'count', label: 'Locations', format: value => number.format(value)},
+    {key: 'start', label: 'Date (UTC)', format: formatDay}, {key: 'count', label: 'Locations', format: value => number.format(value)},
     {key: 'minutes', label: 'Duration', format: duration},
   ], selectRow);
   function paintArea() {

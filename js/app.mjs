@@ -1,9 +1,9 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=26';
-import {createPlaceHistory} from './place-history.mjs?v=31';
+import {createPlaceHistory} from './place-history.mjs?v=32';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=31';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=30';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=32';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=31';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=33';
 import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=14';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
@@ -29,9 +29,9 @@ function showPoint({feature, previous, next}, longitude, focus) {
   const p = feature.properties, node = document.createElement('div');
   const [lon, lat] = feature.geometry.coordinates;
   node.className = 'point-details';
-  const iso = new Date(p.time).toISOString(), day = Math.floor(p.time / DAY) * DAY, hour = new Date(p.time).getUTCHours();
+  const iso = new Date(p.time).toISOString(), dayLabel = formatDate(p.time), day = Math.floor(p.time / DAY) * DAY, hour = new Date(p.time).getUTCHours();
   const when = document.createElement('div'); when.className = 'point-timestamp';
-  for (const [text, selectedHour, label] of [[iso.slice(0, 10), undefined, `Show day ${iso.slice(0, 10)} UTC`], [iso.slice(11, -1), hour, `Show hour ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00 UTC on ${iso.slice(0, 10)}`]]) {
+  for (const [text, selectedHour, label] of [[dayLabel, undefined, `Show day ${dayLabel} UTC`], [iso.slice(11, -1), hour, `Show hour ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00 UTC on ${dayLabel}`]]) {
     const link = document.createElement('a'); link.href = '#timeline-title'; link.textContent = text; link.title = label; link.setAttribute('aria-label', label);
     link.onclick = event => {
       event.preventDefault(); event.stopPropagation();
@@ -208,7 +208,7 @@ function paintLegend() {
   const unconfirmed = speed && filters.values().trackMode === 'drift';
   $('legend-unknown-label').textContent = unconfirmed ? 'Unconfirmed' : 'Unknown';
   $('legend-unknown').hidden = !speed && !altitude; $('legend-unknown-swatch').style.background = SPEED_UNKNOWN;
-  document.querySelector('.legend').title = altitude ? 'Altitude as recorded in the file; reference datum depends on the export. Range follows Date window, not the viewport.' : speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: ${unconfirmed ? 'unconfirmed movement' : 'unavailable'}.` : temporal ? `${new Date(state.start).toISOString().replace('T', ' ')} → ${new Date(state.end).toISOString().replace('T', ' ')} · UTC` : '';
+  document.querySelector('.legend').title = altitude ? 'Altitude as recorded in the file; reference datum depends on the export. Range follows Date window, not the viewport.' : speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: ${unconfirmed ? 'unconfirmed movement' : 'unavailable'}.` : temporal ? `${formatDate(state.start)}, ${new Date(state.start).toISOString().slice(11)} → ${formatDate(state.end)}, ${new Date(state.end).toISOString().slice(11)} · UTC` : '';
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.

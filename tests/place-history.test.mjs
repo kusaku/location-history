@@ -84,6 +84,8 @@ test('place tables show stay dates, daily durations and select the corresponding
     f.controller.receive({type: 'place', id: f.sent[0].id, result});
     assert.equal(f.get('place-visits-label').textContent, 'Recorded stays · 1');
     assert.equal(f.get('place-daily-label').textContent, 'By day · 2');
+    assert.equal(f.get('place-first').textContent, 'Thu, 1970-01-01, 23:50');
+    assert.equal(f.get('place-last').textContent, 'Fri, 1970-01-02, 00:10');
     const stays = f.get('place-visits').children, daily = f.get('place-daily').children;
     assert.equal(stays.length, 1); assert.equal(stays[0].children[3].textContent, '40 min');
     assert.equal(daily.length, 2); assert.equal(daily[0].children[1].textContent, '2');
@@ -104,30 +106,30 @@ test('stay tables sort every column across all pages and expose the oldest rows'
     f.controller.receive({type: 'place', id: f.sent[0].id, result: {count: 205, visits: 205, days: 205, first: 0, last: 204 * day, minutes: 1000, stays, daily: stays.map(({start, count, minutes}) => ({start, count, minutes}))}});
     const cellText = (id, index = 0) => f.get(id).children[index].children[0].children[0].textContent;
     assert.equal(f.get('place-visits').children.length, 100);
-    assert.equal(cellText('place-visits'), new Date(204 * day).toISOString().slice(0, 16).replace('T', ' '));
+    assert.equal(cellText('place-visits'), 'Fri, 1970-07-24, 00:00');
     assert.equal(f.get('place-visits-page').textContent, '1–100 of 205');
     f.get('place-visits-next').onclick(); f.get('place-visits-next').onclick();
     assert.equal(f.get('place-visits').children.length, 5);
-    assert.equal(cellText('place-visits', 4), '1970-01-01 00:00');
+    assert.equal(cellText('place-visits', 4), 'Thu, 1970-01-01, 00:00');
     assert.equal(f.get('place-visits-next').disabled, true);
     assert.equal(f.get('place-visits-page').textContent, '201–205 of 205');
     const headers = f.get('place-visits-head').children;
     headers[2].children[0].onclick(); // Locations: the largest count was on the last page.
-    assert.equal(cellText('place-visits'), '1970-01-06 00:00');
+    assert.equal(cellText('place-visits'), 'Tue, 1970-01-06, 00:00');
     assert.equal(headers[2].attributes['aria-sort'], 'descending');
     headers[3].children[0].onclick();
-    assert.equal(cellText('place-visits'), '1970-01-01 00:00');
+    assert.equal(cellText('place-visits'), 'Thu, 1970-01-01, 00:00');
     headers[3].children[0].onclick();
-    assert.equal(cellText('place-visits'), new Date(204 * day).toISOString().slice(0, 16).replace('T', ' '));
+    assert.equal(cellText('place-visits'), 'Fri, 1970-07-24, 00:00');
     assert.equal(headers[3].attributes['aria-sort'], 'ascending');
     headers[1].children[0].onclick();
     assert.equal(headers[1].attributes['aria-sort'], 'descending');
     headers[0].children[0].onclick(); headers[0].children[0].onclick();
-    assert.equal(cellText('place-visits'), '1970-01-01 00:00');
+    assert.equal(cellText('place-visits'), 'Thu, 1970-01-01, 00:00');
     f.get('place-daily-head').children[1].children[0].onclick();
-    assert.equal(cellText('place-daily'), '1970-01-06');
+    assert.equal(cellText('place-daily'), 'Tue, 1970-01-06');
     f.get('place-daily-head').children[2].children[0].onclick();
-    assert.equal(cellText('place-daily'), '1970-01-01');
+    assert.equal(cellText('place-daily'), 'Thu, 1970-01-01');
     f.get('place-daily-next').onclick(); f.get('place-daily-previous').onclick();
     assert.equal(f.get('place-daily-page').textContent, '1–100 of 205');
   } finally { f.cleanup(); }

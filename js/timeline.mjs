@@ -3,6 +3,7 @@ import {DAY, shiftPeriod} from './data.mjs?v=31';
 // Visible dates are ISO in every browser; all calendar arithmetic stays in UTC.
 const weekday = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'});
 export const formatDay = value => `${weekday.format(value)}, ${new Date(value).toISOString().slice(0, 10)}`;
+export const formatDateTime = value => `${formatDay(value)}, ${new Date(value).toISOString().slice(11, 16)}`;
 export function parseDay(value) {
   if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000')) return NaN;
   const time = Date.parse(value);

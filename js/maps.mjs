@@ -1,5 +1,5 @@
 import {MAP_CONFIG} from './map-config.mjs?v=4';
-import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=25';
+import {SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=26';
 
 // Keep every provider's attribution with its documented endpoint.
 const osm = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';

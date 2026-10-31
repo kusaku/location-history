@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=20';
-import {createPlaceHistory} from './place-history.mjs?v=24';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=21';
+import {createPlaceHistory} from './place-history.mjs?v=25';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=25';
-import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from './timeline.mjs?v=23';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=26';
-import {createFilters, bindRange, paintRange} from './filters.mjs?v=7';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=26';
+import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from './timeline.mjs?v=24';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=27';
+import {createFilters, bindRange, paintRange} from './filters.mjs?v=8';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -255,6 +255,28 @@ async function selectBasemap(key, remember = false) {
     showMapView(MAP_GROUPS.find(group => group.maps.includes(state.basemap)).id);
   }
 }
+function createHistogram(count) {
+  $('histogram').replaceChildren();
+  for (let i = 0; i < count; i++) {
+    const bar = document.createElement('button'); bar.type = 'button'; bar.disabled = true;
+    bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false');
+    bar.tabIndex = i === 0 ? 0 : -1;
+    bar.onclick = () => {
+      stopPlayback();
+      const range = histogramWindow(state.report.min, state.report.max, i, $('histogram').children.length);
+      if (!range) return;
+      setDates(range.start, range.end); rememberSettings();
+    };
+    bar.onkeydown = event => {
+      const bars = [...$('histogram').children].filter(b => !b.disabled), current = bars.indexOf(bar);
+      const index = {ArrowLeft: Math.max(0, current - 1), ArrowRight: Math.min(bars.length - 1, current + 1), Home: 0, End: bars.length - 1}[event.key];
+      if (index === undefined) return;
+      event.preventDefault(); bars[index].focus();
+    };
+    bar.onfocus = () => { for (const sibling of $('histogram').children) sibling.tabIndex = sibling === bar ? 0 : -1; };
+    $('histogram').append(bar);
+  }
+}
 function showResult(result) {
   state.result = {...state.result, ...result};
   if (state.views[state.mode].colorBy === 'altitude') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode], altitudeRange: result.altitudeRange}, 'altitude'); }
@@ -264,6 +286,7 @@ function showResult(result) {
   $('range-summary').textContent = result.count || result.drawn ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
   $('render-note').textContent = !result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`;
   $('fit').disabled = !result.bounds;
+  if ($('histogram').children.length !== result.histogram.length) createHistogram(result.histogram.length);
   const max = Math.max(1, ...result.histogram);
   [...$('histogram').children].forEach((bar, i) => {
     const range = histogramWindow(state.report.min, state.report.max, i, result.histogram.length);
@@ -357,11 +380,11 @@ function clearHistory() {
   for (const id of ['stat-records', 'stat-days', 'stat-distance']) $(id).textContent = '—';
   for (const id of ['date-start', 'date-end']) $(id).value = '';
   $('range-start').value = 0; $('range-end').value = 1000;
-  for (const bar of $('histogram').children) { bar.style.setProperty('--bar-height', '3%'); bar.className = ''; bar.removeAttribute('title'); bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false'); }
+  $('histogram').replaceChildren();
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=25', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=26', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -379,6 +402,7 @@ function createWorker() {
       else closePoint();
     } else if (data.type === 'imported') {
       placeHistory?.clear();
+      $('histogram').replaceChildren();
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
       filters.setBounds(data.report.ranges);
       $('empty-state').hidden = true;
@@ -438,25 +462,6 @@ function bindControls() {
     }
   }
   showMapView(MAP_GROUPS.find(group => group.maps.includes(state.basemap)).id);
-  for (let i = 0; i < HISTOGRAM_BINS; i++) {
-    const bar = document.createElement('button'); bar.type = 'button'; bar.disabled = true;
-    bar.setAttribute('aria-label', 'Load history to select dates'); bar.setAttribute('aria-pressed', 'false');
-    bar.tabIndex = i === 0 ? 0 : -1;
-    bar.onclick = () => {
-      stopPlayback();
-      const range = histogramWindow(state.report.min, state.report.max, i, $('histogram').children.length);
-      if (!range) return;
-      setDates(range.start, range.end); rememberSettings();
-    };
-    bar.onkeydown = event => {
-      const bars = [...$('histogram').children].filter(b => !b.disabled), current = bars.indexOf(bar);
-      const index = {ArrowLeft: Math.max(0, current - 1), ArrowRight: Math.min(bars.length - 1, current + 1), Home: 0, End: bars.length - 1}[event.key];
-      if (index === undefined) return;
-      event.preventDefault(); bars[index].focus();
-    };
-    bar.onfocus = () => { for (const sibling of $('histogram').children) sibling.tabIndex = sibling === bar ? 0 : -1; };
-    $('histogram').append(bar);
-  }
   filters = createFilters($('window-filters'), preferences, () => { stopPlayback(); closePoint(); refresh(); }, rememberSettings);
   bindRange($('date-range'));
   $('metric').onchange = event => { state.views[state.mode].metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };

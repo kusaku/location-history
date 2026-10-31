@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=25';
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=26';
 
 // Native range inputs share one track. Each thumb keeps its keyboard and
 // accessibility behaviour; the same small control serves filters and dates.

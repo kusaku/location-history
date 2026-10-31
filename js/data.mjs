@@ -339,6 +339,7 @@ export function createHistoryQuery(points) {
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
   const min = points[0]?.t ?? 0, max = points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1)?.t ?? 0);
   const firstDay = Math.floor(min / DAY), historyDays = Math.floor(max / DAY) - firstDay + 1;
+  const histogramBins = Math.min(HISTOGRAM_BINS, historyDays);
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
   let jumps = new Uint8Array(0), jumpTolerance;
   const quality = (i, options) => {
@@ -365,13 +366,13 @@ export function createHistoryQuery(points) {
     const nextFilterKey = JSON.stringify([accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
     if (filterKey !== nextFilterKey) {
       const bridge = accuracy || options.accuracyMin || options.altitudeMin != null || options.altitudeMax != null || options.speedMin != null || options.speedMax != null || options.accuracyUnknown === false || options.altitudeUnknown === false || options.speedUnknown === false;
-      const mask = new Uint8Array(points.length), histogram = Array(HISTOGRAM_BINS).fill(0), barriers = bridge ? new Uint32Array(points.length + 1) : null;
+      const mask = new Uint8Array(points.length), histogram = Array(histogramBins).fill(0), barriers = bridge ? new Uint32Array(points.length + 1) : null;
       for (let i = 0; i < points.length; i++) {
         const blocked = excludeJumps && jumps[i] || !accepts(points[i], 0, hourStart, hourEnd);
         if (barriers) barriers[i + 1] = barriers[i] + (blocked ? 1 : 0);
         if (!blocked && quality(i, options)) {
           mask[i] = 1;
-          histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) / historyDays * HISTOGRAM_BINS)]++;
+          histogram[Math.floor((Math.floor(points[i].t / DAY) - firstDay) * histogramBins / historyDays)]++;
         }
       }
       filter = {mask, histogram, barriers}; filterKey = nextFilterKey;

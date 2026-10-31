@@ -74,16 +74,16 @@ test('quarters step three calendar months and preserve month-end anchors in both
 });
 
 test('histogram windows partition UTC dates and exactly reproduce counts, including short histories', () => {
-  for (const [min, max] of [[1234, 1234], [DAY - 1, DAY - 1], [-5000, 5000], [time('2013-06-02') + 3600000, time('2022-09-18') + 7200000]]) {
+  for (const [min, max, bins] of [[1234, 1234, 1], [DAY - 1, DAY - 1, 1], [-5000, 5000, 2], [0, 6 * DAY, 7], [0, 62 * DAY, 63], [0, 63 * DAY, 64], [0, 64 * DAY, 64], [time('2013-06-02') + 3600000, time('2022-09-18') + 7200000, 64]]) {
     const points = preparePoints(Array.from({length: 257}, (_, i) => ({t: min + (max - min) * i / 256, lat: 52, lon: 13, accuracy: null, duration: 0}))).points;
     const query = createHistoryQuery(points);
-    for (const filters of [{}, {hourStart: 1, hourEnd: 3}]) {
+    for (const filters of [{}, {hourStart: 1, hourEnd: 3}, {accuracyUnknown: false}]) {
       const {histogram, count} = query(filters);
-      assert.equal(histogram.length, 64);
+      assert.equal(histogram.length, bins);
       let previousEnd = Math.floor(min / DAY) * DAY - 1, total = 0;
       for (let i = 0; i < histogram.length; i++) {
         const window = histogramWindow(min, max, i, histogram.length);
-        if (!window) { assert.equal(histogram[i], 0); continue; }
+        assert.ok(window);
         assert.ok(window.start % DAY === 0);
         assert.ok((window.end + 1) % DAY === 0);
         assert.equal(window.start, previousEnd + 1);
@@ -94,6 +94,15 @@ test('histogram windows partition UTC dates and exactly reproduce counts, includ
       assert.equal(previousEnd, Math.floor(max / DAY) * DAY + DAY - 1);
     }
   }
+});
+
+test('every short history keeps each UTC day in its own bar, including days without records', () => {
+  const point = t => ({t, lat: 52, lon: 13, accuracy: null, duration: 0});
+  for (let days = 1; days <= 64; days++) {
+    const points = Array.from({length: days}, (_, day) => point(day * DAY + 3600000));
+    assert.deepEqual(createHistoryQuery(points)().histogram, Array(days).fill(1), `${days} days`);
+  }
+  assert.deepEqual(createHistoryQuery([point(0), point(3 * DAY)])().histogram, [1, 0, 0, 1]);
 });
 
 test('Week resizes the current window to seven UTC days and steps by the whole week', () => {

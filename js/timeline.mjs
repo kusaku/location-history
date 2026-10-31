@@ -1,4 +1,4 @@
-import {DAY, shiftPeriod} from './data.mjs?v=25';
+import {DAY, shiftPeriod} from './data.mjs?v=26';
 
 // Preset IDs stay compatible with saved preferences. Calendar windows use UTC
 // calendar arithmetic; a preferred day avoids drifting after February or April.
@@ -45,7 +45,7 @@ export function dragWindow(start, end, min, max, target, edge, period) {
 }
 
 // Match the worker's UTC-day bins exactly: selecting a bar must reproduce its
-// count. Histories shorter than the bar count have empty, disabled intervals.
+// count. The bar count is capped at the number of days in the imported history.
 export function histogramWindow(min, max, index, count) {
   const firstDay = Math.floor(min / DAY), days = Math.floor(max / DAY) - firstDay + 1;
   const start = Math.ceil(index * days / count), end = Math.ceil((index + 1) * days / count);

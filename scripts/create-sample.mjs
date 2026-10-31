@@ -4,7 +4,7 @@ import {writeFile, rename, rm, realpath} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {parseArgs} from 'node:util';
-import {randomUUID} from 'node:crypto';
+import {randomUUID, createHash} from 'node:crypto';
 import {gzipSync} from 'node:zlib';
 import {readHistory} from '../js/import.mjs';
 import {preparePoints, MAX_POINTS, DAY} from '../js/data.mjs';
@@ -22,6 +22,20 @@ export function encodeHistory(points) {
   const prepared = preparePoints(points, {inferStationary: false});
   if (!points.length) throw new Error('No locations match the requested sample dates.');
   const encoded = {format: 'delta-compressed', version: 2, base: [], data: [[], [], []]};
+  const anonymousDevices = new Map(), streamCodes = new Map();
+  const namespace = createHash('sha256').update(JSON.stringify([points.length, points[0].t, points[0].lat, points[0].lon, points.at(-1).t, points.at(-1).lat, points.at(-1).lon])).digest('hex').slice(0, 16);
+  if (points.some(p => p.stream)) { encoded.streams = []; encoded.stream = []; }
+  const streamCode = origin => {
+    if (!origin) return 0;
+    let device = '';
+    if (origin.device) {
+      if (!anonymousDevices.has(origin.device)) anonymousDevices.set(origin.device, `sample:${namespace}:${anonymousDevices.size + 1}`);
+      device = anonymousDevices.get(origin.device);
+    }
+    let sources = streamCodes.get(device); if (!sources) { sources = new Map(); streamCodes.set(device, sources); }
+    if (!sources.has(origin.source)) { encoded.streams.push({device, source: origin.source}); sources.set(origin.source, encoded.streams.length); }
+    return sources.get(origin.source);
+  };
   if (points.some(p => p.accuracy !== null)) encoded.accuracy = [];
   if (points.some(p => p.duration > 0)) encoded.duration = [];
   for (const key of ['altitude', 'recordedSpeed']) if (points.some(p => p[key] != null)) encoded[key] = [];
@@ -31,6 +45,7 @@ export function encodeHistory(points) {
     if (!encoded.base.length) encoded.base = [nextLat, nextLon, p.t];
     else { encoded.data[0].push(nextLat - lat); encoded.data[1].push(nextLon - lon); encoded.data[2].push(p.t - t); }
     encoded.accuracy?.push(p.accuracy); encoded.duration?.push(p.duration);
+    encoded.stream?.push(streamCode(p.stream));
     for (const key of ['altitude', 'recordedSpeed']) encoded[key]?.push(p[key] ?? null);
     lat = nextLat; lon = nextLon; t = p.t;
   }

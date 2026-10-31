@@ -32,6 +32,26 @@ async function startWorker() {
 const json = data => new Blob([JSON.stringify(data)], {type: 'application/json'});
 const record = (t, lon = 134000000, accuracy) => ({latitudeE7: 525000000, longitudeE7: lon, timestampMs: String(t), accuracy});
 
+test('worker reports anonymous device choices and keeps their filters through queries and place history', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    const imported = await request('import', {files: [
+      json({locations: [{...record(0), deviceTag: 'private-phone-a', source: 'GPS'}, {...record(1), deviceTag: 'private-phone-b', source: 'WIFI'}]}),
+      json({locations: [{...record(0), deviceTag: 'private-phone-a', source: 'GPS'}, {...record(60000), deviceTag: 'private-phone-a', source: 'GPS'}]}),
+    ]});
+    assert.deepEqual(imported.report.devices, [{id: 0, label: 'Device 1', count: 2}, {id: 1, label: 'Device 2', count: 1}]);
+    assert.ok(!JSON.stringify(imported).includes('private-phone'));
+    assert.equal(imported.report.duplicates, 1);
+    const options = {device: 0, trackMode: 'drift', mode: 'points'};
+    const result = (await request('query', {options})).result;
+    assert.equal(result.count, 2); assert.equal(result.km, 0);
+    assert.equal(result.dots.features[0].properties.device, 'Device 1');
+    const area = {geometry: {coordinates: [[[13, 52], [14, 52], [14, 53], [13, 53], [13, 52]]]}};
+    assert.equal((await request('place', {area, options})).result.count, 2);
+    assert.equal((await request('point', {index: 1, options})).result, null);
+  } finally { await worker.terminate(); }
+});
+
 test('worker navigates filtered points with matching metadata and resets navigation on import or clear', async () => {
   const {worker, request} = await startWorker();
   try {

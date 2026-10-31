@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=26';
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=27';
 
 // Native range inputs share one track. Each thumb keeps its keyboard and
 // accessibility behaviour; the same small control serves filters and dates.
@@ -43,45 +43,81 @@ export function createFilters(root, initial, changed, committed) {
     {id: 'track', name: 'Track quality'},
     {id: 'speed', name: 'Speed', unit: 'km/h', minKey: 'speedMin', maxKey: 'speedMax', unknown: 'speedUnknown', bounds: [0, 1000], logarithmic: true},
     {id: 'altitude', name: 'Altitude', unit: 'm', minKey: 'altitudeMin', maxKey: 'altitudeMax', unknown: 'altitudeUnknown', bounds: [-500, 9000]},
+    {id: 'devices', name: 'Devices'},
   ];
   const values = {};
   const number = new Intl.NumberFormat('en', {maximumFractionDigits: 1});
   const clock = value => `${String(value).padStart(2, '0')}:00`;
+  let devicesControl;
+  function deviceFilter(config) {
+    values.device = null;
+    const button = document.createElement('button'), panel = document.createElement('div');
+    button.type = 'button'; button.id = 'filter-devices'; button.className = 'filter-toggle'; button.hidden = true; button.setAttribute('popovertarget', 'filter-devices-panel');
+    panel.id = 'filter-devices-panel'; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto'); panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Devices');
+    panel.innerHTML = '<div class="filter-title"><strong>Devices</strong><button type="button" data-reset>Reset</button></div><div class="device-options" role="group" aria-label="Device selection"></div>';
+    const choices = panel.querySelector('.device-options'); let devices = [];
+    function paint() {
+      button.textContent = `Devices · ${devices.find(d => d.id === values.device)?.label ?? 'All'}`;
+      button.classList.toggle('active', values.device !== null);
+      for (const choice of choices.children) choice.setAttribute('aria-pressed', String(choice.deviceId === values.device));
+    }
+    const select = id => { values.device = id; paint(); changed(); committed(); };
+    panel.querySelector('[data-reset]').onclick = () => select(null);
+    bindPopover(root, button, panel);
+    devicesControl = {set(items = []) {
+      if (panel.matches(':popover-open')) panel.hidePopover();
+      devices = items; values.device = null; choices.replaceChildren(); button.hidden = devices.length < 2;
+      for (const device of [{id: null, label: 'All devices'}, ...devices]) {
+        const choice = document.createElement('button'); choice.type = 'button'; choice.className = 'filter-toggle'; choice.deviceId = device.id; choice.textContent = device.label;
+        if (device.count !== undefined) choice.title = `${number.format(device.count)} recorded locations`;
+        choice.onclick = () => select(device.id); choices.append(choice);
+      }
+      paint();
+    }};
+    devicesControl.set();
+    return {config, paint};
+  }
   function trackQuality(config) {
-    values.excludeJumps = initial.excludeJumps === true;
+    values.trackMode = initial.trackMode ?? (initial.excludeJumps ? 'outliers' : 'off');
+    values.excludeJumps = values.trackMode !== 'off';
     values.jumpTolerance = initial.jumpTolerance ?? DEFAULT_JUMP_TOLERANCE;
+    values.driftWindow = initial.driftWindow ?? 60;
     const button = document.createElement('button'), panel = document.createElement('div');
     button.type = 'button'; button.className = 'filter-toggle'; button.id = 'filter-track'; button.setAttribute('popovertarget', 'filter-track-panel');
-    button.title = 'Filter isolated location outliers using nearby movement and track geometry';
+    button.title = 'Remove isolated outliers or estimate supported movement through GPS noise';
     panel.id = 'filter-track-panel'; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto');
     panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Track quality');
     panel.innerHTML = `<div class="filter-title"><strong>Track quality</strong><button type="button" data-reset>Reset</button></div>
-      <button class="filter-toggle" type="button" data-enabled aria-pressed="false">Remove outliers</button>
-      <div class="filter-values quality-values"><label>Allowed speed spike<input type="number" min="0" max="200" step="any" aria-label="Allowed speed spike">km/h</label></div>
-      <input class="quality-slider" type="range" min="0" max="200" step="1" aria-label="Allowed speed spike slider">
-      <p class="hint">Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.</p>`;
-    const toggle = panel.querySelector('[data-enabled]'), field = panel.querySelector('input[type=number]'), slider = panel.querySelector('input[type=range]');
+      <div class="quality-modes" role="group" aria-label="Track quality mode"><button class="filter-toggle" type="button" data-track-mode="off">Off</button><button class="filter-toggle" type="button" data-track-mode="outliers">Outliers</button><button class="filter-toggle" type="button" data-track-mode="drift">GPS drift</button></div>
+      <div class="filter-values quality-values"><label><span data-label></span><input type="number" step="1"><span data-unit></span></label></div>
+      <input class="quality-slider" type="range" step="1"><p class="hint"></p>`;
+    const field = panel.querySelector('input[type=number]'), slider = panel.querySelector('input[type=range]');
     function paint() {
-      button.textContent = `Track quality · ${values.excludeJumps ? `+${number.format(values.jumpTolerance)} km/h` : 'Off'}`;
+      const drift = values.trackMode === 'drift', value = drift ? values.driftWindow : values.jumpTolerance;
+      button.textContent = `Track quality · ${values.trackMode === 'off' ? 'Off' : drift ? `GPS drift · ${value}s` : `+${number.format(value)} km/h`}`;
       button.classList.toggle('active', values.excludeJumps);
-      toggle.setAttribute('aria-pressed', String(values.excludeJumps));
-      field.value = slider.value = values.jumpTolerance;
-      slider.setAttribute('aria-valuetext', `${values.jumpTolerance} km/h above nearby movement`);
+      for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.setAttribute('aria-pressed', String(choice.dataset.trackMode === values.trackMode));
+      panel.querySelector('[data-label]').textContent = drift ? 'Averaging window' : 'Allowed speed spike';
+      panel.querySelector('[data-unit]').textContent = drift ? 's' : 'km/h';
+      panel.querySelector('.hint').textContent = drift ? 'Estimates movement within each device. Grey means unconfirmed. Longer windows smooth short stops and speed changes. Original points stay available.' : 'Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.';
+      for (const input of [field, slider]) { input.min = drift ? 15 : 0; input.max = drift ? 600 : 200; input.value = value; input.disabled = values.trackMode === 'off'; }
+      field.setAttribute('aria-label', drift ? 'GPS drift window' : 'Allowed speed spike');
+      slider.setAttribute('aria-label', drift ? 'GPS drift window slider' : 'Allowed speed spike slider');
+      slider.setAttribute('aria-valuetext', drift ? `${value} seconds` : `${value} km/h above nearby movement`);
     }
-    const apply = () => { paint(); changed(); committed(); };
-    toggle.onclick = () => { values.excludeJumps = !values.excludeJumps; apply(); };
-    slider.oninput = () => { values.jumpTolerance = Number(slider.value); values.excludeJumps = true; paint(); };
-    slider.onchange = () => { changed(); committed(); };
-    field.onchange = () => {
-      if (!field.value.trim() || !Number.isFinite(Number(field.value))) { paint(); return; }
-      values.jumpTolerance = Math.max(0, Math.min(200, Number(field.value))); values.excludeJumps = true; apply();
-    };
-    panel.querySelector('[data-reset]').onclick = () => { values.excludeJumps = false; values.jumpTolerance = DEFAULT_JUMP_TOLERANCE; apply(); };
+    const apply = () => { values.excludeJumps = values.trackMode !== 'off'; paint(); changed('track'); committed(); };
+    for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.onclick = () => { values.trackMode = choice.dataset.trackMode; apply(); };
+    const set = value => { if (values.trackMode === 'drift') values.driftWindow = Math.max(15, Math.min(600, Math.round(value))); else values.jumpTolerance = Math.max(0, Math.min(200, value)); };
+    slider.oninput = () => { set(Number(slider.value)); paint(); };
+    slider.onchange = () => { changed('track'); committed(); };
+    field.onchange = () => { if (!field.value.trim() || !Number.isFinite(Number(field.value))) { paint(); return; } set(Number(field.value)); apply(); };
+    panel.querySelector('[data-reset]').onclick = () => { values.trackMode = 'off'; values.jumpTolerance = DEFAULT_JUMP_TOLERANCE; values.driftWindow = 60; apply(); };
     bindPopover(root, button, panel); paint();
     return {config, paint};
   }
   const controls = configs.map(config => {
     if (config.id === 'track') return trackQuality(config);
+    if (config.id === 'devices') return deviceFilter(config);
     const {id, name, minKey, maxKey, unknown, hours} = config;
     values[minKey] = initial[minKey] ?? (hours ? 0 : null);
     values[maxKey] = initial[maxKey] ?? (hours ? 24 : null);
@@ -142,6 +178,7 @@ export function createFilters(root, initial, changed, committed) {
     return {config, paint};
   });
   return {
+    setDevices: items => devicesControl.set(items),
     values: () => ({...values, accuracy: values.accuracy ?? 0, accuracyMin: values.accuracyMin ?? 0}),
     setHours(start, end) { values.hourStart = start; values.hourEnd = end; controls[0].paint(); },
     setBounds(ranges = {}) { for (const {config, paint} of controls) { const range = ranges[config.id]; if (range?.every(Number.isFinite)) { config.bounds = [Math.floor(range[0]), Math.max(Math.floor(range[0]) + 1, Math.ceil(range[1]))]; paint(); } } },

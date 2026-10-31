@@ -157,7 +157,7 @@ test('journey thickness is independent, bounded and persisted with quarter windo
   const settings = loadSettings(maps, storage);
   settings.views.route.lineWidth = 4.5;
   settings.views.heat.intensity = 2;
-  Object.assign(settings, {period: '90', periodDay: 31, excludeJumps: true});
+  Object.assign(settings, {period: '90', periodDay: 31, excludeJumps: true, trackMode: 'outliers'});
   saveSettings(settings, maps, storage);
   assert.deepEqual(loadSettings(maps, storage), settings);
   assert.equal(settings.views.hex.intensity, 1);

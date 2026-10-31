@@ -1,10 +1,10 @@
-import {DAY, DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=26';
-import {resizeWindow} from './timeline.mjs?v=24';
+import {DAY, DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=27';
+import {resizeWindow} from './timeline.mjs?v=25';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
 const VIEW_DEFAULTS = Object.freeze({metric: 'records', palette: 'ember', radius: 24, intensity: 1, opacity: .85});
-const DEFAULTS = Object.freeze({basemap: 'dark', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, accuracyMin: 0, accuracyUnknown: true, speedMin: null, speedMax: null, speedUnknown: true, altitudeMin: null, altitudeMax: null, altitudeUnknown: true, excludeJumps: false, jumpTolerance: DEFAULT_JUMP_TOLERANCE, period: 'all', periodDay: null, dateRange: null});
+const DEFAULTS = Object.freeze({basemap: 'dark', mode: 'heat', hourStart: 0, hourEnd: 24, accuracy: 0, accuracyMin: 0, accuracyUnknown: true, speedMin: null, speedMax: null, speedUnknown: true, altitudeMin: null, altitudeMax: null, altitudeUnknown: true, excludeJumps: false, jumpTolerance: DEFAULT_JUMP_TOLERANCE, trackMode: 'off', driftWindow: 60, period: 'all', periodDay: null, dateRange: null});
 
 function validatedSettings(input, availableMaps) {
   const settings = {...DEFAULTS, views: Object.fromEntries(Object.keys(RADIUS_MIN).map(mode => [mode, {...VIEW_DEFAULTS}])), basemap: availableMaps.includes(DEFAULTS.basemap) ? DEFAULTS.basemap : availableMaps[0]};
@@ -40,6 +40,9 @@ function validatedSettings(input, availableMaps) {
   }
   // Keep only the old jump preference; removed exclusions must never stay active.
   settings.excludeJumps = typeof input.excludeJumps === 'boolean' ? input.excludeJumps : Number.isInteger(input.exclude) && input.exclude >= 0 && input.exclude <= 15 && Boolean(input.exclude & 2);
+  settings.trackMode = ['off', 'outliers', 'drift'].includes(input.trackMode) ? input.trackMode : settings.excludeJumps ? 'outliers' : 'off';
+  settings.excludeJumps = settings.trackMode !== 'off';
+  if (Number.isInteger(input.driftWindow) && input.driftWindow >= 15 && input.driftWindow <= 600) settings.driftWindow = input.driftWindow;
   if (Number.isFinite(input.jumpTolerance) && input.jumpTolerance >= 0 && input.jumpTolerance <= 200) settings.jumpTolerance = input.jumpTolerance;
   if (settings.hourStart >= settings.hourEnd) { settings.hourStart = 0; settings.hourEnd = 24; }
   const range = input.dateRange;

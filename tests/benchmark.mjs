@@ -13,18 +13,24 @@ const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const git = args => execFileSync('git', args, {cwd: projectRoot, encoding: 'utf8'}).trim();
 const commit = revision ? git(['rev-parse', '--verify', `${revision}^{commit}`]) : null;
 const dataPath = commit ? git(['ls-tree', '-r', '--name-only', commit, '--', 'js/data.mjs', 'assets/js/data.mjs', 'data.mjs']).split('\n')[0] : null;
-const source = commit ? git(['show', `${commit}:${dataPath}`]) : readFileSync(new URL('../js/data.mjs', import.meta.url), 'utf8');
-const data = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+let source = commit ? git(['show', `${commit}:${dataPath}`]) : readFileSync(new URL('../js/data.mjs', import.meta.url), 'utf8');
+// A historical data module may depend on its matching motion kernel.
+if (commit && source.includes('./motion.mjs')) {
+  const motionPath = dataPath.replace(/data\.mjs$/, 'motion.mjs');
+  const motion = git(['show', `${commit}:${motionPath}`]);
+  source = source.replace(/'\.\/motion\.mjs[^']*'/, `'data:text/javascript;base64,${Buffer.from(motion).toString('base64')}'`);
+}
+const data = await import(commit ? `data:text/javascript;base64,${Buffer.from(source).toString('base64')}` : new URL('../js/data.mjs', import.meta.url));
 const synthetic = args[0] === '--synthetic' ? Number(args.splice(0, 2)[1]) : 0;
 if (!Number.isInteger(synthetic) || synthetic < 0 || synthetic > data.MAX_POINTS) throw new Error('Synthetic count must be within the import limit.');
 const files = synthetic ? [] : args.length ? args.map(path => resolve(path)) : [fileURLToPath(new URL('../data/sample-location-history.json.gz', import.meta.url))];
-const points = []; let skipped = 0;
+const points = [], streams = new Map(); let skipped = 0;
 const started = performance.now();
 for (let i = 0; i < synthetic; i++) points.push({t: i * 60000 + Math.floor(i / 100000) * data.DAY, lon: 13.3 + i % 1000 * .0001, lat: 52.4 + Math.floor(i / 1000) % 1000 * .0001, accuracy: i % 11 ? 20 : 500, duration: 0});
 for (const path of files) {
   const head = new Uint8Array(2), fd = openSync(path, 'r');
   readSync(fd, head); closeSync(fd);
-  const result = await readHistory({name: basename(path), size: statSync(path).size, slice: (start, end) => new Blob([head.slice(start, end)]), stream: () => Readable.toWeb(createReadStream(path))}, batch => { for (const p of batch) points.push(p); }, () => {}, {allowEmpty: true});
+  const result = await readHistory({name: basename(path), size: statSync(path).size, slice: (start, end) => new Blob([head.slice(start, end)]), stream: () => Readable.toWeb(createReadStream(path))}, batch => { for (const p of batch) points.push(p); }, () => {}, {allowEmpty: true, streams});
   skipped += result.skipped;
 }
 if (!points.length) throw new Error('No valid timestamped locations were found.');
@@ -44,6 +50,7 @@ const cases = [
   ['journeys', {mode: 'route', zoom: 5, viewport: [-10, 40, 35, 65]}],
   ['journeys_speed', {mode: 'route', colorBy: 'speed', zoom: 5, viewport: [-10, 40, 35, 65]}],
 ];
+if (data.createHistoryQuery && source.includes('createMotionQuery')) cases.push(['gps_drift', {mode: 'points', colorBy: 'speed', trackMode: 'drift', viewport: [-10, 40, 35, 65]}]);
 if (data.jumpFlags) cases.push(['exclude_jumps', {mode: 'heat', excludeJumps: true, zoom: 5, viewport: [-10, 40, 35, 65]}]);
 for (const [name, options] of cases) {
   const times = []; let result;

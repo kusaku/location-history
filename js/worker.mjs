@@ -1,12 +1,12 @@
-import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=26';
-import {readHistory} from './import.mjs?v=25';
+import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=27';
+import {readHistory} from './import.mjs?v=26';
 let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;
   try {
     if (type === 'import') {
       // Stage all files before replacing the current dataset; a bad file never clears it.
-      const staged = []; let skipped = 0;
+      const staged = [], streams = new Map(); let skipped = 0;
       for (let i = 0; i < data.files.length; i++) {
         const file = data.files[i];
         self.postMessage({type: 'progress', id, message: `Reading ${file.name} (${i + 1}/${data.files.length})…`});
@@ -18,7 +18,7 @@ self.onmessage = async ({data}) => {
           if (Date.now() - lastProgress < 200) return;
           lastProgress = Date.now();
           self.postMessage({type: 'progress', id, message: `Reading ${file.name} (${i + 1}/${data.files.length}) · ${Math.min(100, Math.round(bytes / Math.max(1, size) * 100))}% · ${staged.length.toLocaleString('en')} locations…`});
-        }, {allowEmpty: true}).catch(error => { throw new Error(`${file.name || `File ${i + 1}`}: ${error.message}`); });
+        }, {allowEmpty: true, streams}).catch(error => { throw new Error(`${file.name || `File ${i + 1}`}: ${error.message}`); });
         skipped += parsed.skipped;
       }
       self.postMessage({type: 'progress', id, message: `Sorting and merging ${staged.length.toLocaleString('en')} locations…`});
@@ -26,7 +26,7 @@ self.onmessage = async ({data}) => {
       const prepared = preparePoints(staged);
       const nextQuery = createHistoryQuery(prepared.points);
       points = prepared.points; query = nextQuery; geometry = {};
-      const report = {total: points.length, min: points[0].t, max: points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1).t), skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name), ranges: nextQuery.ranges};
+      const report = {total: points.length, min: points[0].t, max: points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1).t), skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name), ranges: nextQuery.ranges, devices: nextQuery.devices};
       self.postMessage({type: 'imported', id, report});
     } else if (type === 'query') {
       const result = query(data.options), versions = {};

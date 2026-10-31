@@ -1,4 +1,4 @@
-import {parseHistory} from './data.mjs?v=26';
+import {parseHistory} from './data.mjs?v=27';
 
 // Keep only one array entry in text form. Nested braces and escaped quotes can
 // cross byte chunks; JSON.parse still validates each complete value.
@@ -71,7 +71,7 @@ class JSONReader {
   }
 }
 
-export async function readHistory(file, append, progress = () => {}, {allowEmpty = false} = {}) {
+export async function readHistory(file, append, progress = () => {}, {allowEmpty = false, streams = new Map()} = {}) {
   const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
   let bytes = 0, total = 0, skipped = 0;
   let stream = file.stream().pipeThrough(new TransformStream({transform(chunk, controller) { bytes += chunk.byteLength; controller.enqueue(chunk); }}));
@@ -87,7 +87,7 @@ export async function readHistory(file, append, progress = () => {}, {allowEmpty
     if (collection && !(['semanticSegments', 'rawSignals'].includes(collection) && ['semanticSegments', 'rawSignals'].includes(key))) throw new Error('This file contains incompatible history collections.');
     collection = key;
     let batch = [], characters = 0;
-    const flush = () => { if (batch.length) { add(parseHistory({[key]: batch, ...(key === 'features' ? {type: 'FeatureCollection'} : {})}, {allowEmpty: true})); batch = []; characters = 0; } };
+    const flush = () => { if (batch.length) { add(parseHistory({[key]: batch, ...(key === 'features' ? {type: 'FeatureCollection'} : {})}, {allowEmpty: true, streams})); batch = []; characters = 0; } };
     await reader.array(record => {
       batch.push(record); characters += reader.valueLength;
       if (batch.length === 1000 || characters >= 1_000_000) flush();
@@ -106,8 +106,8 @@ export async function readHistory(file, append, progress = () => {}, {allowEmpty
         else {
           // Delta history uses bounded numeric columns, including optional
           // accuracy and explicit visit durations. Legacy samples still work.
-          const value = await reader.value(['data', 'accuracy', 'duration', 'altitude', 'recordedSpeed'].includes(key) ? 512_000_000 : undefined);
-          if (['format', 'version', 'base', 'data', 'accuracy', 'duration', 'altitude', 'recordedSpeed', 'type'].includes(key)) metadata[key] = value;
+          const value = await reader.value(['data', 'accuracy', 'duration', 'altitude', 'recordedSpeed', 'stream'].includes(key) ? 512_000_000 : undefined);
+          if (['format', 'version', 'base', 'data', 'accuracy', 'duration', 'altitude', 'recordedSpeed', 'type', 'streams', 'stream'].includes(key)) metadata[key] = value;
         }
         if (await reader.peek() === '}') break;
         await reader.expect(',');
@@ -116,7 +116,7 @@ export async function readHistory(file, append, progress = () => {}, {allowEmpty
     }
     if (await reader.peek()) throw new Error('Invalid JSON: unexpected content after the history.');
     if (collection === 'features' && metadata.type !== 'FeatureCollection') throw new Error('Unsupported GeoJSON. Use a FeatureCollection of timestamped points.');
-    if (!collection) add(parseHistory(metadata));
+    if (!collection) add(parseHistory(metadata, {streams}));
     if (!total && !allowEmpty) throw new Error('No valid timestamped locations were found in this file.');
     notify();
     return {skipped};

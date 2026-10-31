@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseHistory, preparePoints, createHistoryQuery, pointSpeed, jumpFlags, DAY} from '../js/data.mjs';
-import {createDeviceIndex, createMotionQuery, driftSpeeds} from '../js/motion.mjs';
+import {createDeviceIndex} from '../js/motion.mjs';
 import {readHistory} from '../js/import.mjs';
 import {encodeHistory} from '../scripts/create-sample.mjs';
 import {loadSettings, saveSettings} from '../js/settings.mjs';
@@ -91,59 +91,77 @@ test('stationary inference and place intervals stay within a device and overlapp
   assert.equal(query.place(box, {start: DAY / 2, end: DAY - 1, hourly: true}).minutes, 720);
 });
 
-test('GPS drift preserves walking, driving and flights despite fixed provider offsets', () => {
+test('GPS drift keeps real walking, driving and flights without averaging their speeds', () => {
   for (const kmh of [1, 5, 60, 900]) {
     const points = Array.from({length: 100}, (_, i) => [point(i * 5000, i * 5 * kmh / 3.6, '', 1), point(i * 5000 + 10, i * 5 * kmh / 3.6 + 500, '', 4)]).flat();
-    const {speeds} = driftSpeeds(points);
-    assert.ok(Number.isFinite(speeds[80])); assert.ok(Math.abs(speeds[80] - kmh) < .005);
+    const query = createHistoryQuery(points), off = query({mode: 'points'});
+    for (const driftWindow of [15, 60, 600]) {
+      const result = query({mode: 'points', trackMode: 'drift', driftWindow});
+      assert.equal(result.count, points.length);
+      assert.deepEqual(result.dots, off.dots);
+    }
   }
 });
 
-test('GPS drift reports unconfirmed indoor noise, ignores recorded spikes and keeps source points intact', () => {
-  const points = Array.from({length: 300}, (_, i) => ({...point(i * 5000, Math.sin(i * 2) * 8, '', 1, 20), recordedSpeed: 150}));
-  const snapshot = structuredClone(points), query = createHistoryQuery(points), result = query({mode: 'points', trackMode: 'drift'});
-  assert.ok(result.dots.features.every(f => f.properties.speed === null));
-  assert.equal(result.count, points.length); assert.equal(result.km, 0);
-  assert.equal(result.dots.features[0].properties.reportedSpeed, 150);
-  assert.equal(query({speedMin: 80, speedUnknown: false, trackMode: 'drift'}).count, 0);
+test('stationary jitter and sparse night records remain visible, with journeys independent of speed availability', () => {
+  const points = Array.from({length: 100}, (_, i) => point(i * 60000, Math.sin(i * 2) * 8));
+  const snapshot = structuredClone(points), query = createHistoryQuery(points), original = query({mode: 'route', colorBy: 'speed'});
+  for (const driftWindow of [15, 60, 120, 300, 600]) {
+    const options = {trackMode: 'drift', driftWindow};
+    const route = query({...options, mode: 'route', colorBy: 'speed'});
+    assert.equal(route.count, points.length); assert.deepEqual(route.routes, original.routes);
+    assert.equal(query({...options, speedUnknown: false}).count, points.length);
+    assert.equal(query.place(box, options).count, points.length);
+  }
+  const unknown = createHistoryQuery(points.map(p => ({...p, stream: {device: '', source: -1}})));
+  const result = unknown({mode: 'route', colorBy: 'speed', trackMode: 'drift'});
+  assert.ok(result.routes.features.length > 0);
+  assert.ok(result.routes.features.every(f => f.properties.speed === null));
   assert.deepEqual(points, snapshot);
-  assert.equal(query({mode: 'points', trackMode: 'off'}).dots.features[0].properties.speed, 150);
 });
 
-test('GPS drift caches independently of display filters and keeps separate stationary and moving devices', () => {
-  const points = Array.from({length: 100}, (_, i) => [point(i * 5000, 0, 'a'), point(i * 5000 + 1, 13000 + i * 5, 'b')]).flat();
-  const query = createMotionQuery(points, createDeviceIndex(points)), result = query();
-  assert.equal(query(), result); assert.equal(result.speeds.byteLength, 4 * points.length);
-  assert.ok(Number.isNaN(result.speeds[80])); assert.ok(Math.abs(result.speeds[81] - 3.6) < .001);
-  assert.equal(query(90).speeds, result.speeds); // Reuse the output allocation.
-  const history = createHistoryQuery(points);
-  assert.equal(history({trackMode: 'drift', device: 0, speedUnknown: false}).count, 0);
-  assert.ok(history({trackMode: 'drift', device: 1, speedUnknown: false}).count > 90);
+test('GPS drift excludes a brief distant burst among stationary neighbours without removing the cluster', () => {
+  const points = Array.from({length: 100}, (_, i) => point(i * 10000, i === 50 || i === 51 ? 300 : Math.sin(i) * 2));
+  const snapshot = structuredClone(points), ordinary = jumpFlags(points), flags = jumpFlags(points, {stationaryWindow: 120});
+  assert.equal(ordinary.reduce((n, v) => n + v, 0), 0);
+  assert.deepEqual([...flags.entries()].filter(([, flag]) => flag).map(([i]) => i), [50, 51]);
+  const query = createHistoryQuery(points), options = {trackMode: 'drift', driftWindow: 120};
+  const result = query({...options, mode: 'points'});
+  assert.equal(result.count, 98); assert.equal(query.place(box, options).count, 98);
+  assert.ok(result.dots.features.every(f => f.properties.index !== 50 && f.properties.index !== 51));
+  assert.ok(result.dots.features.every(f => f.properties.speed < 2));
+  assert.equal(query({...options, driftWindow: 15}).count, 100);
+  assert.equal(query(options).count, 98);
+  assert.deepEqual(points, snapshot);
 });
 
-test('longer windows support minute-spaced archives without changing the 60-second default', () => {
-  const points = Array.from({length: 31}, (_, i) => point(i * 60000, i * 100));
-  const motion = createMotionQuery(points, createDeviceIndex(points));
-  assert.ok(motion().speeds.every(Number.isNaN));
-  assert.ok(motion(120).speeds.every(Number.isNaN));
-  assert.ok(Math.abs(motion(300).speeds[15] - 6) < .001);
-  assert.ok(Math.abs(motion(600).speeds[15] - 6) < .001);
-  const rolling = driftSpeeds(points, {windowSeconds: 600}).speeds;
-  assert.deepEqual(rolling, driftSpeeds(points, {windowSeconds: 600, reference: true}).speeds);
-  const history = createHistoryQuery(points);
-  assert.ok(history({trackMode: 'drift', driftWindow: 600, speedUnknown: false}).count > 20);
-  assert.equal(saveSettings({trackMode: 'drift', driftWindow: 600}, ['dark']).driftWindow, 600);
-  assert.equal(saveSettings({trackMode: 'drift', driftWindow: 601}, ['dark']).driftWindow, 60);
+test('curved cycling paths and device speed do not change with the GPS drift context window', () => {
+  const points = Array.from({length: 150}, (_, i) => ({...point(i * 5000, 50 * Math.cos(i * .3)), lat: 50 * Math.sin(i * .3) / 111195}));
+  const query = createHistoryQuery(points), raw = query({mode: 'points'});
+  for (const driftWindow of [60, 300, 600]) {
+    const result = query({mode: 'points', trackMode: 'drift', driftWindow});
+    assert.deepEqual(result.dots, raw.dots); assert.equal(result.km, raw.km);
+  }
+  const recorded = createHistoryQuery(points.map(p => ({...p, recordedSpeed: 25})))({mode: 'points', trackMode: 'drift', driftWindow: 600});
+  assert.ok(recorded.dots.features.every(f => f.properties.speed === 25 && f.properties.speedRecorded));
 });
 
-test('rolling estimates agree with full recomputation, cross the dateline and reject unsupported gaps', () => {
-  const points = Array.from({length: 15000}, (_, i) => point(i * 5000, 100 * i + Math.sin(i), '', i % 3 ? 1 : 4));
-  const rolling = driftSpeeds(points).speeds, reference = driftSpeeds(points, {reference: true}).speeds;
-  for (let i = 0; i < points.length; i++) assert.ok(Number.isNaN(rolling[i]) && Number.isNaN(reference[i]) || Math.abs(rolling[i] - reference[i]) < .0001);
-  const crossing = Array.from({length: 30}, (_, i) => ({...point(i * 5000), lon: ((179.999 + i * .001 + 180) % 360) - 180}));
-  assert.ok(Math.abs(driftSpeeds(crossing).speeds[15] - 80.06) < .1);
-  assert.ok(driftSpeeds([point(0), point(DAY)]).speeds.every(Number.isNaN));
-  assert.ok(driftSpeeds([point(0), point(0), point(0), point(0)]).speeds.every(Number.isNaN));
+test('stationary drift needs two-sided context and does not erase slow real excursions or a second device', () => {
+  const walk = Array.from({length: 20}, (_, i) => point(i * 60000, i === 10 ? 60 : 0));
+  assert.ok(jumpFlags(walk, {stationaryWindow: 600}).every(v => !v));
+  const mixed = Array.from({length: 100}, (_, i) => [point(i * 10000, 0, 'a'), point(i * 10000 + 1, 300, 'b')]).flat();
+  assert.equal(createHistoryQuery(mixed)({trackMode: 'drift', driftWindow: 600}).count, mixed.length);
+  const sparse = [point(0), point(DAY, 300), point(2 * DAY)];
+  assert.ok(jumpFlags(sparse, {stationaryWindow: 600}).every(v => !v));
+});
+
+test('stationary GPS filtering wraps the dateline and caches repeated display queries', () => {
+  const points = Array.from({length: 100}, (_, i) => ({...point(i * 10000, i === 50 || i === 51 ? 300 : Math.sin(i) * 2), lon: ((179.999 + (i === 50 || i === 51 ? 300 : Math.sin(i) * 2) / 111195 + 180) % 360) - 180}));
+  const query = createHistoryQuery(points), options = {mode: 'route', trackMode: 'drift', driftWindow: 120, viewport: [179.99, -.01, 180.01, .01]};
+  const first = query(options);
+  assert.equal(first.count, 98); assert.ok(first.routes.features.length > 0);
+  assert.equal(query(options).routes, first.routes);
+  assert.equal(query({...options, mode: 'points'}).count, first.count);
 });
 
 test('motion preferences migrate old quality toggles and omit dataset-specific device choice', () => {

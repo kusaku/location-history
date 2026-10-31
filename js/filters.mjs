@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=33';
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=34';
 
 // ISO text remains editable independently of browser locale. The companion date
 // input supplies the native calendar without another calendar implementation.
@@ -108,7 +108,7 @@ export function createFilters(root, initial, changed, committed) {
     values.driftWindow = initial.driftWindow ?? 60;
     const button = document.createElement('button'), panel = document.createElement('div');
     button.type = 'button'; button.className = 'filter-toggle'; button.id = 'filter-track'; button.setAttribute('popovertarget', 'filter-track-panel');
-    button.title = 'Remove isolated outliers or estimate supported movement through GPS noise';
+    button.title = 'Remove isolated jumps and distant fixes among stationary neighbours';
     panel.id = 'filter-track-panel'; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto');
     panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Track quality');
     panel.innerHTML = `<div class="filter-title"><strong>Track quality</strong><button type="button" data-reset>Reset</button></div>
@@ -121,12 +121,12 @@ export function createFilters(root, initial, changed, committed) {
       button.textContent = `Track quality · ${values.trackMode === 'off' ? 'Off' : drift ? `GPS drift · ${value}s` : `+${number.format(value)} km/h`}`;
       button.classList.toggle('active', values.excludeJumps);
       for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.setAttribute('aria-pressed', String(choice.dataset.trackMode === values.trackMode));
-      panel.querySelector('[data-label]').textContent = drift ? 'Averaging window' : 'Allowed speed spike';
+      panel.querySelector('[data-label]').textContent = drift ? 'Context window' : 'Allowed speed spike';
       panel.querySelector('[data-unit]').textContent = drift ? 's' : 'km/h';
-      panel.querySelector('.hint').textContent = drift ? 'Estimates movement within each device. Grey means unconfirmed. Longer windows smooth short stops and speed changes. Original points stay available.' : 'Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.';
+      panel.querySelector('.hint').textContent = drift ? 'Removes isolated distant fixes surrounded by stationary recordings from the same device and source. Speed is not averaged. Valid points and paths stay visible.' : 'Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.';
       for (const input of [field, slider]) { input.min = drift ? 15 : 0; input.max = drift ? 600 : 200; input.value = value; input.disabled = values.trackMode === 'off'; }
-      field.setAttribute('aria-label', drift ? 'GPS drift window' : 'Allowed speed spike');
-      slider.setAttribute('aria-label', drift ? 'GPS drift window slider' : 'Allowed speed spike slider');
+      field.setAttribute('aria-label', drift ? 'GPS drift context' : 'Allowed speed spike');
+      slider.setAttribute('aria-label', drift ? 'GPS drift context slider' : 'Allowed speed spike slider');
       slider.setAttribute('aria-valuetext', drift ? `${value} seconds` : `${value} km/h above nearby movement`);
     }
     const apply = () => { values.excludeJumps = values.trackMode !== 'off'; paint(); changed('track'); committed(); };

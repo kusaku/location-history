@@ -843,6 +843,17 @@ select {
 .point-details>div:not(:first-child) {
   color: var(--muted);
 }
+.point-timestamp {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+}
+.point-timestamp a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 .color-controls {
   display: flex;

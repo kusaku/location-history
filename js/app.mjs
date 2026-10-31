@@ -240,6 +240,11 @@ function setDates(start, end, period = null, periodDay = null) {
   state.periodDay = periodDay;
   syncDates(); refresh();
 }
+function selectDates(start, end, hour) {
+  stopPlayback();
+  filters.setHours(hour ?? 0, hour === undefined ? 24 : hour + 1);
+  setDates(start, end); rememberSettings();
+}
 function moveWindow(direction) {
   const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
   const next = shiftWindow(state.start, state.end, min, max, direction, state.period, state.periodDay ?? undefined);
@@ -448,7 +453,7 @@ async function init() {
     maplibre.addProtocol('yandex-tiles', createYandexTileLoader());
     map = new maplibre.Map({container: 'map', style: {version: 8, sources: {}, layers: [{id: 'background', type: 'background', paint: {'background-color': '#202a27'}}]}, center: [13.4, 52.5], zoom: 10, attributionControl: false, maxZoom: 20, canvasContextAttributes: {antialias: true}});
     nativeMaps = createNativeMaps(map, $('workspace'), async message => { await selectBasemap('dark'); status(message, true); });
-    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates: (start, end, hour) => { stopPlayback(); filters.setHours(hour ?? 0, hour === undefined ? 24 : hour + 1); setDates(start, end); rememberSettings(); }});
+    placeHistory = createPlaceHistory({map, report: () => state.report, options: currentOptions, send: message => worker.postMessage(message), status, selectDates});
     map.addControl(new maplibre.NavigationControl({visualizePitch: true}), 'top-right');
     const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
     compass.setAttribute('aria-label', 'Reset rotation and tilt'); compass.title = 'Reset rotation and tilt';
@@ -479,8 +484,20 @@ async function init() {
       }
       const p = feature.properties, node = document.createElement('div');
       node.className = 'point-details';
+      const iso = new Date(p.time).toISOString(), day = Math.floor(p.time / DAY) * DAY, hour = new Date(p.time).getUTCHours();
+      const when = document.createElement('div'); when.className = 'point-timestamp';
+      for (const [text, selectedHour, label] of [[iso.slice(0, 10), undefined, `Show day ${iso.slice(0, 10)} UTC`], [iso.slice(11, -1), hour, `Show hour ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00 UTC on ${iso.slice(0, 10)}`]]) {
+        const link = document.createElement('a'); link.href = '#timeline-title'; link.textContent = text; link.title = label; link.setAttribute('aria-label', label);
+        link.onclick = event => {
+          event.preventDefault(); event.stopPropagation();
+          selectDates(day, day + DAY - 1, selectedHour);
+          $(selectedHour === undefined ? 'date-start' : 'filter-hours').focus({preventScroll: true});
+        };
+        when.append(link);
+      }
+      when.append(document.createTextNode('UTC')); node.append(when);
       const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
-      for (const text of [new Date(p.time).toISOString().replace('T', ' ').replace(/Z$/, ' UTC'), p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
+      for (const text of [p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
         const line = document.createElement('div'); line.textContent = text; node.append(line);
       }
       popup?.remove();

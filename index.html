@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=42">
-    <script type="module" src="js/app.mjs?v=54">
+    <link rel="stylesheet" href="css/styles.css?v=43">
+    <script type="module" src="js/app.mjs?v=55">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -641,7 +641,7 @@
         </b>
         connects consecutive observations, skipping inaccurate locations while preserving breaks at gaps over six hours, excluded jumps, hour filters, dateline crossings, or implausible speeds.
       </p>
-      <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b>, <b>Speed</b> or <b>Altitude</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. The scales stay fixed when panning. Altitude uses the known height range in Date window, including zero and negative heights. It is the height recorded in the file; the export may use WGS84 rather than mean sea level. Click a point for its timestamp, accuracy, speed and altitude. Heatmap and Hexagons use colour for density instead.</p>
+      <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b>, <b>Speed</b> or <b>Altitude</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. The scales stay fixed when panning. Altitude uses the known height range in Date window, including zero and negative heights. It is the height recorded in the file; the export may use WGS84 rather than mean sea level. Click a point for its timestamp, accuracy, speed and altitude. In its popup, select the date to show that complete UTC day, or the time to show only that UTC hour on the same day. Heatmap and Hexagons use colour for density instead.</p>
       <p>Distance uses accumulated displacement beyond GPS uncertainty rather than adding every small fluctuation. Short intervals with recorded device speed use its time integral. Small walks can still count, but movements below measurement uncertainty may be missed. Distance is an estimate.</p>
       <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between neighbouring original recordings, averaged at a point over its incoming and outgoing intervals. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude paths average values over bounded displayed sections; a section is grey if less than half its duration has data. Narrow Date window for more detail.</p>
       <h3>

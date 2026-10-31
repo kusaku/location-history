@@ -225,6 +225,24 @@ function lowerBound(points, time, inclusive = false) {
   return lo;
 }
 
+// Exact one-dimensional bounds of a cubic Bézier, including interior extrema.
+function cubicRange(p0, p1, p2, p3) {
+  let low = Math.min(p0, p3), high = Math.max(p0, p3);
+  const a = -p0 + 3 * p1 - 3 * p2 + p3, b = 2 * (p0 - 2 * p1 + p2), c = p1 - p0;
+  const include = t => {
+    if (t > 0 && t < 1) {
+      const u = 1 - t, value = u ** 3 * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t ** 3 * p3;
+      low = Math.min(low, value); high = Math.max(high, value);
+    }
+  };
+  if (Math.abs(a) < Number.EPSILON) { if (b) include(-c / b); }
+  else {
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant >= 0) { const root = Math.sqrt(discriminant); include((-b - root) / (2 * a)); include((-b + root) / (2 * a)); }
+  }
+  return [low, high];
+}
+
 // Calendar-aligned overview bins. Keep roughly 10px per bar; unusually long
 // histories fall back to years rather than allocating unbounded quarter bins.
 function histogramPlan(min, max, budget) {
@@ -549,10 +567,10 @@ export function createHistoryQuery(points) {
       const parts = [], step = colorBy === 'time' ? 128 : Math.max(1, Math.ceil(indices.length / 20_000));
       for (const [run, [a, b]] of runs.entries()) for (let from = a; from < b - 1; from += step) {
         const to = Math.min(from + step, b - 1), first = points[indices[from]], last = points[indices[to]];
-        let west = first.lon, east = west, south = first.lat, north = south, weighted = 0, elapsed = 0;
+        let west = first.lon, east = west, top = projectedY[indices[from]], bottom = top, weighted = 0, elapsed = 0;
         for (let k = from + 1; k <= to; k++) {
           const p = points[indices[k]];
-          west = Math.min(west, p.lon); east = Math.max(east, p.lon); south = Math.min(south, p.lat); north = Math.max(north, p.lat);
+          west = Math.min(west, p.lon); east = Math.max(east, p.lon); top = Math.min(top, projectedY[indices[k]]); bottom = Math.max(bottom, projectedY[indices[k]]);
           if (colorBy === 'time') continue;
           const previous = points[indices[k - 1]], dt = p.t - previous.t;
           let value;
@@ -564,29 +582,56 @@ export function createHistoryQuery(points) {
           if (value !== null) { weighted += value * dt; elapsed += dt; }
         }
         const value = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
-        parts.push({from, to, run, west, east, south, north, value, time: first.t + (last.t - first.t) / 2});
+        parts.push({from, to, run, west, east, top, bottom, value, time: first.t + (last.t - first.t) / 2});
       }
       selection.routeParts = parts;
     }
     const level = Number.isFinite(zoom) ? Math.floor(Math.max(0, Math.min(20, zoom))) : 10;
     const scale = 512 * 2 ** level, parts = selection.routeParts, visible = [];
+    const viewLeft = (viewport[0] + 180) / 360, viewRight = (viewport[2] + 180) / 360, viewTop = projectY(viewport[3]), viewBottom = projectY(viewport[1]);
     let smooth = options.smooth === true && level >= 12, segments;
-    const collect = padding => {
+    const collect = curved => {
       visible.length = 0; segments = 0;
       for (let i = 0; i < parts.length; i++) {
-        const p = parts[i], shift = 360 * Math.ceil((viewport[0] - padding - p.east) / 360);
-        if (p.west + shift <= viewport[2] + padding && p.south <= viewport[3] + padding && p.north >= viewport[1] - padding) { visible.push(i); segments += p.to - p.from; }
+        const p = parts[i];
+        let left = (p.west + 180) / 360, right = (p.east + 180) / 360, top = p.top, bottom = p.bottom;
+        if (curved) {
+          if (!p.curveBounds) {
+            // The indexed part plus two context fixes on either side contains
+            // every adjusted anchor. A support diameter also bounds its handles.
+            for (let at = Math.max(runs[p.run][0], p.from - 2); at < Math.min(runs[p.run][1], p.to + 3); at++) {
+              if (at >= p.from && at <= p.to) { at = p.to; continue; }
+              const x = (points[indices[at]].lon + 180) / 360, y = projectedY[indices[at]];
+              left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+            }
+            const pad = Math.hypot(right - left, bottom - top);
+            p.curveBounds = [left - pad, right + pad, top - pad, bottom + pad];
+          }
+          [left, right, top, bottom] = p.curveBounds;
+        }
+        const shift = Math.ceil(viewLeft - right);
+        if (left + shift <= viewRight && top <= viewBottom && bottom >= viewTop) { visible.push(i); segments += p.to - p.from; }
       }
     };
-    collect(smooth ? 12 * 360 / scale : 0);
+    collect(false);
     // Avoid multiplying large/dense geometry. Overview and disabled smoothing
     // reuse the original line cache, without generating any curve vertices.
-    if (smooth && segments > 10_000) { smooth = false; collect(0); }
-    if (selection.routes && selection.routeLevel === level && selection.routeSmooth === smooth && visible.length === selection.routeVisible.length && visible.every((value, i) => value === selection.routeVisible[i])) return selection.routes;
-    const features = [], tolerance = (.5 / scale) ** 2, curveTolerance = (.25 / scale) ** 2;
+    if (smooth && segments <= 10_000) collect(true);
+    if (smooth && segments > 10_000) { smooth = false; collect(false); }
+    const needsCurveFit = options.smooth === true && selection.routeCount <= 10_000 && selection.curveFitBounds === undefined;
+    const cached = selection.routes && selection.routeLevel === level && selection.routeSmooth === smooth && visible.length === selection.routeVisible.length && visible.every((value, i) => value === selection.routeVisible[i]);
+    if (cached && !needsCurveFit) return selection.routes;
+    const plannedSmooth = smooth;
+    if (smooth) {
+      let length = 0;
+      for (const id of visible) for (let k = parts[id].from + 1; k <= parts[id].to; k++) length += Math.hypot((points[indices[k]].lon - points[indices[k - 1]].lon) / 360, projectedY[indices[k]] - projectedY[indices[k - 1]]);
+      if (length * scale < segments * 4) smooth = false;
+    }
+    const features = [], tolerance = (.5 / scale) ** 2, curveTolerance = (.25 / scale) ** 2, knotTolerance = Math.tan(Math.PI / 90) ** 2;
+    let curveVertices = 0;
     // A four-entry rolling cache, not another array over the imported history.
     // Uncertain fixes may round toward their time-interpolated neighbours within
-    // reported accuracy and four screen pixels; run endpoints stay unchanged.
+    // reported accuracy. Anchors are zoom-independent; endpoints stay unchanged.
     const anchors = [];
     const anchor = (at, run) => {
       const slot = at & 3;
@@ -596,106 +641,149 @@ export function createHistoryQuery(points) {
       if (!(p.accuracy > 0) || at === runs[run][0] || at === runs[run][1] - 1) return result;
       const before = points[indices[at - 1]], after = points[indices[at + 1]];
       const bx = (before.lon + 180) / 360, by = projectedY[indices[at - 1]], ax = (after.lon + 180) / 360, ay = projectedY[indices[at + 1]];
-      if (Math.hypot(x - bx, y - by) * scale < 4 || Math.hypot(ax - x, ay - y) * scale < 4 || after.t <= before.t) return result;
+      if (after.t <= before.t) return result;
       const time = (p.t - before.t) / (after.t - before.t), dx = bx + (ax - bx) * time - x, dy = by + (ay - by) * time - y;
       const distance = Math.hypot(dx, dy);
       if (!distance) return result;
-      const weight = p.accuracy / (p.accuracy + Math.max(before.accuracy ?? p.accuracy, after.accuracy ?? p.accuracy));
-      const limit = Math.min(4 / scale, p.accuracy / (40_075_016.686 * Math.cos(p.lat * rad)));
+      const metres = 40_075_016.686 * Math.cos(p.lat * rad), limit = p.accuracy / metres;
+      const neighbor = Math.max(before.accuracy ?? p.accuracy, after.accuracy ?? p.accuracy) / metres;
+      // A corner much larger than its uncertainty is likely real movement;
+      // avoid pulling every precise corner to the edge of its accuracy circle.
+      const weight = limit ** 2 / (limit ** 2 + neighbor ** 2 + distance ** 2);
       const amount = Math.min(weight, limit / distance);
       result.x += dx * amount; result.y += dy * amount;
       const [lon, lat] = unproject(result.x, result.y); result.p = {lon, lat, t: p.t};
       return result;
     };
-    const curvedEdge = (k, run, emit) => {
+    const curveControls = (k, run) => {
       const left = anchor(k - 1, run), right = anchor(k, run), a = left.p, b = right.p, ax = left.x, ay = left.y, bx = right.x, by = right.y;
       const dx = bx - ax, dy = by - ay, length = Math.hypot(dx, dy);
-      if (length * scale < 4) { emit(b, by, true); return; }
+      if (!length) return {a, b, ax, ay, bx, by, h1x: 0, h1y: 0, h2x: 0, h2y: 0};
+      const dt = Math.sqrt(length);
       let h1x = dx / 3, h1y = dy / 3, h2x = h1x, h2y = h1y;
-      // Catmull–Rom tangents shortened for uneven spacing. Controls always
-      // progress along the edge; eight-pixel handles bound bends and overshoot.
+      // Centripetal Catmull–Rom expressed as cubic Bézier controls. Adjacent
+      // pieces share a tangent; handle length follows spacing, never pixel zoom.
       if (k - 1 > runs[run][0]) {
-        const p = anchor(k - 2, run), x = ax - p.x, y = ay - p.y, d = Math.hypot(x, y);
-        if (d) { const f = Math.min(d, length) / 6; h1x = (x / d + dx / length) * f; h1y = (y / d + dy / length) * f; }
+        const p = anchor(k - 2, run), x = ax - p.x, y = ay - p.y, d = Math.sqrt(Math.hypot(x, y));
+        if (d) { const f = dt / (3 * (d + dt)); h1x = (x * dt / d + dx * d / dt) * f; h1y = (y * dt / d + dy * d / dt) * f; }
       }
       if (k + 1 < runs[run][1]) {
-        const p = anchor(k + 1, run), x = p.x - bx, y = p.y - by, d = Math.hypot(x, y);
-        if (d) { const f = Math.min(d, length) / 6; h2x = (x / d + dx / length) * f; h2y = (y / d + dy / length) * f; }
+        const p = anchor(k + 1, run), x = p.x - bx, y = p.y - by, d = Math.sqrt(Math.hypot(x, y));
+        if (d) { const f = dt / (3 * (dt + d)); h2x = (dx * d / dt + x * dt / d) * f; h2y = (dy * d / dt + y * dt / d) * f; }
       }
-      const f1 = Math.min(1, 8 / scale / Math.hypot(h1x, h1y)), f2 = Math.min(1, 8 / scale / Math.hypot(h2x, h2y));
-      h1x *= f1; h1y *= f1; h2x *= f2; h2y *= f2;
-      const flatness = Math.max((h1x * dy - h1y * dx) ** 2, (h2x * dy - h2y * dx) ** 2);
-      if (flatness <= curveTolerance * length ** 2) { emit(b, by, true); return; }
-      // Adaptive de Casteljau subdivision: at most 16 samples per visible edge.
-      // Intermediate samples exist only in rendered geometry, never in history.
+      return {a, b, ax, ay, bx, by, h1x, h1y, h2x, h2y};
+    };
+    // Fit the complete sparse spline, independent of the current viewport/zoom.
+    // Dense selections use straight geometry when fitted; no full-history curve
+    // pass is needed for them. These bounds are cached with the selection.
+    if (needsCurveFit) {
+      if (selection.routeBounds === undefined) {
+        selection.routeBounds = wrappedBounds(points, indices, runs);
+        if (selection.routeCount === selection.count) selection.bounds = selection.routeBounds;
+      }
+      const raw = selection.routeBounds;
+      selection.curveFitBounds = raw;
+      if (raw) {
+        const center = (raw[0][0] + raw[1][0]) / 2;
+        let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+        for (const [run, [from, to]] of runs.entries()) for (let k = from + 1; k < to; k++) {
+          const {a, ax, ay, bx, by, h1x, h1y, h2x, h2y} = curveControls(k, run), shift = Math.round((center - a.lon) / 360);
+          const x = cubicRange(ax, ax + h1x, bx - h2x, bx), y = cubicRange(ay, ay + h1y, by - h2y, by);
+          left = Math.min(left, x[0] + shift); right = Math.max(right, x[1] + shift); top = Math.min(top, y[0]); bottom = Math.max(bottom, y[1]);
+        }
+        const [west, south] = unproject(left, bottom), [east, north] = unproject(right, top);
+        selection.curveFitBounds = [[west, Math.max(-85, south)], [east, Math.min(85, north)]];
+      }
+    }
+    if (cached) return selection.routes;
+    const curvedEdge = (k, run, emit) => {
+      const {a, b, ax, ay, bx, by, h1x, h1y, h2x, h2y} = curveControls(k, run);
+      if (ax === bx && ay === by) { emit(b, by, true); return true; }
+      const aligned = (x, y, hx, hy) => {
+        const dot = x * hx + y * hy, cross = x * hy - y * hx;
+        return hx * hx + hy * hy === 0 || dot > 0 && cross * cross <= knotTolerance * dot * dot;
+      };
+      // Refine the end chords as well as flatness so tessellation preserves the
+      // shared tangent at joins, including joins across colour features.
       const draw = (x0, y0, x1, y1, x2, y2, x3, y3, t0, t1, depth) => {
         const x = x3 - x0, y = y3 - y0;
         const bend = Math.max(((x1 - x0) * y - (y1 - y0) * x) ** 2, ((x2 - x0) * y - (y2 - y0) * x) ** 2);
-        if (depth === 4 || bend <= curveTolerance * (x * x + y * y)) {
+        const tangent = Math.hypot(x, y) * scale < .01 || (t0 !== 0 || aligned(x, y, h1x, h1y)) && (t1 !== 1 || aligned(x, y, h2x, h2y));
+        if (bend <= curveTolerance * (x * x + y * y) && tangent) {
           if (t1 === 1) emit(b, by, true);
-          else { const [lon, lat] = unproject(x3, y3); emit({lon, lat, t: a.t + (b.t - a.t) * t1}, y3, false); }
-          return;
+          else {
+            if (++curveVertices > 50_000) return false;
+            const [lon, lat] = unproject(x3, y3); emit({lon, lat, t: a.t + (b.t - a.t) * t1}, y3, false);
+          }
+          return true;
         }
+        if (depth === 10) return false;
         const x01 = (x0 + x1) / 2, y01 = (y0 + y1) / 2, x12 = (x1 + x2) / 2, y12 = (y1 + y2) / 2, x23 = (x2 + x3) / 2, y23 = (y2 + y3) / 2;
         const x012 = (x01 + x12) / 2, y012 = (y01 + y12) / 2, x123 = (x12 + x23) / 2, y123 = (y12 + y23) / 2, mx = (x012 + x123) / 2, my = (y012 + y123) / 2, mid = (t0 + t1) / 2;
-        draw(x0, y0, x01, y01, x012, y012, mx, my, t0, mid, depth + 1);
-        draw(mx, my, x123, y123, x23, y23, x3, y3, mid, t1, depth + 1);
+        return draw(x0, y0, x01, y01, x012, y012, mx, my, t0, mid, depth + 1)
+          && draw(mx, my, x123, y123, x23, y23, x3, y3, mid, t1, depth + 1);
       };
-      draw(ax, ay, ax + h1x, ay + h1y, bx - h2x, by - h2y, bx, by, 0, 1, 0);
+      return draw(ax, ay, ax + h1x, ay + h1y, bx - h2x, by - h2y, bx, by, 0, 1, 0);
     };
     let coordinates = [], keptLon, keptY;
     const append = (p, y, force = false) => {
       const dx = (p.lon - keptLon) / 360, dy = y - keptY, last = coordinates.at(-1);
       // Skip only subpixel movement, never every Nth recording. At fractional
       // zoom this stays below one map pixel; piece endpoints are always retained.
-      if (!last || force || dx * dx + dy * dy >= tolerance) {
+      if (smooth || !last || force || dx * dx + dy * dy >= tolerance) {
         if (last && last[0] === p.lon && last[1] === p.lat) return;
         coordinates.push([p.lon, p.lat]); keptLon = p.lon; keptY = y;
       }
     };
     const finish = properties => { if (coordinates.length > 1) features.push({type: 'Feature', properties, geometry: {type: 'LineString', coordinates}}); };
-    if (colorBy !== 'time') {
-      for (const id of visible) {
-        const part = parts[id]; coordinates = [];
-        if (smooth) {
-          const first = anchor(part.from, part.run); append(first.p, first.y, true);
-          let last;
-          const emit = (p, y, endpoint) => append(p, y, endpoint && last);
-          for (let k = part.from + 1; k <= part.to; k++) { last = k === part.to; curvedEdge(k, part.run, emit); }
-        } else for (let k = part.from; k <= part.to; k++) append(points[indices[k]], projectedY[indices[k]], k === part.to);
-        finish({[colorBy]: part.value, time: part.time});
+    const render = () => {
+      if (colorBy !== 'time') {
+        for (const id of visible) {
+          const part = parts[id]; coordinates = [];
+          if (smooth) {
+            const first = anchor(part.from, part.run); append(first.p, first.y, true);
+            let last;
+            const emit = (p, y, endpoint) => append(p, y, endpoint && last);
+            for (let k = part.from + 1; k <= part.to; k++) { last = k === part.to; if (!curvedEdge(k, part.run, emit)) return false; }
+          } else for (let k = part.from; k <= part.to; k++) append(points[indices[k]], projectedY[indices[k]], k === part.to);
+          finish({[colorBy]: part.value, time: part.time});
+        }
+      } else {
+        const first = Number.isFinite(options.start) ? options.start : min, last = Number.isFinite(options.end) ? options.end : max;
+        const width = Math.max(1, last - first) / 256;
+        const bandAt = time => Math.max(0, Math.min(255, Math.floor((time - first) / width)));
+        for (let n = 0; n < visible.length;) {
+          const part = parts[visible[n++]], from = part.from; let to = part.to;
+          while (n < visible.length && parts[visible[n]].run === part.run && parts[visible[n]].from === to) to = parts[visible[n++]].to;
+          const initial = smooth ? anchor(from, part.run) : {p: points[indices[from]], y: projectedY[indices[from]]};
+          let previous = initial.p, band = bandAt(previous.t);
+          coordinates = []; append(previous, initial.y, true);
+          const emit = (next, y, force) => {
+            const nextBand = bandAt(next.t); let boundary;
+            while (band < nextBand) {
+              boundary = first + (band + 1) * width;
+              const fraction = (boundary - previous.t) / (next.t - previous.t);
+              const p = boundary === next.t ? next : {lon: previous.lon + (next.lon - previous.lon) * fraction, lat: previous.lat + (next.lat - previous.lat) * fraction};
+              const y = projectY(p.lat); append(p, y, true); finish({time: first + (band + .5) * width});
+              coordinates = []; append(p, y, true); band++;
+            }
+            if (boundary !== next.t) append(next, y, force);
+            previous = next;
+          };
+          if (smooth) {
+            let last;
+            const curved = (p, y, endpoint) => emit(p, y, endpoint && last);
+            for (let k = from + 1; k <= to; k++) { last = k === to; if (!curvedEdge(k, part.run, curved)) return false; }
+          } else for (let k = from + 1; k <= to; k++) emit(points[indices[k]], projectedY[indices[k]], k === to);
+          finish({time: first + (band + .5) * width});
+        }
       }
-    } else {
-      const first = Number.isFinite(options.start) ? options.start : min, last = Number.isFinite(options.end) ? options.end : max;
-      const width = Math.max(1, last - first) / 256;
-      const bandAt = time => Math.max(0, Math.min(255, Math.floor((time - first) / width)));
-      for (let n = 0; n < visible.length;) {
-        const part = parts[visible[n++]], from = part.from; let to = part.to;
-        while (n < visible.length && parts[visible[n]].run === part.run && parts[visible[n]].from === to) to = parts[visible[n++]].to;
-        const initial = smooth ? anchor(from, part.run) : {p: points[indices[from]], y: projectedY[indices[from]]};
-        let previous = initial.p, band = bandAt(previous.t);
-        coordinates = []; append(previous, initial.y, true);
-        const emit = (next, y, force) => {
-          const nextBand = bandAt(next.t); let boundary;
-          while (band < nextBand) {
-            boundary = first + (band + 1) * width;
-            const fraction = (boundary - previous.t) / (next.t - previous.t);
-            const p = boundary === next.t ? next : {lon: previous.lon + (next.lon - previous.lon) * fraction, lat: previous.lat + (next.lat - previous.lat) * fraction};
-            const y = projectY(p.lat); append(p, y, true); finish({time: first + (band + .5) * width});
-            coordinates = []; append(p, y, true); band++;
-          }
-          if (boundary !== next.t) append(next, y, force);
-          previous = next;
-        };
-        if (smooth) {
-          let last;
-          const curved = (p, y, endpoint) => emit(p, y, endpoint && last);
-          for (let k = from + 1; k <= to; k++) { last = k === to; curvedEdge(k, part.run, curved); }
-        } else for (let k = from + 1; k <= to; k++) emit(points[indices[k]], projectedY[indices[k]], k === to);
-        finish({time: first + (band + .5) * width});
-      }
-    }
-    selection.routeVisible = visible; selection.routeLevel = level; selection.routeSmooth = smooth;
+      return true;
+    };
+    // Fall back for the complete visible path, never by splicing straight edges
+    // into a spline. Cache that result too, so panning cannot retry the same work.
+    if (!render()) { smooth = false; features.length = 0; coordinates = []; render(); }
+    selection.routeVisible = visible; selection.routeLevel = level; selection.routeSmooth = plannedSmooth; selection.routeCurveFallback = plannedSmooth && !smooth;
     return selection.routes = collection(features);
   }
   const query = (options = {}) => {
@@ -834,7 +922,8 @@ export function createHistoryQuery(points) {
       selection[boundsKey] = wrappedBounds(points, indices, mode === 'route' ? selection.runs : null);
       if (selection.routeCount === selection.count) selection.bounds = selection.routeBounds = selection[boundsKey];
     }
-    const bounds = selection[boundsKey] ?? (mode !== 'route' && metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null);
+    const rawBounds = selection[boundsKey] ?? (mode !== 'route' && metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null);
+    const bounds = mode === 'route' && options.smooth === true && !selection.routeCurveFallback ? selection.curveFitBounds ?? rawBounds : rawBounds;
     return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds, histogram: filter.histogram, histogramRanges: plan.ranges, histogramUnit: plan.unit, altitudeRange: selection.altitudeRange, peak, drawn};
   };
   // Navigate the complete filtered window, independent of viewport and drawing stride.

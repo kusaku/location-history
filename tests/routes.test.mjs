@@ -123,9 +123,9 @@ test('cubic journeys bound visual rounding and preserve measurements and colour 
     const options = {mode: 'route', colorBy, zoom: 18};
     const straight = query(options), smooth = query({...options, smooth: true});
     assert.notDeepEqual(smooth.routes, straight.routes, colorBy);
-    for (const key of ['count', 'visible', 'days', 'km', 'bounds', 'histogram', 'altitudeRange']) assert.deepEqual(smooth[key], straight[key], key);
-    assert.ok(errorPixels(points, vertices(smooth), 18) < 4.5);
-    assert.ok(errorPixels(vertices(smooth).map(([lon, lat]) => ({lon, lat})), points.map(p => [p.lon, p.lat]), 18) < 12);
+    for (const key of ['count', 'visible', 'days', 'km', 'histogram', 'altitudeRange']) assert.deepEqual(smooth[key], straight[key], key);
+    assert.ok(errorPixels(points, vertices(smooth), 18) < 4 * 512 * 2 ** 18 / 40_075_016.686 + .5);
+    assert.ok(vertices(smooth).every(c => c.every(Number.isFinite)));
     const features = smooth.routes.features;
     for (let i = 1; i < features.length; i++) assert.deepEqual(features[i - 1].geometry.coordinates.at(-1), features[i].geometry.coordinates[0]);
     assert.deepEqual(vertices(smooth)[0], [points[0].lon, points[0].lat]);
@@ -162,8 +162,8 @@ test('smooth journeys cache repeated pans, bound subdivision and keep uneven/U-t
   const first = query({...options, viewport: [-1, -1, 1, 1]});
   assert.equal(query({...options, zoom: 18.7, viewport: [-.5, -.5, .5, .5]}).routes, first.routes);
   assert.ok(vertices(first).every(c => c.every(Number.isFinite)));
-  assert.ok(vertices(first).length <= (points.length - 1) * 17);
-  assert.ok(errorPixels(points, vertices(first), 18) < 4.5);
+  assert.ok(vertices(first).length <= 50_000 + (points.length - 1) * 2);
+  assert.ok(errorPixels(points, vertices(first), 18) < 4 * 512 * 2 ** 18 / 40_075_016.686 + .5);
 });
 
 test('uncertain anchors may round within accuracy while precise and unknown fixes stay close to their observations', () => {
@@ -175,7 +175,91 @@ test('uncertain anchors may round within accuracy while precise and unknown fixe
   }
   assert.ok(errors[0] < .01);
   assert.ok(errors[1] < .5);
-  assert.ok(errors[2] > 2 && errors[2] <= 4.5);
+  const pixelsPerMetre = 512 * 2 ** 18 / 40_075_016.686;
+  assert.ok(errors[2] > 50 * pixelsPerMetre && errors[2] <= 500 * pixelsPerMetre);
+});
+
+function knotAngle(coordinates, point) {
+  const at = coordinates.findIndex(c => c[0] === point.lon && c[1] === point.lat);
+  assert.ok(at > 0 && at < coordinates.length - 1, 'the shared knot must be retained');
+  const a = project(...coordinates[at - 1]), p = project(...coordinates[at]), b = project(...coordinates[at + 1]);
+  const ux = p[0] - a[0], uy = p[1] - a[1], vx = b[0] - p[0], vy = b[1] - p[1];
+  return Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / Math.hypot(ux, uy) / Math.hypot(vx, vy)))) * 180 / Math.PI;
+}
+const uniqueVertices = result => vertices(result).filter((c, i, all) => !i || c[0] !== all[i - 1][0] || c[1] !== all[i - 1][1]);
+
+test('elastic spline bends scale with point spacing and preserve tangent direction through colour joins', () => {
+  const points = corners().map(p => ({...p, accuracy: null})), query = createHistoryQuery(points);
+  let previousBend;
+  for (const zoom of [16, 18]) for (const colorBy of ['time', 'speed', 'altitude']) {
+    const result = query({mode: 'route', zoom, colorBy, smooth: true}), line = uniqueVertices(result);
+    const bend = Math.min(...line.map(c => c[1]));
+    assert.ok(bend < -.00005, 'the curve must bow along the edge, not round only eight pixels near a corner');
+    if (previousBend !== undefined) assert.ok(Math.abs(bend - previousBend) < .000002, 'zoom must not change the spline shape');
+    previousBend = bend;
+    for (const p of points.slice(1, -1)) assert.ok(knotAngle(line, p) < 4.05, `${colorBy} has a visible kink`);
+  }
+});
+
+test('Fit includes exact spline extrema even before zooming in or from an empty viewport', () => {
+  const points = corners().map(p => ({...p, accuracy: null})), query = createHistoryQuery(points);
+  const straight = query({mode: 'route', zoom: 8});
+  const far = query({mode: 'route', zoom: 8, smooth: true, viewport: [100, 0, 110, 10]});
+  assert.equal(far.routes.features.length, 0);
+  assert.ok(far.bounds[0][1] < -.00005); assert.ok(far.bounds[1][1] > .00105);
+  assert.equal(query({mode: 'route', zoom: 18, smooth: true}).bounds, far.bounds);
+  assert.equal(query({mode: 'route', zoom: 18}).bounds, straight.bounds);
+  assert.deepEqual(straight.bounds.map(c => c[1]), [0, .001]);
+});
+
+test('spline Fit keeps wrapped longitudes and separate runs close to the dateline', () => {
+  const points = [point(0, 179.1), point(60000, 179.2), point(86400000, -179.2), point(86460000, -179.1)];
+  const query = createHistoryQuery(points), result = query({mode: 'route', smooth: true, zoom: 8});
+  assert.ok(result.bounds[1][0] - result.bounds[0][0] < 2);
+  assert.ok(result.bounds.flat().every(Number.isFinite));
+});
+
+test('spline Fit follows the displayed path when an uncertain fix rounds toward its neighbours', () => {
+  const points = [point(0, 0, 0, {accuracy: 0}), point(60000, .001, .001, {accuracy: 500}), point(120000, .002, 0, {accuracy: 0})];
+  const query = createHistoryQuery(points), raw = query({mode: 'route', zoom: 18});
+  const smooth = query({mode: 'route', zoom: 18, smooth: true});
+  assert.equal(raw.bounds[1][1], .001);
+  assert.ok(smooth.bounds[1][1] < .0001);
+  assert.equal(raw.count, smooth.count); assert.equal(raw.km, smooth.km);
+});
+
+test('a short edge between long edges stays part of the same continuous spline', () => {
+  const points = [[0, 0], [.0004, 0], [.000402, .000002], [.0008, .0004]].map(([lon, lat], i) => point(i * 60000, lon, lat, {accuracy: null}));
+  const query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) {
+    const line = uniqueVertices(query({mode: 'route', colorBy, zoom: 18, smooth: true}));
+    for (const p of points.slice(1, -1)) assert.ok(knotAngle(line, p) < 4.05, `${colorBy} spliced a straight edge into the spline`);
+  }
+});
+
+test('unevenly spaced spline samples agree with independent centripetal interpolation', () => {
+  const points = [[-.002, .001], [0, 0], [.001, .003], [.02, .001]].map(([lon, lat], i) => point(i * 3600000, lon, lat, {accuracy: null}));
+  const xy = points.map(p => project(p.lon, p.lat)), knots = [0];
+  for (let i = 1; i < 4; i++) knots.push(knots.at(-1) + Math.sqrt(Math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1])));
+  const mix = (a, b, lo, hi, t) => a.map((value, i) => ((hi - t) * value + (t - lo) * b[i]) / (hi - lo));
+  const samples = Array.from({length: 1001}, (_, i) => {
+    const t = knots[1] + (knots[2] - knots[1]) * i / 1000;
+    const a = xy.slice(0, 3).map((p, k) => mix(p, xy[k + 1], knots[k], knots[k + 1], t));
+    const b = [mix(a[0], a[1], knots[0], knots[2], t), mix(a[1], a[2], knots[1], knots[3], t)];
+    const [x, y] = mix(b[0], b[1], knots[1], knots[2], t);
+    return {lon: x * 360 - 180, lat: Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI};
+  });
+  const result = createHistoryQuery(points)({mode: 'route', colorBy: 'speed', zoom: 16, smooth: true});
+  assert.ok(errorPixels(samples, result.routes.features[1].geometry.coordinates, 16) < .3);
+});
+
+test('subdivision budget falls back for the whole path and caches the fallback', () => {
+  const corners = [[0, 0], [.001, 0], [.001, .001], [0, .001]];
+  const points = Array.from({length: 9000}, (_, i) => point(i * 1000, ...corners[i % 4], {accuracy: null}));
+  const query = createHistoryQuery(points), options = {mode: 'route', colorBy: 'speed', zoom: 18};
+  const straight = query(options), result = query({...options, smooth: true});
+  assert.deepEqual(result.routes, straight.routes);
+  assert.equal(query({...options, smooth: true, viewport: [-1, -1, 1, 1]}).routes, result.routes);
 });
 
 test('curve overhang is included when original observations are just outside the viewport', () => {

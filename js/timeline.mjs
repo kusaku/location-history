@@ -1,5 +1,14 @@
 import {DAY, shiftPeriod} from './data.mjs?v=27';
 
+// Visible dates are ISO in every browser; all calendar arithmetic stays in UTC.
+const weekday = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'});
+export const formatDay = value => `${weekday.format(value)}, ${new Date(value).toISOString().slice(0, 10)}`;
+export function parseDay(value) {
+  if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000')) return NaN;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value ? time : NaN;
+}
+
 // Preset IDs stay compatible with saved preferences. Calendar windows use UTC
 // calendar arithmetic; a preferred day avoids drifting after February or April.
 function offset(start, period, amount, day = new Date(start).getUTCDate()) {

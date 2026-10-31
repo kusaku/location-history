@@ -1,5 +1,29 @@
 import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=27';
 
+// ISO text remains editable independently of browser locale. The companion date
+// input supplies the native calendar without another calendar implementation.
+export function bindDateField(root) {
+  const input = root.querySelector('.iso-date'), picker = root.querySelector('.native-date'), button = root.querySelector('button');
+  const sync = () => { button.disabled = picker.disabled = input.disabled; };
+  button.hidden = typeof picker.showPicker !== 'function';
+  button.onclick = () => {
+    sync();
+    if (input.disabled) return;
+    for (const key of ['min', 'max', 'value']) picker[key] = input[key];
+    picker.showPicker();
+  };
+  picker.onchange = () => {
+    input.value = picker.value;
+    input.dispatchEvent(new Event('change', {bubbles: true})); input.focus();
+  };
+  input.onkeydown = event => {
+    if (event.key === 'Enter') { event.preventDefault(); input.dispatchEvent(new Event('change', {bubbles: true})); }
+    else if (event.altKey && event.key === 'ArrowDown' && !button.hidden) { event.preventDefault(); button.click(); }
+  };
+  sync();
+  return sync;
+}
+
 // Native range inputs share one track. Each thumb keeps its keyboard and
 // accessibility behaviour; the same small control serves filters and dates.
 export function paintRange(root) {

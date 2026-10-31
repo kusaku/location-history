@@ -1,20 +1,19 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=22';
-import {createPlaceHistory} from './place-history.mjs?v=26';
+import {createPlaceHistory} from './place-history.mjs?v=27';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=27';
-import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from './timeline.mjs?v=25';
+import {resizeWindow, shiftWindow, dragWindow, histogramWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=26';
 import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=28';
-import {createFilters, bindRange, paintRange} from './filters.mjs?v=9';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=10';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
-const fullDate = new Intl.DateTimeFormat('en', {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
-const formatDate = t => fullDate.format(t);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy, speed and altitude.', route: 'Paths coloured by time in Date window. Accuracy filtering connects retained locations; gaps and excluded jumps still break paths.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
+let dateFields = [];
 let currentAttribution = '', filters, selectedPoint, pointPending, pointRequest = 0;
 function closePoint() {
   pointRequest++; pointPending = null;
@@ -133,6 +132,7 @@ function setEnabled(enabled) {
   for (const id of ['clear', 'fit', 'draw-area', 'date-start', 'date-end', 'range-start', 'range-end', 'play', 'period-back', 'period-forward']) $(id).disabled = !enabled;
   document.querySelectorAll('[data-period]').forEach(b => { b.disabled = !enabled; });
   for (const bar of $('histogram').children) bar.disabled = !enabled;
+  for (const sync of dateFields) sync();
 }
 function currentOptions() {
   const bounds = map?.getBounds();
@@ -434,6 +434,7 @@ function showMapView(id) {
   for (const panel of $('basemaps').children) panel.hidden = panel.id !== `maps-${id}`;
 }
 function bindControls() {
+  dateFields = [...document.querySelectorAll('.date-field')].map(bindDateField);
   for (const group of MAP_GROUPS) {
     const tab = document.createElement('button'); tab.type = 'button'; tab.id = `view-${group.id}`; tab.dataset.view = group.id; tab.textContent = group.name.split(' ·')[0];
     tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', `maps-${group.id}`);
@@ -485,7 +486,7 @@ function bindControls() {
   $('clear').onclick = clearHistory; $('fit').onclick = fitHistory;
   for (const id of ['date-start', 'date-end']) $(id).onchange = () => {
     stopPlayback();
-    const start = Date.parse($('date-start').value), end = Date.parse($('date-end').value) + DAY - 1;
+    const start = parseDay($('date-start').value), end = parseDay($('date-end').value) + DAY - 1;
     if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || date(start) < date(state.report.min) || date(end) > date(state.report.max)) { status('Choose an ordered date range within your imported history.', true); syncDates(); return; }
     setDates(start, end); rememberSettings();
   };

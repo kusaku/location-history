@@ -159,7 +159,7 @@ test('place calendar lays out leap days and 54-week years in UTC, preserving exa
     assert.equal(cells.length, 366);
     const february = cells.find(cell => cell.dataset.date === '2024-02-29');
     assert.equal(february.style.gridRow, 5); assert.equal(february.dataset.level, 4);
-    assert.match(february.title, /Thu, Feb 29, 2024 · 4 locations · <1 min/);
+    assert.match(february.title, /Thu, 2024-02-29 · 4 locations · <1 min/);
     february.onclick(); assert.deepEqual(selected, [{start: leap, end: leap + day}]);
     assert.equal(cells[0].disabled, true);
     assert.match(f.get('place-calendar-summary').textContent, /2 recorded days · 11 min/);
@@ -349,7 +349,7 @@ test('switching from Year to smaller views opens the clicked day, including unde
     f.get('place-calendar-days').children.find(cell => cell.dataset.date === '2024-09-19').click();
     assert.equal(f.sent.length, requests); // No day-result refresh in All dates.
     assert.deepEqual(f.dates, [[clicked, clicked + day - 1]]);
-    for (const [view, caption] of [['week', 'Mon, Sep 16, 2024 — Sun, Sep 22, 2024'], ['day', 'Thu, Sep 19, 2024'], ['quarter', 'Q3 · 2024'], ['month', 'Sep 2024'], ['year', '2024']]) {
+    for (const [view, caption] of [['week', 'Mon, 2024-09-16 — Sun, 2024-09-22'], ['day', 'Thu, 2024-09-19'], ['quarter', 'Q3 · 2024'], ['month', 'Sep 2024'], ['year', '2024']]) {
       f.get('place-calendar-view').value = view; f.get('place-calendar-view').onchange();
       assert.equal(f.get('place-calendar-anchor').value, '2024-09-19');
       assert.equal(f.get('place-calendar-caption').textContent, caption);

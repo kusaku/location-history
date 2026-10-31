@@ -1,4 +1,5 @@
 import {DAY, placePolygon} from './data.mjs?v=27';
+import {parseDay, formatDay} from './timeline.mjs?v=26';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -11,7 +12,7 @@ const duration = minutes => {
   const rounded = Math.round(minutes);
   return minutes === 0 ? '0 min' : minutes < 1 ? '<1 min' : rounded < 60 ? `${rounded} min` : `${number.format(Math.floor(rounded / 60))} h ${rounded % 60} min`;
 };
-const calendarDate = new Intl.DateTimeFormat('en', {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
+
 const monthName = new Intl.DateTimeFormat('en', {month: 'short', timeZone: 'UTC'});
 const yearStart = year => { const date = new Date(0); date.setUTCFullYear(year, 0, 1); return date.getTime(); };
 
@@ -72,7 +73,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, windowStart
     button.style.setProperty('--activity', value > 0 ? `${Math.max(3, Math.sqrt(value / peak) * 100)}%` : '0%');
     button.disabled = !count && !entry?.minutes || day < scope.start || day > scope.end; button.tabIndex = -1;
     const clock = value => `${String(value).padStart(2, '0')}:00`;
-    button.title = `${calendarDate.format(at)}${hourly ? ` · ${clock(hour)}–${clock(hour + 1)} UTC` : ''} · ${number.format(count)} locations · ${duration(entry?.minutes ?? 0)}${day < scope.start || day > scope.end ? ' · outside selected dates' : ''}`;
+    button.title = `${formatDay(at)}${hourly ? ` · ${clock(hour)}–${clock(hour + 1)} UTC` : ''} · ${number.format(count)} locations · ${duration(entry?.minutes ?? 0)}${day < scope.start || day > scope.end ? ' · outside selected dates' : ''}`;
     button.setAttribute('aria-label', button.title);
     button.onclick = () => select({start: day, end: day + DAY, ...(hourly ? {hour} : {})});
     button.onpointerenter = () => { $('place-calendar-detail').textContent = button.title; };
@@ -159,7 +160,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, windowStart
       const at = period.start + d * DAY, button = document.createElement('button'); button.type = 'button';
       button.className = 'place-calendar-day-heading'; button.textContent = headerDate.format(at);
       button.style.gridColumn = 1; button.style.gridRow = d + 2; button.disabled = at < scope.start || at > scope.end;
-      button.title = `Select ${calendarDate.format(at)}`; button.onclick = () => select({start: at, end: at + DAY}); nodes.push(button);
+      button.title = `Select ${formatDay(at)}`; button.onclick = () => select({start: at, end: at + DAY}); nodes.push(button);
     }
     const count = view === 'week' ? 168 : 24;
     for (let i = 0; i < count; i++) {
@@ -189,7 +190,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, windowStart
     $('place-calendar-next').disabled = period.end >= scope.historyEnd;
     $('place-calendar-previous').setAttribute('aria-label', `Previous calendar ${view}`);
     $('place-calendar-next').setAttribute('aria-label', `Next calendar ${view}`);
-    $('place-calendar-caption').textContent = view === 'week' ? `${calendarDate.format(period.start)} — ${calendarDate.format(period.end)}` : view === 'year' ? String(year) : view === 'quarter' ? `Q${Math.floor(new Date(anchor).getUTCMonth() / 3) + 1} · ${year}` : view === 'month' ? `${monthName.format(anchor)} ${year}` : calendarDate.format(anchor);
+    $('place-calendar-caption').textContent = view === 'week' ? `${formatDay(period.start)} — ${formatDay(period.end)}` : view === 'year' ? String(year) : view === 'quarter' ? `Q${Math.floor(new Date(anchor).getUTCMonth() / 3) + 1} · ${year}` : view === 'month' ? `${monthName.format(anchor)} ${year}` : formatDay(anchor);
     $('place-calendar-chart').hidden = hourly; $('place-calendar-hours').hidden = !hourly;
     if (hourly) {
       $('place-calendar-days').replaceChildren(); $('place-calendar-months').replaceChildren();
@@ -207,7 +208,7 @@ export function createPlaceCalendar(select, requestHours = () => {}, windowStart
   }
   $('place-calendar-year').oninput = () => enterYear(false); $('place-calendar-year').onchange = () => enterYear(true);
   $('place-calendar-anchor').onchange = () => {
-    const at = Date.parse($('place-calendar-anchor').value);
+    const at = parseDay($('place-calendar-anchor').value);
     if (Number.isFinite(at)) anchor = clamp(at); render();
   };
   $('place-calendar-view').onchange = () => { if (scope) anchor = firstDay(); render(); };

@@ -159,3 +159,13 @@ test('a fixed preset larger than the history stays fixed at that complete histor
   const window = resizeWindow(min, '365', min, max);
   for (const edge of ['start', 'end']) for (const target of [min - DAY, max + DAY]) assert.deepEqual(dragWindow(window.start, window.end, min, max, target, edge, '365'), window);
 });
+
+
+test('ISO date entry rejects invalid dates and keeps UTC day labels independent of locale', async () => {
+  const {parseDay, formatDay} = await import('../js/timeline.mjs');
+  assert.equal(parseDay('2024-02-29'), Date.UTC(2024, 1, 29));
+  assert.equal(parseDay('2019-11-30'), Date.UTC(2019, 10, 30));
+  assert.equal(formatDay(parseDay('2019-11-30')), 'Sat, 2019-11-30');
+  assert.equal(formatDay(Date.UTC(2024, 2, 31, 23, 59)), 'Sun, 2024-03-31');
+  for (const value of ['', '2023-02-29', '2024-02-30', '2024-04-31', '2024-13-01', '2024-00-01', '2024-01-00', '30/11/2019', '2019-1-01', '2019-11-30T00:00:00Z', '0000-01-01', null]) assert.ok(Number.isNaN(parseDay(value)));
+});

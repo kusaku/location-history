@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=49">
-    <script type="module" src="js/app.mjs?v=64">
+    <link rel="stylesheet" href="css/styles.css?v=50">
+    <script type="module" src="js/app.mjs?v=65">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -403,7 +403,11 @@
                   <div class="place-calendar-years">
                     <button id="place-calendar-previous" type="button" aria-label="Previous calendar year">←</button>
                     <input id="place-calendar-year" type="number" step="1" aria-label="Calendar year">
-                    <input id="place-calendar-anchor" type="date" aria-label="Calendar date in UTC" hidden>
+                    <span class="date-field">
+                  <input id="place-calendar-anchor" class="iso-date" type="text" placeholder="yyyy-mm-dd" maxlength="10" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" autocomplete="off" spellcheck="false" aria-label="Calendar date in UTC" title="YYYY-MM-DD · UTC" hidden>
+                  <button class="date-picker" type="button" aria-label="Choose calendar date in UTC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button>
+                  <input class="native-date" type="date" tabindex="-1" aria-hidden="true">
+                </span>
                     <button id="place-calendar-next" type="button" aria-label="Next calendar year">→</button>
                   </div>
                   <label>Shade by <select id="place-calendar-metric"><option value="count">Locations</option><option value="minutes">Time in area</option></select></label>
@@ -498,10 +502,14 @@
             <div class="histogram" id="histogram" role="group" aria-label="Select dates from the history histogram" title="Select a bar’s dates. Use arrow keys to move between bars, then Enter or Space to select.">
             </div>
             <div class="timeline-inputs">
-              <label>
-                From
-                <input id="date-start" type="date" aria-label="Start date" disabled>
-              </label>
+              <div class="timeline-date">
+                <label for="date-start">From</label>
+                <span class="date-field">
+                  <input id="date-start" class="iso-date" type="text" placeholder="yyyy-mm-dd" maxlength="10" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" autocomplete="off" spellcheck="false" aria-label="Start date" title="YYYY-MM-DD · UTC" disabled>
+                  <button class="date-picker" type="button" aria-label="Choose start date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button>
+                  <input class="native-date" type="date" tabindex="-1" aria-hidden="true">
+                </span>
+              </div>
               <div class="range-controls dual-range" id="date-range">
                 <label class="sr-only" for="range-start">
                   Timeline start
@@ -512,10 +520,14 @@
                 </label>
                 <input id="range-end" type="range" min="0" max="1000" value="1000" disabled>
               </div>
-              <label>
-                To
-                <input id="date-end" type="date" aria-label="End date" disabled>
-              </label>
+              <div class="timeline-date">
+                <label for="date-end">To</label>
+                <span class="date-field">
+                  <input id="date-end" class="iso-date" type="text" placeholder="yyyy-mm-dd" maxlength="10" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" autocomplete="off" spellcheck="false" aria-label="End date" title="YYYY-MM-DD · UTC" disabled>
+                  <button class="date-picker" type="button" aria-label="Choose end date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button>
+                  <input class="native-date" type="date" tabindex="-1" aria-hidden="true">
+                </span>
+              </div>
               <span class="utc-tag">
                 UTC
               </span>
@@ -616,7 +628,7 @@
       <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
       <p>Choose the current window or <b>All dates</b>. Hour, accuracy, speed, altitude and jump filters still apply. Known visit intervals contribute time on every covered UTC day and hour, including days without a new GPS observation; no extra GPS points are invented. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
       <h3>Filters and date windows</h3>
-      <p><b>Hours</b>, <b>Accuracy</b>, <b>Speed</b> and <b>Altitude</b> open compact range controls. Drag either thumb or enter exact bounds; Reset clears that filter. Accuracy and speed sliders give extra room to small values. Unknown measurements stay included unless you turn off <b>Include unknown</b>. The date range has two thumbs on one track, with one-day steps and exact date fields. With Day, Week, Month, Quarter or Year selected, dragging either thumb moves the entire window without changing its day count and stops at the history edges. In All time, the thumbs resize the range independently; clicking All time restores the complete history.</p>
+      <p><b>Hours</b>, <b>Accuracy</b>, <b>Speed</b> and <b>Altitude</b> open compact range controls. Drag either thumb or enter exact bounds; Reset clears that filter. Accuracy and speed sliders give extra room to small values. Unknown measurements stay included unless you turn off <b>Include unknown</b>. The date range has two thumbs on one track, with one-day steps and YYYY-MM-DD date fields in UTC. Type a date directly, or use the calendar button (Alt+Down from the field). With Day, Week, Month, Quarter or Year selected, dragging either thumb moves the entire window without changing its day count and stops at the history edges. In All time, the thumbs resize the range independently; clicking All time restores the complete history.</p>
       <p><b>Track quality</b>, after Accuracy, has three modes. <b>Off</b> keeps all observations. <b>Outliers</b> removes isolated spikes relative to nearby movement; its +15 km/h default is an allowance above the local pattern, not a speed limit. <b>GPS drift</b> estimates movement over an adjustable 15–600 second window, allowing for accuracy and noisy coordinates. Grey speed means movement is unconfirmed. Device-reported speed remains available in the point popup. Neither mode deletes original data; both estimate each device and recording source separately.</p>
       <p><b>Devices</b> appears when an export identifies several devices. Select one or <b>All devices</b>; the map, distance, filters and Place history use that choice. Tracks never connect different devices. Labels are anonymous and the selection resets on import. Files without a device identifier are grouped as <b>Unknown device</b>; their devices cannot be reliably inferred from coordinates.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>

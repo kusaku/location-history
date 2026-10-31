@@ -361,7 +361,7 @@ label {
   margin: 15px 0 7px;
 }
 
-select,input[type=date] {
+select,.iso-date {
   width: 100%;
   border: 1px solid #354035;
   border-radius: 7px;
@@ -1133,7 +1133,7 @@ select {
   flex-wrap: wrap;
 }
 
-.timeline-inputs label {
+.timeline-inputs .timeline-date {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1143,7 +1143,7 @@ select {
   flex-shrink: 0;
 }
 
-.timeline-inputs input[type=date] {
+.timeline-inputs .iso-date {
   padding: 5px 7px;
   font-size: 10px;
   background: #1e2a1f;
@@ -1151,7 +1151,7 @@ select {
   min-height: 30px;
 }
 
-.timeline-inputs input[type=date] {
+.timeline-inputs .date-field {
   width: 126px;
 }
 
@@ -1344,7 +1344,7 @@ select {
   width: 76px;
 }
 
-.place-calendar-years input[type=date] {
+.place-calendar-years .date-field {
   width: 126px;
 }
 
@@ -2008,14 +2008,14 @@ dialog p {
   .timeline-inputs {
     gap: 7px;
   }
-  .timeline-inputs label {
+  .timeline-inputs .timeline-date {
     font-size: 0;
     gap: 0;
   }
-  .timeline-inputs input[type=date] {
+  .timeline-inputs .date-field {
     width: 110px;
   }
-  .timeline-inputs input[type=date] {
+  .timeline-inputs .iso-date {
     font-size: 9px;
   }
   .utc-tag {
@@ -2121,11 +2121,13 @@ dialog p {
   .timeline {
     padding: 10px;
   }
-  .timeline-inputs label {
+  .timeline-inputs .timeline-date {
     font-size: 0;
   }
-  .timeline-inputs input[type=date] {
+  .timeline-inputs .date-field {
     width: 109px;
+  }
+  .timeline-inputs .iso-date {
     font-size: 9px;
     padding: 5px;
   }
@@ -2206,7 +2208,7 @@ dialog p {
   .timeline-inputs {
     gap: 6px;
   }
-  .timeline-inputs input[type=date] {
+  .timeline-inputs .date-field {
     width: 102px;
   }
   .window-filters,
@@ -2370,10 +2372,10 @@ dialog p {
     grid-template-columns: 1fr 1fr;
     gap: 2px 8px;
   }
-  .timeline-inputs label {
+  .timeline-inputs .timeline-date {
     min-width: 0;
   }
-  .timeline-inputs label:nth-of-type(2) {
+  .timeline-inputs .timeline-date:last-of-type {
     grid-column: 2;
     grid-row: 1;
     justify-content: flex-end;
@@ -2383,7 +2385,7 @@ dialog p {
     grid-row: 2;
     width: 100%;
   }
-  .timeline-inputs input[type=date] {
+  .timeline-inputs .date-field {
     width: min(140px,100%);
   }
   .timeline-inputs .utc-tag {
@@ -2399,4 +2401,56 @@ dialog p {
 }
 .quality-modes {
   margin-bottom: 12px;
+}
+
+/* Fixed ISO text with a native calendar button; no locale-dependent date text. */
+.date-field {
+  display: inline-block;
+  position: relative;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.date-field:has(>.iso-date[hidden]) {
+  display: none;
+}
+.date-field>.iso-date {
+  width: 100%;
+  padding-right: 30px;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-date>label {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+}
+.date-picker {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: 26px;
+  padding: 5px;
+  display: grid;
+  place-items: center;
+  color: #aab9a4;
+  border-radius: 4px;
+}
+.date-picker svg {
+  width: 16px;
+  height: 16px;
+}
+.date-picker:hover:not(:disabled) {
+  color: var(--accent);
+}
+.date-field>.native-date {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }

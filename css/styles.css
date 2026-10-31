@@ -818,6 +818,7 @@ select {
 }
 
 .maplibregl-popup {
+  z-index: 3;
   --popup-fill: #1b251f;
   --popup-border: #43513f;
 }

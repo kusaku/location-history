@@ -68,8 +68,13 @@ function showPoint({feature, previous, next}, longitude, focus) {
     popup.setLngLat(position).setDOMContent(node).addTo(map);
   } else {
     popup.setLngLat(position).setDOMContent(node);
-    const pixel = map.project(position), {clientWidth, clientHeight} = map.getContainer();
-    if (pixel.x < 40 || pixel.x > clientWidth - 40 || pixel.y < 40 || pixel.y > clientHeight - 40) map.panTo(position, {duration: 300});
+  }
+  const frame = map.getContainer(), pixel = map.project(position);
+  if (pixel.x < 40 || pixel.x > frame.clientWidth - 40 || pixel.y < 40 || pixel.y > frame.clientHeight - 40) map.panTo(position, {duration: 300});
+  else {
+    const box = popup.getElement().getBoundingClientRect(), bounds = frame.getBoundingClientRect();
+    const overflow = Math.min(0, box.left - bounds.left - 8) || Math.max(0, box.right - bounds.right + 8);
+    if (overflow) map.panBy([overflow, 0], {duration: 300});
   }
   popup.getElement().querySelector('.maplibregl-popup-close-button').setAttribute('aria-label', 'Close popup');
   if (focus) (navigation.querySelector(`[aria-label="${focus}"]:not(:disabled)`) ?? navigation.querySelector('button:not(:disabled)'))?.focus({preventScroll: true});

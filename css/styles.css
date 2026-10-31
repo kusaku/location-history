@@ -1145,14 +1145,14 @@ select {
 
 .timeline-inputs .iso-date {
   padding: 5px 7px;
-  font-size: 10px;
+  font-size: inherit;
   background: #1e2a1f;
   border-color: #34452e;
   min-height: 30px;
 }
 
 .timeline-inputs .date-field {
-  width: 126px;
+  font-size: 10px;
 }
 
 .window-filters {
@@ -1338,14 +1338,11 @@ select {
   border-radius: 4px;
   min-height: 30px;
   padding: 4px 6px;
+  font-size: 11px;
 }
 
 .place-calendar-years input {
-  width: 76px;
-}
-
-.place-calendar-years .date-field {
-  width: 126px;
+  width: calc(4ch + 30px);
 }
 
 .place-calendar-caption {
@@ -2013,9 +2010,6 @@ dialog p {
     gap: 0;
   }
   .timeline-inputs .date-field {
-    width: 110px;
-  }
-  .timeline-inputs .iso-date {
     font-size: 9px;
   }
   .utc-tag {
@@ -2124,11 +2118,7 @@ dialog p {
   .timeline-inputs .timeline-date {
     font-size: 0;
   }
-  .timeline-inputs .date-field {
-    width: 109px;
-  }
   .timeline-inputs .iso-date {
-    font-size: 9px;
     padding: 5px;
   }
   .histogram {
@@ -2207,9 +2197,6 @@ dialog p {
   }
   .timeline-inputs {
     gap: 6px;
-  }
-  .timeline-inputs .date-field {
-    width: 102px;
   }
   .window-filters,
   .timeline-controls>.presets {
@@ -2327,7 +2314,8 @@ dialog p {
 }
 .filter-values {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2,minmax(0,max-content));
+  justify-content: space-between;
   gap: 12px;
   margin: 10px 0 3px;
 }
@@ -2339,12 +2327,17 @@ dialog p {
 }
 .filter-values input {
   min-width: 0;
-  width: 100%;
+  width: calc(9ch + 32px);
+  max-width: 100%;
   padding: 6px 8px;
   font-size: 12px;
   background: #202c20;
   border: 1px solid #43513f;
   border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+}
+#filter-hours-panel .filter-values input {
+  width: calc(5ch + 18px);
 }
 .filter-popover>.filter-toggle {
   margin-top: 7px;
@@ -2363,7 +2356,7 @@ dialog p {
   gap: 8px;
 }
 .quality-values input {
-  width: 74px;
+  width: calc(4ch + 30px);
   margin-left: auto;
 }
 @media(max-width:700px) {
@@ -2385,9 +2378,6 @@ dialog p {
     grid-row: 2;
     width: 100%;
   }
-  .timeline-inputs .date-field {
-    width: min(140px,100%);
-  }
   .timeline-inputs .utc-tag {
     display: none;
   }
@@ -2407,8 +2397,12 @@ dialog p {
 .date-field {
   display: inline-block;
   position: relative;
+  width: calc(10ch + 40px);
+  max-width: 100%;
   min-width: 0;
   flex-shrink: 1;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .date-field:has(>.iso-date[hidden]) {
   display: none;
@@ -2416,7 +2410,7 @@ dialog p {
 .date-field>.iso-date {
   width: 100%;
   padding-right: 30px;
-  font-variant-numeric: tabular-nums;
+  font-size: inherit;
 }
 .timeline-date>label {
   margin: 0;

@@ -229,13 +229,13 @@ test('panning reuses selection statistics and route geometry; date and quality c
   assert.equal(query().count, 4);
 });
 
-test('route simplification preserves both endpoints without allocating every coordinate', () => {
+test('subpixel route simplification preserves both endpoints without allocating every coordinate', () => {
   const points = Array.from({length: 20001}, (_, i) => point(i * 1000, 13 + i / 1000000));
   const result = createHistoryQuery(points)({mode: 'route', end: 365 * DAY});
   const coordinates = result.routes.features[0].geometry.coordinates;
   assert.deepEqual(coordinates[0], [points[0].lon, points[0].lat]);
   assert.deepEqual(coordinates.at(-1), [points.at(-1).lon, points.at(-1).lat]);
-  assert.equal(coordinates.length, 6668);
+  assert.ok(coordinates.length < 1000);
   assert.equal(result.density.features.length, 0);
 });
 
@@ -347,7 +347,7 @@ test('altitude paths and their range follow the selection, not the viewport, inc
   assert.deepEqual(result.altitudeRange, [-10, 50]);
   assert.equal(result.routes.features[0].properties.altitude, -5);
   assert.equal(result.routes.features[1].properties.altitude, null);
-  const pan = query({mode: 'route', colorBy: 'altitude', viewport: [-1, -1, 1, 1]});
+  const pan = query({mode: 'route', colorBy: 'altitude', viewport: [13, 52, 14, 53]});
   assert.deepEqual(pan.altitudeRange, result.altitudeRange); assert.equal(pan.routes, result.routes);
   assert.deepEqual(query({mode: 'points', start: 60000, end: 120000}).altitudeRange, [0, 0]);
 });

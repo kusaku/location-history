@@ -378,7 +378,8 @@ export function placePolygon(coordinates) {
 }
 
 // One compact index and one current filter/selection cache per committed dataset.
-// Panning never recomputes the histogram, distance, date bounds, or route geometry.
+// Panning reuses selection statistics and the route-piece index. Visible route
+// geometry is cached until its pieces or zoom level change.
 export function createHistoryQuery(points) {
   const devices = createDeviceIndex(points), motionQuery = createMotionQuery(points, devices);
   const columns = 128, rows = 64, cells = columns * rows;
@@ -464,6 +465,87 @@ export function createHistoryQuery(points) {
       }
     }
     return {ranges, candidates};
+  }
+  function routeGeometry(options) {
+    const {colorBy = 'time', zoom = 10, viewport = [-180, -90, 180, 90]} = options;
+    const {indices, runs} = selection;
+    if (selection.routeColor !== colorBy) { selection.routeParts = selection.routes = null; selection.routeColor = colorBy; }
+    if (!selection.routeParts) {
+      // Index small consecutive pieces without allocating their coordinates.
+      // Colour averages stay fixed across pans; geometry retains their turns.
+      const parts = [], step = colorBy === 'time' ? 128 : Math.max(1, Math.ceil(indices.length / 20_000));
+      for (const [a, b] of runs) for (let from = a; from < b - 1; from += step) {
+        const to = Math.min(from + step, b - 1), first = points[indices[from]], last = points[indices[to]];
+        let west = first.lon, east = west, south = first.lat, north = south, weighted = 0, elapsed = 0;
+        for (let k = from + 1; k <= to; k++) {
+          const p = points[indices[k]];
+          west = Math.min(west, p.lon); east = Math.max(east, p.lon); south = Math.min(south, p.lat); north = Math.max(north, p.lat);
+          if (colorBy === 'time') continue;
+          const previous = points[indices[k - 1]], dt = p.t - previous.t;
+          let value;
+          if (colorBy === 'altitude') value = previous.altitude != null && p.altitude != null ? (previous.altitude + p.altitude) / 2 : null;
+          else if (drift) {
+            const left = speedAt(indices[k - 1], options), right = speedAt(indices[k], options);
+            value = left !== null && right !== null ? (left + right) / 2 : null;
+          } else value = intervalSpeed(previous, p);
+          if (value !== null) { weighted += value * dt; elapsed += dt; }
+        }
+        const value = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
+        parts.push({from, to, run: a, west, east, south, north, value, time: first.t + (last.t - first.t) / 2});
+      }
+      selection.routeParts = parts;
+    }
+    const parts = selection.routeParts, visible = [];
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i], shift = 360 * Math.ceil((viewport[0] - p.east) / 360);
+      if (p.west + shift <= viewport[2] && p.south <= viewport[3] && p.north >= viewport[1]) visible.push(i);
+    }
+    const level = Number.isFinite(zoom) ? Math.floor(Math.max(0, Math.min(20, zoom))) : 10;
+    if (selection.routes && selection.routeLevel === level && visible.length === selection.routeVisible.length && visible.every((value, i) => value === selection.routeVisible[i])) return selection.routes;
+    const features = [], tolerance = (.5 / (512 * 2 ** level)) ** 2;
+    let coordinates = [], keptLon, keptY;
+    const append = (p, y, force = false) => {
+      const dx = (p.lon - keptLon) / 360, dy = y - keptY, last = coordinates.at(-1);
+      // Skip only subpixel movement, never every Nth recording. At fractional
+      // zoom this stays below one map pixel; piece endpoints are always retained.
+      if (!last || force || dx * dx + dy * dy >= tolerance) {
+        if (last && last[0] === p.lon && last[1] === p.lat) return;
+        coordinates.push([p.lon, p.lat]); keptLon = p.lon; keptY = y;
+      }
+    };
+    const finish = properties => { if (coordinates.length > 1) features.push({type: 'Feature', properties, geometry: {type: 'LineString', coordinates}}); };
+    if (colorBy !== 'time') {
+      for (const id of visible) {
+        const part = parts[id]; coordinates = [];
+        for (let k = part.from; k <= part.to; k++) append(points[indices[k]], projectedY[indices[k]], k === part.to);
+        finish({[colorBy]: part.value, time: part.time});
+      }
+    } else {
+      const first = Number.isFinite(options.start) ? options.start : min, last = Number.isFinite(options.end) ? options.end : max;
+      const width = Math.max(1, last - first) / 256;
+      const bandAt = time => Math.max(0, Math.min(255, Math.floor((time - first) / width)));
+      for (let n = 0; n < visible.length;) {
+        const part = parts[visible[n++]], from = part.from; let to = part.to;
+        while (n < visible.length && parts[visible[n]].run === part.run && parts[visible[n]].from === to) to = parts[visible[n++]].to;
+        let previous = points[indices[from]], band = bandAt(previous.t);
+        coordinates = []; append(previous, projectedY[indices[from]], true);
+        for (let k = from + 1; k <= to; k++) {
+          const next = points[indices[k]], nextBand = bandAt(next.t); let boundary;
+          while (band < nextBand) {
+            boundary = first + (band + 1) * width;
+            const fraction = (boundary - previous.t) / (next.t - previous.t);
+            const p = boundary === next.t ? next : {lon: previous.lon + (next.lon - previous.lon) * fraction, lat: previous.lat + (next.lat - previous.lat) * fraction};
+            const y = projectY(p.lat); append(p, y, true); finish({time: first + (band + .5) * width});
+            coordinates = []; append(p, y, true); band++;
+          }
+          if (boundary !== next.t) append(next, projectedY[indices[k]], k === to);
+          previous = next;
+        }
+        finish({time: first + (band + .5) * width});
+      }
+    }
+    selection.routeVisible = visible; selection.routeLevel = level;
+    return selection.routes = collection(features);
   }
   const query = (options = {}) => {
     options = motionOptions(options);
@@ -555,50 +637,7 @@ export function createHistoryQuery(points) {
       }
       dots = collection(features); drawn = features.length;
     } else if (mode === 'route') {
-      if (selection.routeColor !== colorBy) { selection.routes = null; selection.routeColor = colorBy; }
-      if (!selection.routes && (colorBy === 'speed' || colorBy === 'altitude')) {
-        const features = [], step = Math.max(1, Math.ceil(indices.length / 20_000));
-        for (const [a, b] of selection.runs) for (let j = a; j < b - 1; j += step) {
-          const end = Math.min(j + step, b - 1), first = points[indices[j]], last = points[indices[end]];
-          let weighted = 0, elapsed = 0;
-          for (let k = j + 1; k <= end; k++) {
-            const a = points[indices[k - 1]], b = points[indices[k]], dt = b.t - a.t;
-            const value = colorBy === 'speed' ? drift ? speedAt(indices[k - 1], options) !== null && speedAt(indices[k], options) !== null ? (speedAt(indices[k - 1], options) + speedAt(indices[k], options)) / 2 : null : intervalSpeed(a, b) : a.altitude != null && b.altitude != null ? (a.altitude + b.altitude) / 2 : null;
-            if (value !== null) { weighted += value * dt; elapsed += dt; }
-          }
-          const value = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
-          features.push({type: 'Feature', properties: {[colorBy]: value, time: first.t + (last.t - first.t) / 2}, geometry: {type: 'LineString', coordinates: [[first.lon, first.lat], [last.lon, last.lat]]}});
-        }
-        selection.routes = collection(features);
-      }
-      if (!selection.routes) {
-        // Split only at time-band boundaries, not every observation. At most
-        // 255 extra parts across the window give every run the same time scale.
-        const features = [], first = Number.isFinite(start) ? start : min, last = Number.isFinite(end) ? end : max;
-        const width = Math.max(1, last - first) / 256;
-        const bandAt = time => Math.max(0, Math.min(255, Math.floor((time - first) / width)));
-        for (const [a, b] of selection.runs) {
-          let previous = points[indices[a]], band = bandAt(previous.t), coordinates = [[previous.lon, previous.lat]];
-          const step = Math.max(1, Math.ceil((b - a) / 10_000));
-          const finish = () => { if (coordinates.length > 1) features.push({type: 'Feature', properties: {time: first + (band + .5) * width}, geometry: {type: 'LineString', coordinates}}); };
-          for (let j = Math.min(a + step, b - 1); j < b; j = Math.min(j + step, b - 1)) {
-            const next = points[indices[j]], nextBand = bandAt(next.t);
-            let boundary;
-            while (band < nextBand) {
-              boundary = first + (band + 1) * width;
-              const fraction = (boundary - previous.t) / (next.t - previous.t);
-              const coordinate = boundary === next.t ? [next.lon, next.lat] : [previous.lon + (next.lon - previous.lon) * fraction, previous.lat + (next.lat - previous.lat) * fraction];
-              coordinates.push(coordinate); finish(); coordinates = [coordinate]; band++;
-            }
-            if (boundary !== next.t) coordinates.push([next.lon, next.lat]);
-            previous = next;
-            if (j === b - 1) break;
-          }
-          finish();
-        }
-        selection.routes = collection(features);
-      }
-      routes = selection.routes; drawn = routes.features.length;
+      routes = routeGeometry(options); drawn = routes.features.length;
     } else {
       const scale = 512 * 2 ** Math.floor(Math.max(0, Math.min(20, zoom)));
       const size = (mode === 'hex' ? Math.max(2, radius) : Math.max(3, radius / 4)) / scale;

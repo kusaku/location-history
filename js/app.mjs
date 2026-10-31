@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=22';
-import {createPlaceHistory} from './place-history.mjs?v=27';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=23';
+import {createPlaceHistory} from './place-history.mjs?v=28';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=27';
-import {resizeWindow, shiftWindow, dragWindow, histogramWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=26';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=28';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=10';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=28';
+import {resizeWindow, shiftWindow, dragWindow, histogramWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=27';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=29';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=11';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -213,7 +213,7 @@ function installLayers() {
   map.addSource('point-accuracy', {type: 'geojson', data: empty()});
   map.addLayer({id: 'point-accuracy-fill', type: 'fill', source: 'point-accuracy', paint: {'fill-color': '#d5f476', 'fill-opacity': .12}}, before);
   map.addLayer({id: 'point-accuracy-line', type: 'line', source: 'point-accuracy', paint: {'line-color': '#d5f476', 'line-opacity': .7, 'line-width': 1}}, before);
-  for (const name of ['density', 'dots', 'route']) map.addSource(`history-${name}`, {type: 'geojson', data: empty(), maxzoom: 18, tolerance: .5, buffer: 64});
+  for (const name of ['density', 'dots', 'route']) map.addSource(`history-${name}`, {type: 'geojson', data: empty(), maxzoom: name === 'route' ? 20 : 18, tolerance: name === 'route' ? 0 : .5, buffer: 64});
   map.addLayer({id: 'history-heat', type: 'heatmap', source: 'history-density', paint: {'heatmap-weight': ['get', 'weight']}}, before);
   map.addLayer({id: 'history-hex', type: 'fill', source: 'history-density', paint: {'fill-outline-color': '#ffffff35'}}, before);
   map.addLayer({id: 'history-dots', type: 'circle', source: 'history-dots', paint: {'circle-stroke-width': 0}}, before);
@@ -387,7 +387,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=27', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=28', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

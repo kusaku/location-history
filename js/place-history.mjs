@@ -1,5 +1,5 @@
-import {DAY, placePolygon} from './data.mjs?v=27';
-import {parseDay, formatDay} from './timeline.mjs?v=26';
+import {DAY, placePolygon} from './data.mjs?v=28';
+import {parseDay, formatDay} from './timeline.mjs?v=27';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});

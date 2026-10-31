@@ -49,6 +49,8 @@ const cases = [
   ['points', {mode: 'points', zoom: 5, viewport: [-10, 40, 35, 65]}],
   ['journeys', {mode: 'route', zoom: 5, viewport: [-10, 40, 35, 65]}],
   ['journeys_speed', {mode: 'route', colorBy: 'speed', zoom: 5, viewport: [-10, 40, 35, 65]}],
+  ['journeys_city_detail', {mode: 'route', zoom: 16, viewport: [13.34, 52.44, 13.35, 52.45]}],
+  ['journeys_speed_city_detail', {mode: 'route', colorBy: 'speed', zoom: 16, viewport: [13.34, 52.44, 13.35, 52.45]}],
 ];
 if (data.createHistoryQuery && source.includes('createMotionQuery')) cases.push(['gps_drift', {mode: 'points', colorBy: 'speed', trackMode: 'drift', viewport: [-10, 40, 35, 65]}]);
 if (data.jumpFlags) cases.push(['exclude_jumps', {mode: 'heat', excludeJumps: true, zoom: 5, viewport: [-10, 40, 35, 65]}]);

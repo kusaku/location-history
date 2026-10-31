@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/styles.css?v=50">
-    <script type="module" src="js/app.mjs?v=65">
+    <script type="module" src="js/app.mjs?v=66">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -656,7 +656,7 @@
       </p>
       <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b>, <b>Speed</b> or <b>Altitude</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. The scales stay fixed when panning. Altitude uses the known height range in Date window, including zero and negative heights. It is the height recorded in the file; the export may use WGS84 rather than mean sea level. Click a point for its timestamp, accuracy, speed and altitude. In its popup, select the date to show that complete UTC day, or the time to show only that UTC hour on the same day. Heatmap and Hexagons use colour for density instead.</p>
       <p>Distance uses accumulated displacement beyond GPS uncertainty rather than adding every small fluctuation. Short intervals with recorded device speed use its time integral. Small walks can still count, but movements below measurement uncertainty may be missed. In GPS drift mode, distance integrates confirmed smoothed speeds; unconfirmed motion does not add distance. Distance is an estimate.</p>
-      <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between neighbouring original recordings from the same device and source, averaged at a point over its incoming and outgoing intervals. Approximate Timeline event boundaries do not establish instantaneous speed. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude paths average values over bounded displayed sections; a section is grey if less than half its duration has data. Narrow Date window for more detail.</p>
+      <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between neighbouring original recordings from the same device and source, averaged at a point over its incoming and outgoing intervals. Approximate Timeline event boundaries do not establish instantaneous speed. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude colours average values over bounded sections; their geometry still follows the intermediate locations. A section is grey if less than half its duration has data. Only subpixel movement is reduced at the current zoom; zooming in restores detail.</p>
       <h3>
         Density metrics
       </h3>

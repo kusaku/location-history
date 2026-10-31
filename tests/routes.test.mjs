@@ -114,3 +114,85 @@ test('route viewport selection respects wrapped longitudes and rebuilds only at 
   assert.equal(query({...options, zoom: 12.8}).routes, first.routes);
   assert.notEqual(query({...options, zoom: 13}).routes, first.routes);
 });
+
+const corners = () => [[0, 0], [.001, 0], [.001, .001], [.002, .001]].map(([lon, lat], i) => point(i * 60000, lon, lat, {altitude: i * 10, recordedSpeed: 20}));
+
+test('cubic journeys bound visual rounding and preserve measurements and colour boundaries in every colour mode', () => {
+  const points = corners(), snapshot = JSON.stringify(points), query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) {
+    const options = {mode: 'route', colorBy, zoom: 18};
+    const straight = query(options), smooth = query({...options, smooth: true});
+    assert.notDeepEqual(smooth.routes, straight.routes, colorBy);
+    for (const key of ['count', 'visible', 'days', 'km', 'bounds', 'histogram', 'altitudeRange']) assert.deepEqual(smooth[key], straight[key], key);
+    assert.ok(errorPixels(points, vertices(smooth), 18) < 4.5);
+    assert.ok(errorPixels(vertices(smooth).map(([lon, lat]) => ({lon, lat})), points.map(p => [p.lon, p.lat]), 18) < 12);
+    const features = smooth.routes.features;
+    for (let i = 1; i < features.length; i++) assert.deepEqual(features[i - 1].geometry.coordinates.at(-1), features[i].geometry.coordinates[0]);
+    assert.deepEqual(vertices(smooth)[0], [points[0].lon, points[0].lat]);
+    assert.deepEqual(vertices(smooth).at(-1), [points.at(-1).lon, points.at(-1).lat]);
+    assert.deepEqual(query(options).routes, straight.routes);
+  }
+  assert.equal(JSON.stringify(points), snapshot);
+});
+
+test('smooth display falls back exactly to straight paths at overview zooms and for large visible tracks', () => {
+  const query = createHistoryQuery(corners());
+  for (const zoom of [2, 10.8, 11.9]) {
+    const straight = query({mode: 'route', zoom});
+    assert.equal(query({mode: 'route', zoom, smooth: true}).routes, straight.routes);
+  }
+  const dense = createHistoryQuery(Array.from({length: 10002}, (_, i) => point(i * 1000, i % 2 * .00003, i * .0000001)));
+  const straight = dense({mode: 'route', colorBy: 'speed', zoom: 18});
+  assert.equal(dense({mode: 'route', colorBy: 'speed', zoom: 18, smooth: true}).routes, straight.routes);
+});
+
+test('closely spaced and straight edges do not acquire unnecessary curve vertices', () => {
+  for (const coordinates of [[[0, 0], [.000002, 0], [.000002, .000002]], [[0, 0], [.001, 0], [.002, 0]]]) {
+    const query = createHistoryQuery(coordinates.map(([lon, lat], i) => point(i * 60000, lon, lat)));
+    for (const colorBy of ['time', 'speed', 'altitude']) {
+      const options = {mode: 'route', colorBy, zoom: 18};
+      assert.deepEqual(query({...options, smooth: true}).routes, query(options).routes);
+    }
+  }
+});
+
+test('smooth journeys cache repeated pans, bound subdivision and keep uneven/U-turn geometry finite', () => {
+  const points = [[0, 0], [.001, 0], [.001001, .000001], [.001, 0], [.001, 0], [.002, .001]].map(([lon, lat], i) => point(i * 60000, lon, lat));
+  const query = createHistoryQuery(points), options = {mode: 'route', colorBy: 'speed', zoom: 18, smooth: true};
+  const first = query({...options, viewport: [-1, -1, 1, 1]});
+  assert.equal(query({...options, zoom: 18.7, viewport: [-.5, -.5, .5, .5]}).routes, first.routes);
+  assert.ok(vertices(first).every(c => c.every(Number.isFinite)));
+  assert.ok(vertices(first).length <= (points.length - 1) * 17);
+  assert.ok(errorPixels(points, vertices(first), 18) < 4.5);
+});
+
+test('uncertain anchors may round within accuracy while precise and unknown fixes stay close to their observations', () => {
+  const coordinates = [[0, 0], [.001, .001], [.002, 0]], errors = [];
+  for (const accuracy of [null, .1, 500]) {
+    const points = coordinates.map(([lon, lat], i) => point(i * 60000, lon, lat, {accuracy: i === 1 ? accuracy : 4}));
+    const result = createHistoryQuery(points)({mode: 'route', colorBy: 'speed', zoom: 18, smooth: true});
+    errors.push(errorPixels([points[1]], vertices(result), 18));
+  }
+  assert.ok(errors[0] < .01);
+  assert.ok(errors[1] < .5);
+  assert.ok(errors[2] > 2 && errors[2] <= 4.5);
+});
+
+test('curve overhang is included when original observations are just outside the viewport', () => {
+  const points = [[-.001, .001], [0, 0], [.001, 0], [.002, .001]].map(([lon, lat], i) => point(i * 60000, lon, lat, {accuracy: null}));
+  const query = createHistoryQuery(points), options = {mode: 'route', colorBy: 'speed', zoom: 18, viewport: [.0003, -.00002, .0007, -.000001]};
+  assert.equal(query(options).routes.features.length, 0);
+  const smooth = query({...options, smooth: true});
+  assert.equal(smooth.visible, 0);
+  assert.ok(vertices(smooth).some(([lon, lat]) => lon >= .0003 && lon <= .0007 && lat < -.000001));
+});
+
+test('smoothing never connects devices or recording gaps', () => {
+  const a = {device: 'a', source: 1}, b = {device: 'b', source: 1};
+  const points = [...corners().map(p => ({...p, stream: a})), ...corners().map(p => ({...p, t: p.t + 500, lon: p.lon + .1, stream: b})), ...corners().map(p => ({...p, t: p.t + DAY, lon: p.lon + 1, stream: a}))].sort((a, b) => a.t - b.t);
+  const query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) {
+    const result = query({mode: 'route', zoom: 18, smooth: true, colorBy});
+    assert.ok(result.routes.features.every(f => Math.max(...f.geometry.coordinates.map(c => c[0])) - Math.min(...f.geometry.coordinates.map(c => c[0])) < .01));
+  }
+});

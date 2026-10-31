@@ -59,7 +59,7 @@ test('invalid and obsolete values fall back independently without losing valid p
 test('legacy shared preferences migrate to independent mode settings', () => {
   const legacy = {metric: 'days', palette: 'ocean', radius: 39, intensity: 1.7, opacity: .65};
   const settings = loadSettings(maps, memoryStorage(JSON.stringify(legacy)));
-  for (const [mode, view] of Object.entries(settings.views)) assert.deepEqual(view, {...legacy, ...(['points', 'route'].includes(mode) ? {colorBy: 'time'} : {}), ...(mode === 'route' ? {lineWidth: 1.5} : {})});
+  for (const [mode, view] of Object.entries(settings.views)) assert.deepEqual(view, {...legacy, ...(['points', 'route'].includes(mode) ? {colorBy: 'time'} : {}), ...(mode === 'route' ? {lineWidth: 1.5, smooth: false} : {})});
   settings.views.heat.radius = 50;
   assert.equal(settings.views.hex.radius, 39);
   assert.equal(settings.views.points.radius, 39);
@@ -83,6 +83,17 @@ test('each mode validates its own fields and hexagons support smaller cells', ()
   assert.equal(settings.views.hex.palette, 'ocean');
   assert.equal(settings.views.hex.metric, 'time');
   assert.deepEqual(settings.views.route, loadSettings(maps, memoryStorage()).views.route);
+});
+
+test('journey smoothing is opt-in, persisted and isolated from other modes', () => {
+  const storage = memoryStorage(), input = loadSettings(maps, storage);
+  assert.equal(input.views.route.smooth, false);
+  input.views.route.smooth = true;
+  saveSettings(input, maps, storage);
+  assert.equal(loadSettings(maps, storage).views.route.smooth, true);
+  for (const smooth of [1, 'true', null, {}, []]) assert.equal(saveSettings({views: {route: {smooth}}}, maps, storage).views.route.smooth, false);
+  const result = saveSettings({views: {points: {smooth: true}, heat: {smooth: true}}}, maps, storage);
+  assert.equal(result.views.points.smooth, undefined); assert.equal(result.views.heat.smooth, undefined);
 });
 
 test('Points and Journeys remember independent validated colour choices, defaulting to time', () => {

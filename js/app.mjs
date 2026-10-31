@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=25';
-import {createPlaceHistory} from './place-history.mjs?v=30';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=26';
+import {createPlaceHistory} from './place-history.mjs?v=31';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=30';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=29';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=31';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=13';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=31';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=30';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=32';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=14';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -140,8 +140,8 @@ function currentOptions() {
   // Pad the viewport so heat kernels and cells remain complete at its edges.
   const padX = bounds ? Math.max(.01, (bounds.getEast() - bounds.getWest()) * .15) : 0;
   const padY = bounds ? Math.max(.01, (bounds.getNorth() - bounds.getSouth()) * .15) : 0;
-  const {start, end, mode, period} = state, {metric, radius, colorBy} = state.views[mode];
-  return {start, end, mode, period, metric, radius, colorBy, ...filters.values(), histogramWidth, zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
+  const {start, end, mode, period} = state, {metric, radius, colorBy, smooth} = state.views[mode];
+  return {start, end, mode, period, metric, radius, colorBy, smooth, ...filters.values(), histogramWidth, zoom: map?.getZoom() ?? 2, viewport: bounds ? [bounds.getWest() - padX, bounds.getSouth() - padY, bounds.getEast() + padX, bounds.getNorth() + padY] : [-180, -90, 180, 90]};
 }
 function requestQuery() {
   if (!worker || !state.report || state.importing) return;
@@ -185,6 +185,8 @@ function paint(changed) {
   $('intensity-field').hidden = !['heat', 'hex'].includes(state.mode);
   $('radius-field').hidden = state.mode === 'route';
   $('line-width-field').hidden = state.mode !== 'route';
+  $('route-controls').hidden = state.mode !== 'route';
+  for (const button of $('route-shape').children) button.setAttribute('aria-pressed', String((button.dataset.smooth === 'true') === view.smooth));
   $('radius-label').textContent = state.mode === 'hex' ? 'Cell size' : state.mode === 'points' ? 'Point size' : 'Spread';
   $('radius-value').textContent = state.mode === 'points' ? `${(view.radius / 8).toFixed(1)} px` : `${view.radius} px`;
   $('intensity-value').textContent = `${view.intensity.toFixed(1)}×`;
@@ -389,7 +391,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=30', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=31', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -475,6 +477,10 @@ function bindControls() {
     state.views[state.mode].colorBy = button.dataset.colorBy;
     rememberSettings(); paint('colorBy');
     if (state.mode === 'route') refresh();
+  };
+  for (const button of $('route-shape').children) button.onclick = () => {
+    state.views.route.smooth = button.dataset.smooth === 'true';
+    rememberSettings(); paint('smooth'); refresh();
   };
   document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; closePoint(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
   document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.views[state.mode].palette = button.dataset.palette; rememberSettings(); paint('palette'); }; });

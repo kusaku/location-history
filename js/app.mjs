@@ -491,7 +491,7 @@ async function init() {
         link.onclick = event => {
           event.preventDefault(); event.stopPropagation();
           selectDates(day, day + DAY - 1, selectedHour);
-          $(selectedHour === undefined ? 'date-start' : 'filter-hours').focus({preventScroll: true});
+          $(selectedHour === undefined ? 'range-start' : 'filter-hours').focus({preventScroll: true});
         };
         when.append(link);
       }

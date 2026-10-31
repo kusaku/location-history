@@ -237,6 +237,21 @@ test('a short edge between long edges stays part of the same continuous spline',
   }
 });
 
+test('zooming into a near reversal keeps the spline instead of reverting the whole track to chords', () => {
+  const points = [[0, 0], [.001, 0], [.000999, .000001], [.002, .001]].map(([lon, lat], i) => point(i * 60000, lon, lat, {accuracy: null}));
+  const snapshot = JSON.stringify(points), query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) for (const zoom of [16, 18, 20]) {
+    const options = {mode: 'route', colorBy, zoom};
+    const straight = query(options), smooth = query({...options, smooth: true});
+    assert.notDeepEqual(smooth.routes, straight.routes, `${colorBy} reverted at zoom ${zoom}`);
+    assert.ok(vertices(smooth).every(c => c.every(Number.isFinite)));
+    assert.ok(vertices(smooth).length < 2000);
+    assert.equal(smooth.count, straight.count); assert.equal(smooth.km, straight.km);
+    assert.equal(query({...options, smooth: true}).routes, smooth.routes);
+  }
+  assert.equal(JSON.stringify(points), snapshot);
+});
+
 test('unevenly spaced spline samples agree with independent centripetal interpolation', () => {
   const points = [[-.002, .001], [0, 0], [.001, .003], [.02, .001]].map(([lon, lat], i) => point(i * 3600000, lon, lat, {accuracy: null}));
   const xy = points.map(p => project(p.lon, p.lat)), knots = [0];

@@ -709,7 +709,10 @@ export function createHistoryQuery(points) {
         const x = x3 - x0, y = y3 - y0;
         const bend = Math.max(((x1 - x0) * y - (y1 - y0) * x) ** 2, ((x2 - x0) * y - (y2 - y0) * x) ** 2);
         const tangent = Math.hypot(x, y) * scale < .01 || (t0 !== 0 || aligned(x, y, h1x, h1y)) && (t1 !== 1 || aligned(x, y, h2x, h2y));
-        if (bend <= curveTolerance * (x * x + y * y) && tangent) {
+        // Near reversals need deeper refinement as zoom increases. At the
+        // numerical guard, retain the refined curve instead of discarding it
+        // and replacing every journey with raw straight edges.
+        if (depth === 20 || bend <= curveTolerance * (x * x + y * y) && tangent) {
           if (t1 === 1) emit(b, by, true);
           else {
             if (++curveVertices > 50_000) return false;
@@ -717,7 +720,6 @@ export function createHistoryQuery(points) {
           }
           return true;
         }
-        if (depth === 10) return false;
         const x01 = (x0 + x1) / 2, y01 = (y0 + y1) / 2, x12 = (x1 + x2) / 2, y12 = (y1 + y2) / 2, x23 = (x2 + x3) / 2, y23 = (y2 + y3) / 2;
         const x012 = (x01 + x12) / 2, y012 = (y01 + y12) / 2, x123 = (x12 + x23) / 2, y123 = (y12 + y23) / 2, mx = (x012 + x123) / 2, my = (y012 + y123) / 2, mid = (t0 + t1) / 2;
         return draw(x0, y0, x01, y01, x012, y012, mx, my, t0, mid, depth + 1)

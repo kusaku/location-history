@@ -6,6 +6,45 @@ import {parseHistory, preparePoints, queryHistory, createHistoryQuery, wrappedBo
 const point = (t, lon = 13.4, lat = 52.5, accuracy = null) => ({t, lon, lat, accuracy, duration: 0});
 const records = locations => parseHistory({locations}).points;
 const legacy = (time, lat = 525000000, lon = 134000000) => ({timestampMs: String(time), latitudeE7: lat, longitudeE7: lon});
+test('point navigation preserves chronological ties, metadata and source records', () => {
+  const points = [point(0), {...point(1000, 13.401, 52.5, 5), altitude: -10, recordedSpeed: 0}, point(1000, 13.402), point(2000)];
+  const source = structuredClone(points), query = createHistoryQuery(points), options = {mode: 'points'};
+  const rendered = query(options);
+  for (let i = 0; i < points.length; i++) {
+    const selected = query.point(i, options);
+    assert.deepEqual(selected.feature, rendered.dots.features[i]);
+    assert.equal(selected.previous, i ? i - 1 : null);
+    assert.equal(selected.next, i < points.length - 1 ? i + 1 : null);
+  }
+  assert.deepEqual(points, source);
+  assert.equal(query(options).bounds, rendered.bounds);
+  assert.equal(query(options).histogram, rendered.histogram);
+  for (const invalid of [undefined, null, NaN, -1, .5, '1', points.length]) assert.equal(query.point(invalid), null);
+  assert.equal(createHistoryQuery([]).point(0), null);
+});
+test('point navigation respects window, UTC hours and measurement filters', () => {
+  const points = Array.from({length: 8}, (_, i) => ({...point((10 * 60 + i * 20) * 60_000, 13.4, 52.5, i === 2 ? 500 : 5), altitude: i === 3 ? 200 : 50, recordedSpeed: i === 4 ? 100 : 5}));
+  const query = createHistoryQuery(points), options = {start: points[1].t, end: points[7].t, hourStart: 10, hourEnd: 12, accuracy: 100, altitudeMax: 100, speedMax: 10};
+  assert.equal(query.point(1, options).previous, null);
+  assert.equal(query.point(1, options).next, 5);
+  assert.equal(query.point(5, options).previous, 1);
+  assert.equal(query.point(5, options).next, null);
+  for (const index of [0, 2, 3, 4, 6, 7]) assert.equal(query.point(index, options), null);
+  assert.equal(query.point(1, {start: points[1].t, end: points[1].t}).next, null);
+  const single = query.point(1, {start: points[1].t, end: points[1].t});
+  assert.equal(single.previous, null); assert.equal(single.next, null);
+});
+test('point navigation reaches observations omitted by sampling and viewport culling', () => {
+  const points = Array.from({length: 20_002}, (_, i) => point(i * 60000));
+  const query = createHistoryQuery(points), rendered = query({mode: 'points'}).dots.features;
+  assert.ok(!rendered.some(feature => feature.properties.index === 1));
+  assert.equal(query.point(0).next, 1);
+  assert.equal(query.point(1).feature.properties.time, points[1].t);
+  const local = createHistoryQuery([point(0), point(60000, -120, 35)]);
+  assert.equal(local({mode: 'points', viewport: [13, 52, 14, 53]}).dots.features.length, 1);
+  const next = local.point(local.point(0).next);
+  assert.deepEqual(next.feature.geometry.coordinates, [-120, 35]);
+});
 test('day navigation steps full inclusive UTC days across month and leap-day boundaries', () => {
   const start = Date.parse('2024-02-29T00:00:00Z'), end = start + DAY - 1;
   const min = Date.parse('2024-01-01T00:00:00Z'), max = Date.parse('2024-04-01T00:00:00Z') - 1;

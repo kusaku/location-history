@@ -32,6 +32,27 @@ async function startWorker() {
 const json = data => new Blob([JSON.stringify(data)], {type: 'application/json'});
 const record = (t, lon = 134000000, accuracy) => ({latitudeE7: 525000000, longitudeE7: lon, timestampMs: String(t), accuracy});
 
+test('worker navigates filtered points with matching metadata and resets navigation on import or clear', async () => {
+  const {worker, request} = await startWorker();
+  try {
+    await request('import', {files: [json({locations: [record(0), {...record(60000, 134001000, 5), altitude: 20, speedMetersPerSecond: 0}, record(120000, 134002000, 500), record(180000, 134003000, 5)]})]});
+    const options = {mode: 'points', accuracy: 100}, rendered = (await request('query', {options})).result;
+    const selected = await request('point', {index: 1, options});
+    assert.equal(selected.type, 'point'); assert.equal(selected.result.previous, 0); assert.equal(selected.result.next, 3);
+    assert.deepEqual(selected.result.feature, rendered.dots.features[1]);
+    assert.equal(selected.result.feature.properties.altitude, 20); assert.equal(selected.result.feature.properties.speed, 0);
+    assert.equal((await request('point', {index: 2, options})).result, null);
+    assert.equal((await request('point', {index: 3, options: {...options, end: 120000}})).result, null);
+    const cached = (await request('query', {options, known: rendered.versions})).result;
+    assert.equal(cached.routes, undefined); assert.equal(cached.count, 3);
+    await request('import', {files: [json({locations: [record(900000)]})]});
+    const replaced = (await request('point', {index: 0})).result;
+    assert.equal(replaced.feature.properties.time, 900000); assert.equal(replaced.previous, null); assert.equal(replaced.next, null);
+    await request('clear');
+    assert.equal((await request('point', {index: 0})).result, null);
+  } finally { await worker.terminate(); }
+});
+
 test('worker merges files, preserves old data after failure, filters exact observations and clears memory', async () => {
   const {worker, request} = await startWorker();
   try {

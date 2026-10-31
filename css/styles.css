@@ -854,6 +854,10 @@ select {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.point-navigation {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
 
 .color-controls {
   display: flex;

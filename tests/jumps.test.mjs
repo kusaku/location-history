@@ -50,6 +50,11 @@ test('local track quality removes a moderate isolated spike while preserving its
   assert.ok(cleaned.every(dot => dot.properties.speed === 0));
   assert.equal(query({excludeJumps: true, speedMin: 56, speedUnknown: false}).count, 0);
   assert.equal(query({excludeJumps: false, speedMin: 56, speedUnknown: false}).count, 1);
+  assert.equal(query.point(6, {excludeJumps: true}).next, 8);
+  assert.equal(query.point(8, {excludeJumps: true}).previous, 6);
+  assert.equal(query.point(7, {excludeJumps: true}), null);
+  assert.equal(query.point(6, {excludeJumps: true, jumpTolerance: 100}).next, 7);
+  assert.equal(query.point(6, {excludeJumps: true}).feature.properties.speed, 0);
 });
 test('local quality keeps steady walking, driving, flight, turns and sustained acceleration', () => {
   for (const kph of [5, 60, 900]) {

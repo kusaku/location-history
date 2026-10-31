@@ -377,6 +377,10 @@ export function createHistoryQuery(points) {
       filter = {mask, histogram, barriers}; filterKey = nextFilterKey;
     }
   }
+  function pointFeature(index, options) {
+    const p = points[index], speed = pointSpeed(points, index, options.excludeJumps ? jumps : null);
+    return {type: 'Feature', properties: {index, time: p.t, accuracy: p.accuracy, speed: Number.isFinite(speed) ? speed : null, speedRecorded: p.recordedSpeed != null, altitude: p.altitude ?? null}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}};
+  }
   function candidateRanges(viewport) {
     const center = (viewport[0] + viewport[2]) / 2;
     const firstRow = Math.max(0, Math.min(rows - 1, Math.floor((viewport[1] + 90) / 180 * rows)));
@@ -467,9 +471,7 @@ export function createHistoryQuery(points) {
     if (mode === 'points') {
       const stride = Math.max(1, Math.ceil(visibleCount / 20_000)), features = [];
       for (let j = 0; j < visibleCount; j += stride) {
-        const p = points[visible[j]];
-        const speed = pointSpeed(points, visible[j], options.excludeJumps ? jumps : null);
-        features.push({type: 'Feature', properties: {time: p.t, accuracy: p.accuracy, speed: Number.isFinite(speed) ? speed : null, speedRecorded: p.recordedSpeed != null, altitude: p.altitude ?? null}, geometry: {type: 'Point', coordinates: [p.lon, p.lat]}});
+        features.push(pointFeature(visible[j], options));
       }
       dots = collection(features); drawn = features.length;
     } else if (mode === 'route') {
@@ -554,6 +556,22 @@ export function createHistoryQuery(points) {
       density = collection(features); drawn = features.length;
     }
     return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds: selection.bounds ?? (metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null), histogram: filter.histogram, altitudeRange: selection.altitudeRange, peak, drawn};
+  };
+  // Navigate the complete filtered window, independent of viewport and drawing stride.
+  query.point = (index, options = {}) => {
+    if (!Number.isInteger(index) || index < 0 || index >= points.length) return null;
+    const {start = -Infinity, end = Infinity} = options;
+    if (points[index].t < start || points[index].t > end) return null;
+    ensureFilter(options);
+    if (!filter.mask[index]) return null;
+    const neighbor = direction => {
+      for (let i = index + direction; i >= 0 && i < points.length; i += direction) {
+        if (points[i].t < start || points[i].t > end) break;
+        if (filter.mask[i]) return i;
+      }
+      return null;
+    };
+    return {feature: pointFeature(index, options), previous: neighbor(-1), next: neighbor(1)};
   };
   // Reuse the dataset index and filter mask, without replacing the map's current
   // date/route cache. Large areas stream chronologically; small areas sort only

@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=19';
-import {createPlaceHistory} from './place-history.mjs?v=23';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=20';
+import {createPlaceHistory} from './place-history.mjs?v=24';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=24';
-import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from './timeline.mjs?v=22';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=25';
-import {createFilters, bindRange, paintRange} from './filters.mjs?v=6';
+import {DAY, HISTOGRAM_BINS, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=25';
+import {resizeWindow, shiftWindow, dragWindow, histogramWindow} from './timeline.mjs?v=23';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=26';
+import {createFilters, bindRange, paintRange} from './filters.mjs?v=7';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -15,7 +15,62 @@ let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
 const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy, speed and altitude.', route: 'Paths coloured by time in Date window. Accuracy filtering connects retained locations; gaps and excluded jumps still break paths.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
-let currentAttribution = '', filters, selectedPoint;
+let currentAttribution = '', filters, selectedPoint, pointPending, pointRequest = 0;
+function closePoint() {
+  pointRequest++; pointPending = null;
+  popup?.remove();
+}
+function requestPoint(index, longitude, focus) {
+  pointPending = {longitude, focus};
+  popup?.getElement().querySelectorAll('.point-navigation button').forEach(button => { button.disabled = true; });
+  worker.postMessage({type: 'point', id: ++pointRequest, index, options: currentOptions()});
+}
+function showPoint({feature, previous, next}, longitude, focus) {
+  const p = feature.properties, node = document.createElement('div');
+  node.className = 'point-details';
+  const iso = new Date(p.time).toISOString(), day = Math.floor(p.time / DAY) * DAY, hour = new Date(p.time).getUTCHours();
+  const when = document.createElement('div'); when.className = 'point-timestamp';
+  for (const [text, selectedHour, label] of [[iso.slice(0, 10), undefined, `Show day ${iso.slice(0, 10)} UTC`], [iso.slice(11, -1), hour, `Show hour ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00 UTC on ${iso.slice(0, 10)}`]]) {
+    const link = document.createElement('a'); link.href = '#timeline-title'; link.textContent = text; link.title = label; link.setAttribute('aria-label', label);
+    link.onclick = event => {
+      event.preventDefault(); event.stopPropagation();
+      selectDates(day, day + DAY - 1, selectedHour);
+      $(selectedHour === undefined ? 'range-start' : 'filter-hours').focus({preventScroll: true});
+    };
+    when.append(link);
+  }
+  when.append(document.createTextNode('UTC')); node.append(when);
+  const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
+  for (const text of [p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
+    const line = document.createElement('div'); line.textContent = text; node.append(line);
+  }
+  const navigation = document.createElement('div'); navigation.className = 'period-navigation point-navigation';
+  navigation.setAttribute('role', 'group'); navigation.setAttribute('aria-label', 'Point navigation');
+  for (const [index, text, label] of [[previous, '←', 'Previous point'], [next, '→', 'Next point']]) {
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = text;
+    button.title = label; button.setAttribute('aria-label', label); button.disabled = index === null;
+    button.onclick = event => { event.stopPropagation(); requestPoint(index, selectedPoint.lon, document.activeElement === button ? label : undefined); };
+    navigation.append(button);
+  }
+  node.append(navigation);
+  const [lon, lat] = feature.geometry.coordinates;
+  selectedPoint = {lon: lon + 360 * Math.round((longitude - lon) / 360), lat, accuracy: p.accuracy};
+  const position = [selectedPoint.lon, lat];
+  map.getSource('point-accuracy').setData(accuracyCircle(position, p.accuracy)); paintAccuracy();
+  if (!popup) {
+    popup = new mapLibrary.Popup({maxWidth: '280px', focusAfterOpen: false});
+    popup.on('close', () => {
+      pointRequest++; pointPending = null; popup = null; selectedPoint = null;
+      map.getSource('point-accuracy')?.setData(empty()); paintAccuracy();
+    });
+    popup.setLngLat(position).setDOMContent(node).addTo(map);
+  } else {
+    popup.setLngLat(position).setDOMContent(node);
+    const pixel = map.project(position), {clientWidth, clientHeight} = map.getContainer();
+    if (pixel.x < 40 || pixel.x > clientWidth - 40 || pixel.y < 40 || pixel.y > clientHeight - 40) map.panTo(position, {duration: 300});
+  }
+  if (focus) (navigation.querySelector(`[aria-label="${focus}"]:not(:disabled)`) ?? navigation.querySelector('button:not(:disabled)'))?.focus({preventScroll: true});
+}
 function paintAccuracy() {
   if (!map?.getSource('point-accuracy')) return;
   const p = selectedPoint, metresPerPixel = p ? 40_075_016.6856 * Math.cos(p.lat * Math.PI / 180) / (512 * 2 ** map.getZoom()) : Infinity;
@@ -169,7 +224,7 @@ async function selectBasemap(key, remember = false) {
       if (Array.isArray(icon) && icon[0] === 'step' && icon[2] === 'circle-11') icon[2] = 'circle_11';
     }
     state.basemap = key;
-    popup?.remove();
+    closePoint();
     nativeMaps.activate(native);
     $('workspace').classList.toggle('native-map', Boolean(provider.native));
     $('workspace').classList.toggle('google-map', key.startsWith('google'));
@@ -234,7 +289,7 @@ function stopPlayback() {
   $('play').disabled = !state.report || $('period-forward').disabled;
 }
 function setDates(start, end, period = null, periodDay = null) {
-  popup?.remove();
+  closePoint();
   state.start = start; state.end = end;
   state.period = period ?? (start <= state.report.min && end >= state.report.max ? 'all' : null);
   state.periodDay = periodDay;
@@ -262,7 +317,7 @@ function fitHistory() {
 }
 function importFiles(files, sample = false) {
   if (!files.length || state.importing) return;
-  stopPlayback(); popup?.remove(); placeHistory?.clear(); setBusy(true); status('Reading history on your device…', false, true);
+  stopPlayback(); closePoint(); placeHistory?.clear(); setBusy(true); status('Reading history on your device…', false, true);
   worker.postMessage({type: 'import', id: ++queryId, files});
   state.nextSample = sample;
 }
@@ -279,7 +334,7 @@ async function loadSample() {
   } catch (error) { if (request === sampleRequest) { setBusy(false); status(`The sample could not load: ${error.message}. You can still open your own history.`, true); } }
 }
 function clearHistory() {
-  sampleRequest++; stopPlayback(); popup?.remove(); placeHistory?.clear();
+  sampleRequest++; stopPlayback(); closePoint(); placeHistory?.clear();
   clearTimeout(queryTimer); worker.terminate(); createWorker(); querying = false; queryDirty = false; setBusy(false);
   state.report = null; state.result = null; state.period = 'all'; setEnabled(false); paintSources();
   $('empty-state').hidden = false; $('source-label').textContent = 'No history loaded'; $('dataset-tag').textContent = 'No history loaded';
@@ -291,16 +346,22 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=24', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=25', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
       if (data.operation === 'place' || data.operation === 'place-hours') { placeHistory?.receive(data); return; }
+      if (data.operation === 'point') { if (data.id !== pointRequest || !pointPending) return; closePoint(); }
       if (data.operation === 'import') setBusy(false);
       if (data.operation === 'query') { querying = false; queryDirty = false; }
       status(data.message, true);
     } else if (data.type === 'place' || data.type === 'place-hours') {
       placeHistory?.receive(data);
+    } else if (data.type === 'point') {
+      if (data.id !== pointRequest || !pointPending) return;
+      const {longitude, focus} = pointPending; pointPending = null;
+      if (data.result) showPoint(data.result, longitude, focus);
+      else closePoint();
     } else if (data.type === 'imported') {
       placeHistory?.clear();
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
@@ -321,7 +382,7 @@ function createWorker() {
       if (state.fitNext) { state.fitNext = false; fitHistory(); }
     }
   };
-  worker.onerror = () => { setBusy(false); querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
+  worker.onerror = () => { closePoint(); setBusy(false); querying = false; status('The import worker could not run. Reload the page and try a smaller export.', true); };
 }
 function showMapView(id) {
   for (const tab of $('map-views').children) {
@@ -381,7 +442,7 @@ function bindControls() {
     bar.onfocus = () => { for (const sibling of $('histogram').children) sibling.tabIndex = sibling === bar ? 0 : -1; };
     $('histogram').append(bar);
   }
-  filters = createFilters($('window-filters'), preferences, () => { stopPlayback(); popup?.remove(); refresh(); }, rememberSettings);
+  filters = createFilters($('window-filters'), preferences, () => { stopPlayback(); closePoint(); refresh(); }, rememberSettings);
   bindRange($('date-range'));
   $('metric').onchange = event => { state.views[state.mode].metric = event.target.value; rememberSettings(); paint('metric'); refresh(); };
   for (const button of $('color-by').children) button.onclick = () => {
@@ -389,7 +450,7 @@ function bindControls() {
     rememberSettings(); paint('colorBy');
     if (state.mode === 'route') refresh();
   };
-  document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; popup?.remove(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
+  document.querySelectorAll('[data-mode]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); button.onclick = () => { state.mode = button.dataset.mode; closePoint(); document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); rememberSettings(); paint('mode'); refresh(); }; });
   document.querySelectorAll('[data-palette]').forEach(button => { button.onclick = () => { state.views[state.mode].palette = button.dataset.palette; rememberSettings(); paint('palette'); }; });
   for (const id of ['radius', 'intensity', 'lineWidth', 'opacity']) {
     $(id).oninput = event => { state.views[state.mode][id] = Number(event.target.value) / (id === 'opacity' ? 100 : 1); paint(id); if (id === 'radius' && ['heat', 'hex'].includes(state.mode)) refresh(); };
@@ -465,7 +526,7 @@ async function init() {
     map.on('style.load', installLayers); map.on('moveend', refresh); map.on('moveend', refreshAttribution); map.on('zoomend', paintAccuracy);
     map.on('mouseenter', 'history-dots', () => { if (state.mode === 'points' && !state.importing && map.getCanvas().style.cursor !== 'crosshair') map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'history-dots', () => { if (map.getCanvas().style.cursor === 'pointer') map.getCanvas().style.cursor = ''; });
-    $('draw-area').addEventListener('click', () => popup?.remove());
+    $('draw-area').addEventListener('click', closePoint);
     let errors = 0;
     map.on('error', event => {
       if (/source|tile|fetch|network|load/i.test(event.error?.message ?? '') && ++errors >= 3) { $('map-error').textContent = 'Some map tiles could not load. Your history is still available. Try another base map.'; $('map-error').hidden = false; }
@@ -475,37 +536,15 @@ async function init() {
       const layer = state.mode === 'hex' ? 'history-hex' : state.mode === 'points' ? 'history-dots' : null;
       if (!layer || !map.getLayer(layer)) return;
       const feature = map.queryRenderedFeatures(event.point, {layers: [layer]})[0];
-      if (!feature) { popup?.remove(); return; }
+      if (!feature) { closePoint(); return; }
       if (state.mode === 'hex') {
         // Rendered polygons may be tile-clipped. Inspect the original cell.
         const original = state.result?.density?.features.find(f => f.properties.cell === feature.properties.cell);
         if (original) placeHistory.select(original, 'Selected hexagon');
         return;
       }
-      const p = feature.properties, node = document.createElement('div');
-      node.className = 'point-details';
-      const iso = new Date(p.time).toISOString(), day = Math.floor(p.time / DAY) * DAY, hour = new Date(p.time).getUTCHours();
-      const when = document.createElement('div'); when.className = 'point-timestamp';
-      for (const [text, selectedHour, label] of [[iso.slice(0, 10), undefined, `Show day ${iso.slice(0, 10)} UTC`], [iso.slice(11, -1), hour, `Show hour ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00 UTC on ${iso.slice(0, 10)}`]]) {
-        const link = document.createElement('a'); link.href = '#timeline-title'; link.textContent = text; link.title = label; link.setAttribute('aria-label', label);
-        link.onclick = event => {
-          event.preventDefault(); event.stopPropagation();
-          selectDates(day, day + DAY - 1, selectedHour);
-          $(selectedHour === undefined ? 'range-start' : 'filter-hours').focus({preventScroll: true});
-        };
-        when.append(link);
-      }
-      when.append(document.createTextNode('UTC')); node.append(when);
-      const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
-      for (const text of [p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
-        const line = document.createElement('div'); line.textContent = text; node.append(line);
-      }
-      popup?.remove();
-      const [lon, lat] = feature.geometry.coordinates;
-      selectedPoint = {lon: lon + 360 * Math.round((event.lngLat.lng - lon) / 360), lat, accuracy: p.accuracy};
-      map.getSource('point-accuracy').setData(accuracyCircle([selectedPoint.lon, lat], p.accuracy)); paintAccuracy();
-      popup = new maplibre.Popup({maxWidth: '280px'}).setLngLat([selectedPoint.lon, lat]).setDOMContent(node).addTo(map);
-      popup.on('close', () => { selectedPoint = null; map.getSource('point-accuracy')?.setData(empty()); paintAccuracy(); });
+      closePoint();
+      requestPoint(feature.properties.index, event.lngLat.lng);
     });
     createWorker(); setBusy(false); await selectBasemap(state.basemap);
     // The existing public sample is explicit; personal imports are never persisted.

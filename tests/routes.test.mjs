@@ -5,6 +5,40 @@ import {createHistoryQuery, project, DAY} from '../js/data.mjs';
 const point = (t, lon, lat = 0, extra = {}) => ({t, lon, lat, accuracy: 4, duration: 0, ...extra});
 const vertices = result => result.routes.features.flatMap(f => f.geometry.coordinates);
 
+test('journey Fit excludes disconnected fixes and stationary runs while retaining all observations', () => {
+  const points = [point(0, 13.4, 52.5), point(60000, 13.401, 52.501), point(DAY, 56, 25), point(DAY + 60000, 56, 25), point(3 * DAY, 100, 14)];
+  const query = createHistoryQuery(points);
+  for (const colorBy of ['time', 'speed', 'altitude']) {
+    const result = query({mode: 'route', colorBy});
+    assert.equal(result.count, 5);
+    assert.ok(Math.abs(result.bounds[0][0] - 13.4) < 1e-9);
+    assert.ok(Math.abs(result.bounds[1][0] - 13.401) < 1e-9);
+    assert.deepEqual(result.bounds.map(b => b[1]), [52.5, 52.501]);
+  }
+  const dots = query({mode: 'points'});
+  assert.equal(dots.count, 5); assert.equal(dots.dots.features.length, 5);
+  assert.equal(dots.bounds[1][0], 100);
+});
+
+test('journey Fit uses all drawable runs even when the current viewport is empty and follows device selection', () => {
+  const a = {stream: {device: 'a', source: 1}}, b = {stream: {device: 'b', source: 1}};
+  const query = createHistoryQuery([point(0, 13.4, 52.5, a), point(1000, 2.3, 48.8, b), point(60000, 13.401, 52.501, a), point(61000, 2.301, 48.801, b)]);
+  const options = {mode: 'route', viewport: [120, -10, 130, 10]};
+  const all = query(options);
+  assert.equal(all.routes.features.length, 0); assert.ok(all.bounds[0][0] < 3 && all.bounds[1][0] > 13);
+  assert.equal(query({...options, viewport: [100, 0, 110, 10]}).bounds, all.bounds);
+  const device = query({...options, device: 1});
+  assert.equal(device.count, 2); assert.ok(device.bounds[1][0] < 3);
+});
+
+test('journey Fit has no target for isolated or entirely stationary observations', () => {
+  for (const points of [[point(0, 13)], [point(0, 13), point(60000, 13)], [point(0, 13), point(DAY, 14)]]) {
+    const query = createHistoryQuery(points), route = query({mode: 'route'});
+    assert.equal(route.bounds, null); assert.equal(route.routes.features.length, 0);
+    assert.ok(query({mode: 'points'}).bounds);
+  }
+});
+
 test('a large date window preserves every visible turn in Time, Speed and Altitude', () => {
   const local = Array.from({length: 20}, (_, i) => point(i * 1000, 13.58 + Math.min(i, 10) * .0001, 52.5 + Math.max(0, i - 10) * .0001, {altitude: i, recordedSpeed: 40}));
   const points = [...local, ...Array.from({length: 260000}, (_, i) => point((i + 20) * 1000, 14 + i * .000001, 52.5, {altitude: 20, recordedSpeed: 0}))];

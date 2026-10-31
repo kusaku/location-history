@@ -198,12 +198,18 @@ function projectY(lat) {
 }
 export function project(lon, lat) { return [(lon + 180) / 360, projectY(lat)]; }
 function unproject(x, y) { return [x * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) / rad]; }
-export function wrappedBounds(points, indices = null) {
-  const length = indices?.length ?? points.length;
+export function wrappedBounds(points, indices = null, runs = null) {
+  const length = runs ? runs.reduce((n, [a, b]) => n + b - a, 0) : indices?.length ?? points.length;
   if (!length) return null;
-  const at = i => points[indices ? indices[i] : i];
-  const lons = Float64Array.from({length}, (_, i) => (at(i).lon + 360) % 360).sort();
-  let gap = -1, index = 0, south = 90, north = -90;
+  const lons = new Float64Array(length);
+  let cursor = 0, south = 90, north = -90;
+  for (const [a, b] of runs ?? [[0, length]]) for (let i = a; i < b; i++) {
+    const p = points[indices ? indices[i] : i];
+    lons[cursor++] = (p.lon + 360) % 360;
+    south = Math.min(south, p.lat); north = Math.max(north, p.lat);
+  }
+  lons.sort();
+  let gap = -1, index = 0;
   for (let i = 0; i < lons.length; i++) {
     const size = (i === lons.length - 1 ? lons[0] + 360 : lons[i + 1]) - lons[i];
     if (size > gap) { gap = size; index = i; }
@@ -211,9 +217,9 @@ export function wrappedBounds(points, indices = null) {
   let west = lons[(index + 1) % lons.length], east = lons[index];
   if (east < west) east += 360;
   if (west > 180) { west -= 360; east -= 360; }
-  for (let i = 0; i < length; i++) { const p = at(i); south = Math.min(south, p.lat); north = Math.max(north, p.lat); }
   return [[west, Math.max(-85, Math.min(85, south))], [east, Math.min(85, Math.max(-85, north))]];
 }
+
 function lowerBound(points, time, inclusive = false) {
   let lo = 0, hi = points.length;
   while (lo < hi) { const m = (lo + hi) >>> 1; if (points[m].t < time || (inclusive && points[m].t === time)) lo = m + 1; else hi = m; }
@@ -294,6 +300,20 @@ function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE} = {}, at = i =
     if (flags[i - 1]) continue;
     if (!flags[i] && impossible(at(i - 1), at(i))) {
       const a = at(i - 1), b = at(i);
+      // A stale location can repeat for several fixes. Reject the short burst
+      // only when both transitions are impossible and bypassing it is plausible.
+      let rejoined = -1, last = i;
+      for (let j = i + 1, checked = 0; j < length && checked < 8; j++) {
+        if (flags[j]) continue;
+        const c = at(j);
+        if (c.t - a.t > 6 * 3_600_000) break;
+        checked++;
+        if (!impossible(a, c)) { if (impossible(at(last), c)) rejoined = j; break; }
+        last = j;
+      }
+      if (rejoined >= 0) {
+        flags.fill(1, i, rejoined); i = rejoined - 1; continue;
+      }
       const before = previous >= 0 && a.t > at(previous).t && a.t - at(previous).t <= 120_000 && !impossible(at(previous), a);
       const after = i + 1 < length && !flags[i + 1] && at(i + 1).t > b.t && at(i + 1).t - b.t <= 120_000 && !impossible(b, at(i + 1));
       if (before && !after || (b.accuracy ?? 0) > Math.max(50, 3 * (a.accuracy ?? 0))) flags[i] = 1;
@@ -558,7 +578,7 @@ export function createHistoryQuery(points) {
       let count = 0, km = 0, days = 0, lastDay, low = Infinity, high = -Infinity;
       const recordedDays = devices.order ? new Set() : null;
       for (const [begin, finish] of devices.ranges(from, to, options.device ?? null)) {
-        let previous = -1, anchor = -1, run = count;
+        let previous = -1, anchor = -1, run = count, moved = false;
         for (let position = begin; position < finish; position++) {
           const i = devices.order ? devices.order[position] : position;
           if (!filter.mask[i]) continue;
@@ -574,6 +594,7 @@ export function createHistoryQuery(points) {
               if (drift) connected = connected && dt <= (options.driftWindow ?? 60) * 2000 && speedAt(previous, options) !== null && speedAt(i, options) !== null;
               if (connected) {
                 const a = points[previous];
+                moved ||= p.lon !== a.lon || p.lat !== a.lat;
                 if (drift) {
                   km += (speedAt(previous, options) + speedAt(i, options)) / 2 * dt / 3_600_000; anchor = i;
                 } else if (dt <= 60_000 && a.recordedSpeed != null && p.recordedSpeed != null) {
@@ -585,7 +606,7 @@ export function createHistoryQuery(points) {
                 }
               }
             }
-            if (!connected) { if (count - run > 1) runs.push([run, count]); run = count; anchor = i; }
+            if (!connected) { if (count - run > 1 && moved) runs.push([run, count]); run = count; anchor = i; moved = false; }
           }
           else anchor = i;
           indices[count++] = i; previous = i;
@@ -593,11 +614,11 @@ export function createHistoryQuery(points) {
           const day = Math.floor(p.t / DAY);
           if (recordedDays) recordedDays.add(day); else if (day !== lastDay) { days++; lastDay = day; }
         }
-        if (count - run > 1) runs.push([run, count]);
+        if (count - run > 1 && moved) runs.push([run, count]);
       }
       if (recordedDays) days = recordedDays.size;
       const selected = indices.subarray(0, count);
-      selection = {from, to, indices: selected, runs, count, days, km, bounds: wrappedBounds(points, selected), routes: null, altitudeRange: low <= high ? [low, high] : null};
+      selection = {from, to, indices: selected, runs, routeCount: runs.reduce((n, [a, b]) => n + b - a, 0), count, days, km, bounds: undefined, routes: null, altitudeRange: low <= high ? [low, high] : null};
       selectionKey = nextSelectionKey;
     }
     const {from, to, indices} = selection;
@@ -674,7 +695,15 @@ export function createHistoryQuery(points) {
       }
       density = collection(features); drawn = features.length;
     }
-    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds: selection.bounds ?? (metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null), histogram: filter.histogram, altitudeRange: selection.altitudeRange, peak, drawn};
+    // Fit every drawable journey, not just viewport geometry or isolated fixes.
+    // Cache both extents lazily; camera changes never repeat the longitude sort.
+    const boundsKey = mode === 'route' ? 'routeBounds' : 'bounds';
+    if (selection[boundsKey] === undefined) {
+      selection[boundsKey] = wrappedBounds(points, indices, mode === 'route' ? selection.runs : null);
+      if (selection.routeCount === selection.count) selection.bounds = selection.routeBounds = selection[boundsKey];
+    }
+    const bounds = selection[boundsKey] ?? (mode !== 'route' && metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null);
+    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds, histogram: filter.histogram, altitudeRange: selection.altitudeRange, peak, drawn};
   };
   // Navigate the complete filtered window, independent of viewport and drawing stride.
   query.point = (index, options = {}) => {

@@ -191,6 +191,12 @@ test('bundled sample preserves every trimmed observation and its accuracy metada
   const query = createHistoryQuery(prepared.points);
   assert.equal(query().count, 910311); assert.equal(query({accuracy: 10}).count, 23671);
   assert.ok(prepared.points.at(-1).t < Date.parse('2020-04-02T00:00:00Z'));
+  const cleaned = query({mode: 'points', excludeJumps: true});
+  assert.ok(cleaned.bounds[1][0] < 40);
+  for (let i = 0; i < prepared.points.length; i++) if (prepared.points[i].lon > 40) assert.equal(query.point(i, {excludeJumps: true}), null);
+  const journeys = query({mode: 'route', viewport: [120, -10, 130, 10]});
+  assert.equal(journeys.routes.features.length, 0);
+  assert.ok(journeys.bounds[0][1] > 39 && journeys.bounds[1][0] < 40);
 });
 
 test('malformed semantic waypoints are skipped without losing valid path observations', () => {

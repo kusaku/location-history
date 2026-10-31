@@ -34,6 +34,19 @@ test('accuracy filtering connects retained locations and panning reuses selectio
 });
 
 const fix = (t, metres, accuracy = 5) => ({t, lon: metres / 111195, lat: 0, accuracy, duration: 0});
+test('short repeated impossible excursions are excluded without discarding their valid neighbours', () => {
+  for (const count of [2, 3, 7]) {
+    const fixes = [fix(0, 0), fix(60000, 0), ...Array.from({length: count}, (_, i) => fix(300000 + i * 60000, 4700000)), fix(310000 + count * 60000, 0), fix(370000 + count * 60000, 0)];
+    const snapshot = structuredClone(fixes);
+    assert.deepEqual([...jumpFlags(fixes)], fixes.map((_, i) => i >= 2 && i < 2 + count ? 1 : 0));
+    assert.deepEqual(fixes, snapshot);
+    assert.equal(createHistoryQuery(fixes)({excludeJumps: true}).count, 4);
+  }
+  // Without a plausible return, the initial conflicting fix remains ambiguous.
+  const relocation = jumpFlags([fix(0, 0), fix(60000, 4700000), fix(120000, 4700010)]);
+  assert.equal(relocation[1], 0); assert.equal(relocation[2], 0);
+});
+
 test('local track quality removes a moderate isolated spike while preserving its neighbours', () => {
   const points = Array.from({length: 15}, (_, i) => fix(i * 60_000, i === 7 ? 1000 : 0));
   const source = structuredClone(points), flags = jumpFlags(points);

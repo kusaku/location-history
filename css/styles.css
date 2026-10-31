@@ -835,28 +835,62 @@ select {
   padding: 3px 8px;
 }
 
-.point-details {
-  display: grid;
-  gap: 4px;
+.point-popup .maplibregl-popup-content {
+  padding: 12px 14px;
 }
-
-.point-details>div:not(:first-child) {
-  color: var(--muted);
+.point-details {
+  min-width: 216px;
+  font-variant-numeric: tabular-nums;
 }
 .point-timestamp {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 3px 6px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
 }
 .point-timestamp a {
+  width: fit-content;
   color: var(--accent);
   text-decoration: underline;
+  text-decoration-color: #d5f47666;
   text-underline-offset: 3px;
 }
+.point-timestamp a:hover,
+.point-timestamp a:focus-visible {
+  text-decoration-color: currentColor;
+}
+.point-timestamp a:first-child {
+  grid-area: 1 / 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+.point-timestamp a:nth-child(2) {
+  grid-area: 2 / 1;
+}
+.point-zone {
+  grid-area: 1 / 2;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .05em;
+}
 .point-navigation {
+  grid-area: 2 / 2;
   justify-content: flex-end;
-  margin-top: 4px;
+}
+.point-measurements {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #43513f;
+}
+.point-measurements dt {
+  color: var(--muted);
+}
+.point-measurements dd {
+  margin: 0;
+  text-align: right;
 }
 
 .color-controls {

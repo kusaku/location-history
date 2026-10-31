@@ -39,10 +39,12 @@ function showPoint({feature, previous, next}, longitude, focus) {
     };
     when.append(link);
   }
-  when.append(document.createTextNode('UTC')); node.append(when);
+  const zone = document.createElement('span'); zone.className = 'point-zone'; zone.textContent = 'UTC'; when.append(zone);
   const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
-  for (const text of [p.accuracy == null ? 'Accuracy unknown' : `Accuracy ±${number.format(p.accuracy)} m`, `${p.speedRecorded ? 'Recorded speed' : 'Est. speed'}: ${speed}`, p.altitude == null ? 'Altitude unavailable' : `Altitude: ${number.format(p.altitude)} m`]) {
-    const line = document.createElement('div'); line.textContent = text; node.append(line);
+  const measurements = document.createElement('dl'); measurements.className = 'point-measurements';
+  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unavailable' : `${number.format(p.altitude)} m`]]) {
+    const term = document.createElement('dt'), detail = document.createElement('dd');
+    term.textContent = label; detail.textContent = value; measurements.append(term, detail);
   }
   const navigation = document.createElement('div'); navigation.className = 'period-navigation point-navigation';
   navigation.setAttribute('role', 'group'); navigation.setAttribute('aria-label', 'Point navigation');
@@ -52,13 +54,13 @@ function showPoint({feature, previous, next}, longitude, focus) {
     button.onclick = event => { event.stopPropagation(); requestPoint(index, selectedPoint.lon, document.activeElement === button ? label : undefined); };
     navigation.append(button);
   }
-  node.append(navigation);
+  when.append(navigation); node.append(when, measurements);
   const [lon, lat] = feature.geometry.coordinates;
   selectedPoint = {lon: lon + 360 * Math.round((longitude - lon) / 360), lat, accuracy: p.accuracy};
   const position = [selectedPoint.lon, lat];
   map.getSource('point-accuracy').setData(accuracyCircle(position, p.accuracy)); paintAccuracy();
   if (!popup) {
-    popup = new mapLibrary.Popup({maxWidth: '280px', focusAfterOpen: false});
+    popup = new mapLibrary.Popup({maxWidth: '280px', className: 'point-popup', focusAfterOpen: false});
     popup.on('close', () => {
       pointRequest++; pointPending = null; popup = null; selectedPoint = null;
       map.getSource('point-accuracy')?.setData(empty()); paintAccuracy();

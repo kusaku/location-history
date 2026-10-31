@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=51">
-    <script type="module" src="js/app.mjs?v=73">
+    <link rel="stylesheet" href="css/styles.css?v=52">
+    <script type="module" src="js/app.mjs?v=74">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -639,7 +639,7 @@
       <h3>Filters and date windows</h3>
       <p><b>Hours</b>, <b>Accuracy</b>, <b>Speed</b> and <b>Altitude</b> open compact range controls. Drag either thumb or enter exact bounds; Reset clears that filter. Accuracy and speed sliders give extra room to small values. Unknown measurements stay included unless you turn off <b>Include unknown</b>. The date range has two thumbs on one track, with one-day steps and YYYY-MM-DD date fields in UTC. Type a date directly, or use the calendar button (Alt+Down from the field). With Day, Week, Month, Quarter or Year selected, dragging either thumb moves the entire window without changing its day count and stops at the history edges. In All time, the thumbs resize the range independently; clicking All time restores the complete history.</p>
       <p><b>Track quality</b>, after Accuracy, has three modes. <b>Off</b> keeps all observations. <b>Outliers</b> removes isolated spikes and short bursts of impossible travel relative to nearby movement; its +15 km/h default is an allowance above the local pattern, not a speed limit. <b>GPS drift</b> also removes brief distant excursions surrounded by a compact group of stationary recordings. Its 15–600 second context window controls how far to look for supporting neighbours, not how to average speed. With too little context, points stay included. Neither mode deletes original data or replaces speeds; each device and recording source is checked separately. Grey means speed is unavailable and does not prevent a journey from being drawn.</p>
-      <p><b>Devices</b> appears when an export identifies several devices. Select one or <b>All devices</b>; the map, distance, filters and Place history use that choice. Tracks never connect different devices. Labels are anonymous and the selection resets on import. Files without a device identifier are grouped as <b>Unknown device</b>; their devices cannot be reliably inferred from coordinates.</p>
+      <p><b>Devices</b> appears when an export identifies several devices. Select one or <b>All devices</b>; the map, distance, filters and Place history use that choice. Tracks never connect different devices. Labels are anonymous and the selection resets on import. Files without a device identifier are grouped as <b>Unknown device</b>; their devices cannot be reliably inferred from coordinates. <b>Source</b> appears when several recording sources are present, such as GPS, Wi-Fi or Cell. Select one or <b>All sources</b>; it applies to the map and Place history, and resets on import.</p>
       <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
       <p>Each histogram bar is a UTC day, week (Monday–Sunday), calendar month or quarter. The interval adapts to the full history and panel width; very long histories use years. First and last bars stop at the history’s dates. Hover for dates and counts, or select a bar to use its dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
       <h3>

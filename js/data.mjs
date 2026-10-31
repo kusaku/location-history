@@ -492,7 +492,7 @@ export function placePolygon(coordinates) {
 // Panning reuses selection statistics and the route-piece index. Visible route
 // geometry is cached until its pieces or zoom level change.
 export function createHistoryQuery(points) {
-  const devices = createDeviceIndex(points);
+  const devices = createDeviceIndex(points), sourceCounts = new Uint32Array(SOURCE_NAMES.length + 1);
   const columns = 128, rows = 64, cells = columns * rows;
   const cell = p => Math.min(rows - 1, Math.floor((p.lat + 90) / 180 * rows)) * columns + Math.min(columns - 1, Math.floor((p.lon + 180) / 360 * columns));
   const offsets = new Uint32Array(cells + 1), order = new Uint32Array(points.length), projectedY = new Float64Array(points.length), intervalEnds = new Float64Array(Math.ceil(points.length / 256));
@@ -500,7 +500,7 @@ export function createHistoryQuery(points) {
   let latestEnd = -Infinity;
   for (let i = 0; i < points.length; i++) {
     offsets[cell(points[i]) + 1]++; projectedY[i] = projectY(points[i].lat);
-    const p = points[i];
+    const p = points[i]; sourceCounts[(p.stream?.source ?? 0) + 1]++;
     latestEnd = Math.max(latestEnd, p.t + p.duration); intervalEnds[i >>> 8] = latestEnd;
     ranges.accuracy[1] = Math.max(ranges.accuracy[1], p.accuracy ?? 0);
     if (p.altitude != null) { ranges.altitude[0] = Math.min(ranges.altitude[0], p.altitude); ranges.altitude[1] = Math.max(ranges.altitude[1], p.altitude); }
@@ -516,7 +516,7 @@ export function createHistoryQuery(points) {
   const quality = (i, options) => {
     const {accuracy = 0, accuracyMin = 0, accuracyUnknown = true, excludeJumps = false, altitudeMin = null, altitudeMax = null, altitudeUnknown = true, speedMin = null, speedMax = null, speedUnknown = true} = options;
     const p = points[i];
-    if (options.device != null && devices.idAt(i) !== options.device) return false;
+    if (options.device != null && devices.idAt(i) !== options.device || options.source != null && (p.stream?.source ?? 0) !== options.source) return false;
     if (excludeJumps && jumps[i] || !accepts(p, accuracy, 0, 24, accuracyMin, accuracyUnknown)) return false;
     if (p.altitude == null ? !altitudeUnknown : altitudeMin !== null && p.altitude < altitudeMin || altitudeMax !== null && p.altitude > altitudeMax) return false;
     if (speedMin !== null || speedMax !== null || !speedUnknown) {
@@ -538,9 +538,9 @@ export function createHistoryQuery(points) {
     if (excludeJumps && (jumpTolerance !== tolerance || jumpWindow !== window)) {
       jumps = jumpFlags(points, {tolerance, stationaryWindow: window}); jumpTolerance = tolerance; jumpWindow = window;
     }
-    const nextFilterKey = JSON.stringify([options.device, options.trackMode, drift ? options.driftWindow : null, accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
+    const nextFilterKey = JSON.stringify([options.device, options.source, options.trackMode, drift ? options.driftWindow : null, accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
     if (filterKey !== nextFilterKey) {
-      const bridge = accuracy || options.device != null || options.accuracyMin || options.altitudeMin != null || options.altitudeMax != null || options.speedMin != null || options.speedMax != null || options.accuracyUnknown === false || options.altitudeUnknown === false || options.speedUnknown === false;
+      const bridge = accuracy || options.device != null || options.source != null || options.accuracyMin || options.altitudeMin != null || options.altitudeMax != null || options.speedMin != null || options.speedMax != null || options.accuracyUnknown === false || options.altitudeUnknown === false || options.speedUnknown === false;
       const mask = new Uint8Array(points.length), totals = new Uint32Array(Math.ceil(points.length / 256) + 1), barriers = bridge ? new Uint32Array(points.length + 1) : null;
       let total = 0;
       for (let i = 0; i < points.length; i++) {
@@ -1105,6 +1105,7 @@ export function createHistoryQuery(points) {
   };
   query.ranges = ranges;
   query.devices = devices.groups.map(({id, label, count}) => ({id, label, count}));
+  query.sources = Array.from(sourceCounts, (count, i) => ({id: i - 1, label: i ? SOURCE_NAMES[i - 1] : 'Timeline event', count})).filter(item => item.count);
   return query;
 }
 

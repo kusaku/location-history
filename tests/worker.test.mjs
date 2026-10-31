@@ -40,6 +40,7 @@ test('worker reports anonymous device choices and keeps their filters through qu
       json({locations: [{...record(0), deviceTag: 'private-phone-a', source: 'GPS'}, {...record(60000), deviceTag: 'private-phone-a', source: 'GPS'}]}),
     ]});
     assert.deepEqual(imported.report.devices, [{id: 0, label: 'Device 1', count: 2}, {id: 1, label: 'Device 2', count: 1}]);
+    assert.deepEqual(imported.report.sources, [{id: 1, label: 'GPS', count: 2}, {id: 2, label: 'Wi-Fi', count: 1}]);
     assert.ok(!JSON.stringify(imported).includes('private-phone'));
     assert.equal(imported.report.duplicates, 1);
     const options = {device: 0, trackMode: 'drift', mode: 'points'};
@@ -49,6 +50,8 @@ test('worker reports anonymous device choices and keeps their filters through qu
     const area = {geometry: {coordinates: [[[13, 52], [14, 52], [14, 53], [13, 53], [13, 52]]]}};
     assert.equal((await request('place', {area, options})).result.count, 2);
     assert.equal((await request('point', {index: 1, options})).result, null);
+    assert.equal((await request('query', {options: {source: 2}})).result.count, 1);
+    assert.equal((await request('place', {area, options: {source: 2}})).result.count, 1);
   } finally { await worker.terminate(); }
 });
 

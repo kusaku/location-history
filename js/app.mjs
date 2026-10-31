@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=29';
-import {createPlaceHistory} from './place-history.mjs?v=35';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=30';
+import {createPlaceHistory} from './place-history.mjs?v=36';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=34';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=34';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=36';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=17';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=35';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=35';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=37';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=18';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const date = t => new Date(t).toISOString().slice(0, 10);
@@ -380,7 +380,7 @@ async function loadSample() {
 function clearHistory() {
   sampleRequest++; stopPlayback(); closePoint(); placeHistory?.clear();
   clearTimeout(queryTimer); worker.terminate(); createWorker(); querying = false; queryDirty = false; setBusy(false);
-  state.report = null; state.result = null; state.period = 'all'; filters.setDevices([]); setEnabled(false); paintSources();
+  state.report = null; state.result = null; state.period = 'all'; filters.setDevices([]); filters.setSources([]); setEnabled(false); paintSources();
   $('empty-state').hidden = false; $('source-label').textContent = 'No history loaded'; $('dataset-tag').textContent = 'No history loaded';
   $('import-detail').textContent = ''; $('range-summary').textContent = 'Load history to filter by date'; $('render-note').textContent = '';
   for (const id of ['stat-records', 'stat-days', 'stat-distance']) $(id).textContent = '—';
@@ -390,7 +390,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=34', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=35', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -410,7 +410,7 @@ function createWorker() {
       placeHistory?.clear();
       $('histogram').replaceChildren();
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
-      filters.setDevices(data.report.devices); filters.setBounds(data.report.ranges);
+      filters.setDevices(data.report.devices); filters.setSources(data.report.sources); filters.setBounds(data.report.ranges);
       $('empty-state').hidden = true;
       $('source-label').textContent = state.nextSample ? 'Bundled sample' : data.report.files.length === 1 ? data.report.files[0] : `${data.report.files.length} files merged`;
       $('source-label').title = data.report.files.join(', ');

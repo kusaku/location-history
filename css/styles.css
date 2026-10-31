@@ -2384,7 +2384,7 @@ dialog p {
 }
 
 .quality-modes,
-.device-options {
+.filter-options {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;

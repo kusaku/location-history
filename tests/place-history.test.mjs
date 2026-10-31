@@ -33,12 +33,15 @@ function fixture(history = {min: 0, max: 100000}) {
 test('place requests ignore viewport changes, coalesce filter changes and discard stale selection results', () => {
   const f = fixture();
   try {
+    f.options.source = 1;
     f.controller.select(area, 'Drawn area');
     assert.equal(f.sent.length, 1); assert.equal(f.sent[0].options.excludeJumps, true);
+    assert.equal(f.sent[0].options.source, 1);
     f.options.viewport = [0, 0, 10, 10]; f.controller.refresh(); assert.equal(f.sent.length, 1);
-    f.options.end = 2000; f.controller.refresh(); assert.equal(f.sent.length, 1);
+    f.options.end = 2000; f.options.source = 2; f.controller.refresh(); assert.equal(f.sent.length, 1);
     f.controller.receive({type: 'place', id: f.sent[0].id, result: {count: 99}});
     assert.equal(f.sent.length, 2); assert.equal(f.sent[1].options.end, 2000);
+    assert.equal(f.sent[1].options.source, 2);
     f.controller.clear();
     f.controller.receive({type: 'place', id: f.sent[1].id, result: {count: 99}});
     assert.equal(f.get('place-history').hidden, true);

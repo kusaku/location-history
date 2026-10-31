@@ -91,6 +91,28 @@ test('stationary inference and place intervals stay within a device and overlapp
   assert.equal(query.place(box, {start: DAY / 2, end: DAY - 1, hourly: true}).minutes, 720);
 });
 
+test('source choices count imported observations and consistently filter maps, navigation and place history', () => {
+  const points = [point(0, 0, 'a', 1), point(1000, 5000, 'a', 2), point(60000, 100, 'a', 1), point(61000, 5100, 'b', 2), point(120000, 200, 'a'), point(180000, 300, 'a', -1)];
+  const query = createHistoryQuery(points), snapshot = structuredClone(points);
+  assert.deepEqual(query.sources, [{id: -1, label: 'Timeline event', count: 1}, {id: 0, label: 'Recorded position', count: 1}, {id: 1, label: 'GPS', count: 2}, {id: 2, label: 'Wi-Fi', count: 2}]);
+  for (const mode of ['heat', 'hex', 'points', 'route']) {
+    const result = query({mode, source: 1, zoom: 18});
+    assert.equal(result.count, 2); assert.equal(result.histogram.reduce((a, b) => a + b, 0), 2);
+    if (mode === 'route') {
+      assert.ok(result.routes.features.length > 0);
+      assert.deepEqual(result.routes.features[0].geometry.coordinates[0], [points[0].lon, 0]);
+      assert.deepEqual(result.routes.features.at(-1).geometry.coordinates.at(-1), [points[2].lon, 0]);
+    }
+  }
+  assert.equal(query({source: 0}).count, 1); assert.equal(query({source: -1}).count, 1);
+  assert.equal(query({source: 2, device: 0}).count, 1); assert.equal(query({source: 1, device: 1}).count, 0);
+  assert.equal(query.point(0, {source: 1}).next, 2); assert.equal(query.point(1, {source: 1}), null);
+  assert.equal(query.place(box, {source: 1}).count, 2);
+  assert.equal(query({source: null}).count, points.length); assert.equal(query({source: 6}).count, 0);
+  assert.deepEqual(createHistoryQuery([point(0)]).sources, [{id: 0, label: 'Recorded position', count: 1}]);
+  assert.deepEqual(createHistoryQuery([]).sources, []); assert.deepEqual(points, snapshot);
+});
+
 test('GPS drift keeps real walking, driving and flights without averaging their speeds', () => {
   for (const kmh of [1, 5, 60, 900]) {
     const points = Array.from({length: 100}, (_, i) => [point(i * 5000, i * 5 * kmh / 3.6, '', 1), point(i * 5000 + 10, i * 5 * kmh / 3.6 + 500, '', 4)]).flat();

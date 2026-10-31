@@ -1,5 +1,5 @@
-import {DAY, placePolygon} from './data.mjs?v=34';
-import {parseDay, formatDay, formatDateTime} from './timeline.mjs?v=34';
+import {DAY, placePolygon} from './data.mjs?v=35';
+import {parseDay, formatDay, formatDateTime} from './timeline.mjs?v=35';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -325,7 +325,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     const history = report();
     if (!area || !history || drawing) return;
     const current = options();
-    const filters = Object.fromEntries(['device', 'trackMode', 'driftWindow', 'hourStart', 'hourEnd', 'accuracy', 'accuracyMin', 'accuracyUnknown', 'speedMin', 'speedMax', 'speedUnknown', 'altitudeMin', 'altitudeMax', 'altitudeUnknown', 'excludeJumps', 'jumpTolerance'].map(key => [key, current[key]]));
+    const filters = Object.fromEntries(['device', 'source', 'trackMode', 'driftWindow', 'hourStart', 'hourEnd', 'accuracy', 'accuracyMin', 'accuracyUnknown', 'speedMin', 'speedMax', 'speedUnknown', 'altitudeMin', 'altitudeMax', 'altitudeUnknown', 'excludeJumps', 'jumpTolerance'].map(key => [key, current[key]]));
     filters.start = allDates ? Math.floor(history.min / DAY) * DAY : current.start;
     filters.end = allDates ? Math.floor(history.max / DAY) * DAY + DAY - 1 : current.end;
     const key = JSON.stringify([area, filters]);

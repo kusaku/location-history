@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=34';
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=35';
 
 // ISO text remains editable independently of browser locale. The companion date
 // input supplies the native calendar without another calendar implementation.
@@ -67,38 +67,40 @@ export function createFilters(root, initial, changed, committed) {
     {id: 'track', name: 'Track quality'},
     {id: 'speed', name: 'Speed', unit: 'km/h', minKey: 'speedMin', maxKey: 'speedMax', unknown: 'speedUnknown', bounds: [0, 1000], logarithmic: true},
     {id: 'altitude', name: 'Altitude', unit: 'm', minKey: 'altitudeMin', maxKey: 'altitudeMax', unknown: 'altitudeUnknown', bounds: [-500, 9000]},
-    {id: 'devices', name: 'Devices'},
+    {id: 'devices', name: 'Devices', key: 'device', all: 'All devices'},
+    {id: 'source', name: 'Source', key: 'source', all: 'All sources'},
   ];
   const values = {};
   const number = new Intl.NumberFormat('en', {maximumFractionDigits: 1});
   const clock = value => `${String(value).padStart(2, '0')}:00`;
-  let devicesControl;
-  function deviceFilter(config) {
-    values.device = null;
+  const choiceControls = {};
+  function choiceFilter(config) {
+    const {id, name, key, all} = config;
+    values[key] = null;
     const button = document.createElement('button'), panel = document.createElement('div');
-    button.type = 'button'; button.id = 'filter-devices'; button.className = 'filter-toggle'; button.hidden = true; button.setAttribute('popovertarget', 'filter-devices-panel');
-    panel.id = 'filter-devices-panel'; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto'); panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Devices');
-    panel.innerHTML = '<div class="filter-title"><strong>Devices</strong><button type="button" data-reset>Reset</button></div><div class="device-options" role="group" aria-label="Device selection"></div>';
-    const choices = panel.querySelector('.device-options'); let devices = [];
+    button.type = 'button'; button.id = `filter-${id}`; button.className = 'filter-toggle'; button.hidden = true; button.setAttribute('popovertarget', `filter-${id}-panel`);
+    panel.id = `filter-${id}-panel`; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto'); panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', name);
+    panel.innerHTML = `<div class="filter-title"><strong>${name}</strong><button type="button" data-reset>Reset</button></div><div class="filter-options" role="group" aria-label="${name} selection"></div>`;
+    const choices = panel.querySelector('.filter-options'); let items = [];
     function paint() {
-      button.textContent = `Devices · ${devices.find(d => d.id === values.device)?.label ?? 'All'}`;
-      button.classList.toggle('active', values.device !== null);
-      for (const choice of choices.children) choice.setAttribute('aria-pressed', String(choice.deviceId === values.device));
+      button.textContent = `${name} · ${items.find(item => item.id === values[key])?.label ?? 'All'}`;
+      button.classList.toggle('active', values[key] !== null);
+      for (const choice of choices.children) choice.setAttribute('aria-pressed', String(choice.choiceId === values[key]));
     }
-    const select = id => { values.device = id; paint(); changed(); committed(); };
+    const select = value => { values[key] = value; paint(); changed(); committed(); };
     panel.querySelector('[data-reset]').onclick = () => select(null);
     bindPopover(root, button, panel);
-    devicesControl = {set(items = []) {
+    choiceControls[id] = {set(next = []) {
       if (panel.matches(':popover-open')) panel.hidePopover();
-      devices = items; values.device = null; choices.replaceChildren(); button.hidden = devices.length < 2;
-      for (const device of [{id: null, label: 'All devices'}, ...devices]) {
-        const choice = document.createElement('button'); choice.type = 'button'; choice.className = 'filter-toggle'; choice.deviceId = device.id; choice.textContent = device.label;
-        if (device.count !== undefined) choice.title = `${number.format(device.count)} recorded locations`;
-        choice.onclick = () => select(device.id); choices.append(choice);
+      items = next; values[key] = null; choices.replaceChildren(); button.hidden = items.length < 2;
+      for (const item of [{id: null, label: all}, ...items]) {
+        const choice = document.createElement('button'); choice.type = 'button'; choice.className = 'filter-toggle'; choice.choiceId = item.id; choice.textContent = item.label;
+        if (item.count !== undefined) choice.title = `${number.format(item.count)} recorded locations`;
+        choice.onclick = () => select(item.id); choices.append(choice);
       }
       paint();
     }};
-    devicesControl.set();
+    choiceControls[id].set();
     return {config, paint};
   }
   function trackQuality(config) {
@@ -141,7 +143,7 @@ export function createFilters(root, initial, changed, committed) {
   }
   const controls = configs.map(config => {
     if (config.id === 'track') return trackQuality(config);
-    if (config.id === 'devices') return deviceFilter(config);
+    if (config.key) return choiceFilter(config);
     const {id, name, minKey, maxKey, unknown, hours} = config;
     values[minKey] = initial[minKey] ?? (hours ? 0 : null);
     values[maxKey] = initial[maxKey] ?? (hours ? 24 : null);
@@ -202,7 +204,8 @@ export function createFilters(root, initial, changed, committed) {
     return {config, paint};
   });
   return {
-    setDevices: items => devicesControl.set(items),
+    setDevices: items => choiceControls.devices.set(items),
+    setSources: items => choiceControls.source.set(items),
     values: () => ({...values, accuracy: values.accuracy ?? 0, accuracyMin: values.accuracyMin ?? 0}),
     setHours(start, end) { values.hourStart = start; values.hourEnd = end; controls[0].paint(); },
     setBounds(ranges = {}) { for (const {config, paint} of controls) { const range = ranges[config.id]; if (range?.every(Number.isFinite)) { config.bounds = [Math.floor(range[0]), Math.max(Math.floor(range[0]) + 1, Math.ceil(range[1]))]; paint(); } } },

@@ -27,6 +27,7 @@ function requestPoint(index, longitude, focus) {
 }
 function showPoint({feature, previous, next}, longitude, focus) {
   const p = feature.properties, node = document.createElement('div');
+  const [lon, lat] = feature.geometry.coordinates;
   node.className = 'point-details';
   const iso = new Date(p.time).toISOString(), day = Math.floor(p.time / DAY) * DAY, hour = new Date(p.time).getUTCHours();
   const when = document.createElement('div'); when.className = 'point-timestamp';
@@ -42,7 +43,7 @@ function showPoint({feature, previous, next}, longitude, focus) {
   const zone = document.createElement('span'); zone.className = 'point-zone'; zone.textContent = 'UTC'; when.append(zone);
   const speed = typeof p.speed === 'number' && Number.isFinite(p.speed) ? `${new Intl.NumberFormat('en', {maximumFractionDigits: p.speed < 10 ? 1 : 0}).format(p.speed)} km/h` : 'Unavailable';
   const measurements = document.createElement('dl'); measurements.className = 'point-measurements';
-  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unavailable' : `${number.format(p.altitude)} m`]]) {
+  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unavailable' : `${number.format(p.altitude)} m`], ['Coordinates', `${lat.toFixed(6)}, ${lon.toFixed(6)}`]]) {
     const term = document.createElement('dt'), detail = document.createElement('dd');
     term.textContent = label; detail.textContent = value; measurements.append(term, detail);
   }
@@ -55,7 +56,6 @@ function showPoint({feature, previous, next}, longitude, focus) {
     navigation.append(button);
   }
   when.append(navigation); node.append(when, measurements);
-  const [lon, lat] = feature.geometry.coordinates;
   selectedPoint = {lon: lon + 360 * Math.round((longitude - lon) / 360), lat, accuracy: p.accuracy};
   const position = [selectedPoint.lon, lat];
   map.getSource('point-accuracy').setData(accuracyCircle(position, p.accuracy)); paintAccuracy();

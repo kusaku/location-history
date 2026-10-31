@@ -71,6 +71,7 @@ function showPoint({feature, previous, next}, longitude, focus) {
     const pixel = map.project(position), {clientWidth, clientHeight} = map.getContainer();
     if (pixel.x < 40 || pixel.x > clientWidth - 40 || pixel.y < 40 || pixel.y > clientHeight - 40) map.panTo(position, {duration: 300});
   }
+  popup.getElement().querySelector('.maplibregl-popup-close-button').setAttribute('aria-label', 'Close popup');
   if (focus) (navigation.querySelector(`[aria-label="${focus}"]:not(:disabled)`) ?? navigation.querySelector('button:not(:disabled)'))?.focus({preventScroll: true});
 }
 function paintAccuracy() {

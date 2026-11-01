@@ -358,13 +358,18 @@ test('altitude paths and their range follow the selection, not the viewport, inc
   assert.deepEqual(query({mode: 'points', start: 60000, end: 120000}).altitudeRange, [0, 0]);
 });
 
-test('accuracy exclusions connect retained paths without bridging jump exclusions', () => {
+test('accuracy and outlier exclusions connect retained paths', () => {
   const points = [point(-60000, 0, 0), point(0, .001, 0), point(60000, 80, 0), point(120000, .002, 0), point(180000, .003, 0), point(240000, .004, 0)];
   const query = createHistoryQuery(points);
   for (const colorBy of ['time', 'speed', 'altitude']) {
     const result = query({mode: 'route', colorBy, accuracy: 50, excludeJumps: true});
     assert.equal(result.count, 5); // Only the isolated spike is removed.
-    assert.ok(result.routes.features.every(part => part.geometry.coordinates.every(([lon]) => lon <= .001) || part.geometry.coordinates.every(([lon]) => lon >= .002)));
+    for (let i = 1; i < result.routes.features.length; i++) {
+      const end = result.routes.features[i - 1].geometry.coordinates.at(-1), start = result.routes.features[i].geometry.coordinates[0];
+      assert.ok(Math.hypot(start[0] - end[0], start[1] - end[1]) < 1e-12);
+    }
+    assert.deepEqual(result.routes.features[0].geometry.coordinates[0], [0, 0]);
+    assert.deepEqual(result.routes.features.at(-1).geometry.coordinates.at(-1), [.004, 0]);
   }
 });
 

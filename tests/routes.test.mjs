@@ -5,6 +5,43 @@ import {createHistoryQuery, project, DAY} from '../js/data.mjs';
 const point = (t, lon, lat = 0, extra = {}) => ({t, lon, lat, accuracy: 4, duration: 0, ...extra});
 const vertices = result => result.routes.features.flatMap(f => f.geometry.coordinates);
 
+test('outlier removal connects valid neighbours in every journey colour and quality mode', () => {
+  const points = [point(0, 0), point(5000, .04), point(10000, .0001)];
+  const query = createHistoryQuery(points), original = structuredClone(points);
+  for (const trackMode of ['outliers', 'drift']) for (const colorBy of ['time', 'speed', 'altitude']) for (const smooth of [false, true]) {
+    const options = {mode: 'route', trackMode, colorBy, smooth, zoom: 18};
+    const result = query(options);
+    assert.equal(result.count, 2); assert.equal(result.qualityExcluded, 1);
+    assert.ok(result.routes.features.length > 0);
+    assert.deepEqual(result.routes.features[0].geometry.coordinates[0], [0, 0]);
+    assert.deepEqual(result.routes.features.at(-1).geometry.coordinates.at(-1), [.0001, 0]);
+    for (let i = 1; i < result.routes.features.length; i++) {
+      const end = result.routes.features[i - 1].geometry.coordinates.at(-1), start = result.routes.features[i].geometry.coordinates[0];
+      assert.ok(Math.hypot(start[0] - end[0], start[1] - end[1]) < 1e-12);
+    }
+    assert.ok(result.km > .007 && result.km < .012);
+    assert.equal(query({...options, viewport: [-1, -1, 1, 1]}).routes, result.routes);
+  }
+  assert.equal(query({mode: 'points', trackMode: 'off'}).count, 3);
+  assert.deepEqual(points, original);
+});
+
+test('connecting filtered journey points still respects gaps, impossible travel and excluded UTC hours', () => {
+  const hour = DAY / 24;
+  for (const [points, hours] of [
+    [[point(0, 0), point(60000, .01, 0, {accuracy: 500}), point(7 * hour, .02)], {}],
+    [[point(0, 0), point(500, .01, 0, {accuracy: 500}), point(1000, .02)], {}],
+    [[point(23 * hour, 0), point(23.5 * hour, .01, 0, {accuracy: 500}), point(DAY + 3 * hour, .02)], {hourStart: 3, hourEnd: 24}],
+  ]) {
+    const result = createHistoryQuery(points)({mode: 'route', accuracy: 100, ...hours});
+    assert.equal(result.count, 2);
+    assert.equal(result.routes.features.length, 0);
+  }
+  // Midnight is safe when the complete day is selected.
+  const midnight = createHistoryQuery([point(DAY - 5000, 0), point(DAY, .01, 0, {accuracy: 500}), point(DAY + 5000, .0001)]);
+  assert.ok(midnight({mode: 'route', accuracy: 100}).routes.features.length > 0);
+});
+
 test('journey Fit excludes disconnected fixes and stationary runs while retaining all observations', () => {
   const points = [point(0, 13.4, 52.5), point(60000, 13.401, 52.501), point(DAY, 56, 25), point(DAY + 60000, 56, 25), point(3 * DAY, 100, 14)];
   const query = createHistoryQuery(points);

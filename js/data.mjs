@@ -300,12 +300,51 @@ function accepts(p, accuracy, hourStart, hourEnd, accuracyMin = 0, accuracyUnkno
 }
 
 const uncertainty = (a, b) => Math.max(.006, ((a.accuracy ?? 0) + (b.accuracy ?? 0)) / 1000);
-const impossible = (a, b, km = distance(a, b)) => b.t >= a.t && b.t - a.t <= 6 * 3_600_000 && km - uncertainty(a, b) > (b.t - a.t) / 3_600_000 * 1000;
+const impossible = (a, b, km = distance(a, b)) => b.t >= a.t && b.t - a.t <= 6 * 3_600_000 && km - ((a.stream?.source ?? 0) === (b.stream?.source ?? 0) ? 1 : 3) * uncertainty(a, b) > (b.t - a.t) / 3_600_000 * 1000;
+// A source handover alone does not establish a spike. Mixed-source evidence
+// needs a less precise candidate bracketed by more precise observations; its
+// own accuracy then decides, without a cliff at a fixed precision ratio.
+function comparable(a, b, c) {
+  const source = b.stream?.source ?? 0, left = a.stream?.source ?? 0, right = c.stream?.source ?? 0;
+  return source === left && source === right || source !== left && source !== right
+    && a.accuracy != null && c.accuracy != null && (b.accuracy == null || b.accuracy > Math.max(a.accuracy, c.accuracy));
+}
 // One byte per observation. First identify isolated spikes, preserving their
 // neighbours. Unresolvable two-point conflicts are conservatively excluded.
-export function jumpFlags(points, options = {}) {
+export function jumpFlags(points, options = {}, devices) {
   const firstDevice = points.length ? deviceKey(points[0]) : '', firstSource = points[0]?.stream?.source ?? 0;
-  if (points.every(p => deviceKey(p) === firstDevice && (p.stream?.source ?? 0) === firstSource)) return firstSource === -1 ? new Uint8Array(points.length) : detectJumps(points, options);
+  const stationary = (at, length, flags, record) => {
+    if (!(options.stationaryWindow > 0)) return;
+    markStationarySpikes(at, length, flags, options.stationaryWindow);
+    if (record) classifyMotion(at, length, flags, options.stationaryWindow, record);
+  };
+  if (points.every(p => deviceKey(p) === firstDevice && (p.stream?.source ?? 0) === firstSource)) {
+    const flags = firstSource === -1 ? new Uint8Array(points.length) : detectJumps(points, options);
+    if (firstSource !== -1) stationary(i => points[i], points.length, flags, options.motionState);
+    return flags;
+  }
+  // Outliers use all positional sources of a device, before display filters.
+  // Reuse the existing device order; only semantic event boundaries are omitted.
+  devices ??= createDeviceIndex(points);
+  const semantic = points.some(p => p.stream?.source === -1), globalAt = i => devices.order ? devices.order[i] : i;
+  let flags;
+  if (devices.groups.length === 1 && !semantic) flags = detectJumps(points, options);
+  else {
+    flags = new Uint8Array(points.length);
+    for (const [from, to] of devices.ranges(0, points.length)) {
+      const positions = semantic ? new Uint32Array(to - from) : null;
+      let length = to - from;
+      if (positions) {
+        length = 0;
+        for (let at = from; at < to; at++) { const i = globalAt(at); if (points[i].stream?.source !== -1) positions[length++] = i; }
+      }
+      const index = i => positions ? positions[i] : globalAt(from + i);
+      const local = detectJumps(points, options, i => points[index(i)], length);
+      for (let i = 0; i < length; i++) flags[index(i)] = local[i];
+    }
+  }
+  if (!(options.stationaryWindow > 0)) return flags;
+  // Stationary-motion estimates retain each source's own cadence and accuracy.
   const byDevice = new Map(), groups = [];
   const groupFor = p => {
     const device = deviceKey(p), source = p.stream?.source ?? 0;
@@ -317,58 +356,100 @@ export function jumpFlags(points, options = {}) {
   };
   for (const p of points) { const group = groupFor(p); if (group) group.count++; }
   let size = 0; for (const group of groups) { group.from = group.cursor = size; size += group.count; }
-  const indices = new Uint32Array(size), flags = new Uint8Array(points.length);
+  const indices = new Uint32Array(size);
   for (let i = 0; i < points.length; i++) { const group = groupFor(points[i]); if (group) indices[group.cursor++] = i; }
   for (const group of groups) {
-    const local = detectJumps(points, options, i => points[indices[group.from + i]], group.count);
+    const local = new Uint8Array(group.count);
+    for (let i = 0; i < group.count; i++) local[i] = flags[indices[group.from + i]];
+    const record = options.motionState ? (i, state) => options.motionState(indices[group.from + i], state) : undefined;
+    stationary(i => points[indices[group.from + i]], group.count, local, record);
     for (let i = 0; i < group.count; i++) flags[indices[group.from + i]] = local[i];
   }
   return flags;
 }
 
-// A distant fix needs a compact majority of neighbours on both sides before
-// calling it stationary drift. Fixed scratch buffers keep this linear, even for
-// dense recordings; no speed estimates or extra columns are stored per point.
-function markStationarySpikes(at, length, flags, seconds) {
-  const half = Math.max(15, Math.min(600, seconds)) * 500;
-  const xs = new Float64Array(8), ys = new Float64Array(8), work = new Float64Array(8), ids = new Int32Array(8);
-  const median = (values, count) => { work.fill(Infinity); for (let k = 0; k < count; k++) work[k] = values[k]; work.sort(); return (work[(count - 1) >>> 1] + work[count >>> 1]) / 2; };
-  for (let i = 2; i < length - 2; i++) {
-    if (flags[i]) continue;
-    const p = at(i), scaleX = 111195 * Math.cos(p.lat * rad);
-    let count = 0, before = 0, far = false;
-    for (let side = -1; side <= 1; side += 2) for (let offset = 1; offset <= 4; offset++) {
-      const j = i + side * offset;
-      if (j < 0 || j >= length) break;
-      const q = at(j), dt = side * (q.t - p.t);
-      if (dt > half) break;
-      if (dt <= 0) continue;
-      const lon = q.lon - p.lon;
-      xs[count] = (lon - 360 * Math.round(lon / 360)) * scaleX; ys[count] = (q.lat - p.lat) * 111195; ids[count] = j;
-      far ||= xs[count] ** 2 + ys[count] ** 2 > 2500;
-      count++; if (side < 0) before++;
+// Classify local motion, not the net direction over a long trip. Adjacent-step
+// alignment preserves bends/circles; a compact noisy cloud is not fast travel.
+// Only a packed state is retained: original speed, stationary, or insufficient evidence.
+function classifyMotion(at, length, excluded, seconds, record) {
+  const half = Math.max(15, Math.min(600, seconds)) * 500, errors = new Float64Array(9);
+  let lo = 0, hi = 0;
+  for (let i = 0; i < length; i++) {
+    const p = at(i);
+    while (p.t - at(lo).t > half) lo++;
+    while (hi + 1 < length && at(hi + 1).t - p.t <= half) hi++;
+    if (excluded[i] || p.recordedSpeed != null || lo === i && hi === i) continue;
+    const scaleX = 111195 * Math.cos(p.lat * rad);
+    let count = 0, steps = 0, left = 0, right = 0, top = 0, bottom = 0;
+    let firstTime, lastTime, previousTime, previousX, previousY, oldX, oldY, oldLength, dot = 0, weight = 0, travelled = 0, maxSpeed = 0;
+    // Up to four fixes per side span the whole window, so dense recordings use
+    // the selected context. Sparse windows still use every fix.
+    for (let step = -4, previous = -1; step <= 4; step++) {
+      const k = i + Math.round(step * (step < 0 ? i - lo : hi - i) / 4);
+      if (k === previous) continue;
+      previous = k;
+      const q = at(k);
+      if (excluded[k]) continue;
+      const lon = q.lon - p.lon, x = (lon - 360 * Math.round(lon / 360)) * scaleX, y = (q.lat - p.lat) * 111195;
+      errors[count] = q.accuracy ?? 0;
+      left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+      // Neither stationary rule can accept a cloud wider than 100 metres.
+      // Stop examining an obviously moving neighbourhood immediately.
+      if ((right - left) ** 2 + (bottom - top) ** 2 > 10000) { count = 0; break; }
+      firstTime ??= q.t; lastTime = q.t;
+      if (count) {
+        const dx = x - previousX, dy = y - previousY, step = Math.hypot(dx, dy); travelled += step;
+        if (q.t > previousTime) maxSpeed = Math.max(maxSpeed, step * 3600 / (q.t - previousTime));
+        if (oldLength && step) { dot += oldX * dx + oldY * dy; weight += oldLength * step; }
+        if (step) { oldX = dx; oldY = dy; oldLength = step; steps++; }
+      }
+      previousX = x; previousY = y; previousTime = q.t; count++;
     }
-    if (!far || before < 2 || count - before < 2) continue;
-    const x = median(xs, count), y = median(ys, count), deviation = Math.hypot(x, y);
-    if (deviation <= 50) continue;
-    for (let k = 0; k < count; k++) work[k] = Math.hypot(xs[k] - x, ys[k] - y);
-    work.fill(Infinity, count); work.sort();
-    const scatter = (work[(count - 1) >>> 1] + work[count >>> 1]) / 2;
-    if (scatter > 25) continue;
-    const radius = Math.max(15, 2 * scatter);
-    if (deviation <= Math.max(50, 3 * radius)) continue;
-    let support = 0, left = 0, right = 0, from = -Infinity, to = Infinity;
-    for (let k = 0; k < count; k++) if (Math.hypot(xs[k] - x, ys[k] - y) <= radius) {
-      support++;
-      const q = at(ids[k]);
-      if (ids[k] < i) { left++; from = Math.max(from, q.t); } else { right++; to = Math.min(to, q.t); }
+    if (count < 2 || lastTime <= firstTime) continue;
+    const extent = Math.hypot(right - left, bottom - top), alignment = weight ? dot / weight : 1;
+    // Persistent direction and pace indicate movement even inside uncertainty.
+    // One fast fix followed by tiny corrections does not establish persistence.
+    if (alignment > .8 && extent > 1 && (maxSpeed <= 6 || steps >= 3 && maxSpeed <= 2 * travelled * 3600 / (lastTime - firstTime))) continue;
+    errors.fill(Infinity, count); errors.sort();
+    const accuracy = (errors[(count - 1) >>> 1] + errors[count >>> 1]) / 2, noise = Math.max(3, Math.SQRT2 * accuracy);
+    if (extent <= Math.min(100, noise) || weight && alignment < .15 && extent <= Math.max(15, Math.min(50, 3 * noise))) {
+      record(i, extent < .001 || count >= 3 && lastTime - firstTime >= 5000 ? 1 : 2);
     }
-    // A brief real walk away and back is not an outlier merely for being far.
-    if (support >= Math.ceil(count * .75) && left >= 2 && right >= 2 && deviation * 3600 / Math.max(p.t - from, to - p.t) > DEFAULT_JUMP_TOLERANCE) flags[i] = 1;
   }
 }
 
-function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE, stationaryWindow = 0} = {}, at = i => points[i], length = points.length) {
+// Check short excursions locally: matching entry/return positions plus one
+// quiet neighbour are evidence of a stable location, even in a sparse archive.
+// A wider context may contain real movement; it need not be stationary throughout.
+function markStationarySpikes(at, length, flags, seconds) {
+  const windowMs = Math.max(15, Math.min(600, seconds)) * 1000, radius = .015;
+  for (let i = 1; i < length - 1; i++) {
+    if (flags[i]) continue;
+    const anchor = at(i - 1), first = at(i), entry = first.t - anchor.t;
+    if (flags[i - 1] || entry <= 0 || entry >= windowMs) continue;
+    const outward = distance(anchor, first);
+    if (outward <= .05) continue;
+    for (let end = i + 1; end < Math.min(length, i + 4); end++) {
+      const back = at(end), elapsed = back.t - anchor.t;
+      if (back.t <= first.t || elapsed > windowMs) break;
+      const separation = distance(anchor, back);
+      if (separation <= radius) {
+        if (flags[end] || separation * 3600000 / elapsed > 3) break;
+        const before = i > 1 ? at(i - 2) : null, after = end + 1 < length ? at(end + 1) : null;
+        const quietBefore = before && !flags[i - 2] && anchor.t > before.t && anchor.t - before.t <= windowMs && distance(before, anchor) <= radius;
+        const quietAfter = after && !flags[end + 1] && after.t > back.t && after.t - back.t <= windowMs && distance(back, after) <= radius;
+        const last = at(end - 1), exit = back.t - last.t;
+        if ((quietBefore || quietAfter) && exit > 0 && Math.min(outward * 3600000 / entry, distance(last, back) * 3600000 / exit) > DEFAULT_JUMP_TOLERANCE) {
+          flags.fill(1, i, end); i = end - 1;
+        }
+        break;
+      }
+      if (separation <= .05) break;
+    }
+  }
+}
+
+function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE} = {}, at = i => points[i], length = points.length) {
   tolerance = Number.isFinite(tolerance) ? Math.max(0, Math.min(200, tolerance)) : DEFAULT_JUMP_TOLERANCE;
   const flags = new Uint8Array(length);
   for (let i = 1; i < length - 1; i++) {
@@ -377,6 +458,7 @@ function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE, stationaryWind
     const dt1 = (b.t - a.t) / 1000, dt2 = (c.t - b.t) / 1000;
     if (dt1 < 0 || dt2 < 0 || dt1 + dt2 === 0 || dt1 > 21600 || dt2 > 21600) continue;
     const ab = distance(a, b), bc = distance(b, c), speedSpike = impossible(a, b, ab) && impossible(b, c, bc);
+    if (!speedSpike && !comparable(a, b, c)) continue;
     if (!speedSpike && (dt1 <= 0 || dt2 <= 0 || dt1 > 120 || dt2 > 120)) continue;
     const ac = distance(a, c);
     if (impossible(a, c, ac)) continue;
@@ -402,13 +484,17 @@ function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE, stationaryWind
         last = j;
       }
       if (rejoined >= 0) {
-        flags.fill(1, i, rejoined); i = rejoined - 1; continue;
+        flags.fill(1, i, rejoined); previous = i - 1; i = rejoined - 1; continue;
       }
-      const before = previous >= 0 && a.t > at(previous).t && a.t - at(previous).t <= 120_000 && !impossible(at(previous), a);
-      const after = i + 1 < length && !flags[i + 1] && at(i + 1).t > b.t && at(i + 1).t - b.t <= 120_000 && !impossible(b, at(i + 1));
-      if (before && !after || (b.accuracy ?? 0) > Math.max(50, 3 * (a.accuracy ?? 0))) flags[i] = 1;
-      else if (after && !before || (a.accuracy ?? 0) > Math.max(50, 3 * (b.accuracy ?? 0))) flags[i - 1] = 1;
-      else flags[i - 1] = flags[i] = 1;
+      // A conflicting source handover needs two-sided evidence above. A pair
+      // alone cannot tell which source is stale; do not discard both endpoints.
+      if ((a.stream?.source ?? 0) === (b.stream?.source ?? 0)) {
+        const before = previous >= 0 && a.t > at(previous).t && a.t - at(previous).t <= 120_000 && !impossible(at(previous), a);
+        const after = i + 1 < length && !flags[i + 1] && at(i + 1).t > b.t && at(i + 1).t - b.t <= 120_000 && !impossible(b, at(i + 1));
+        if (before && !after || (b.accuracy ?? 0) > Math.max(50, 3 * (a.accuracy ?? 0))) flags[i] = 1;
+        else if (after && !before || (a.accuracy ?? 0) > Math.max(50, 3 * (b.accuracy ?? 0))) flags[i - 1] = 1;
+        else flags[i - 1] = flags[i] = 1;
+      }
     }
     if (!flags[i - 1]) previous = i - 1;
   }
@@ -424,6 +510,7 @@ function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE, stationaryWind
     while (loaded < Math.min(length - 1, i + 5)) { loaded++; km[loaded & 15] = distance(at(loaded - 1), at(loaded)); }
     if (flags[i]) continue;
     const a = at(i - 1), b = at(i), c = at(i + 1), dt1 = b.t - a.t, dt2 = c.t - b.t;
+    if (!comparable(a, b, c)) continue;
     if (dt1 <= 0 || dt2 <= 0 || dt1 > context || dt2 > context) continue;
     const ab = km[i & 15], bc = km[(i + 1) & 15], speed = Math.min(ab * 3_600_000 / dt1, bc * 3_600_000 / dt2);
     if (speed <= tolerance) continue;
@@ -451,11 +538,15 @@ function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE, stationaryWind
     const ac = distance(a, c), bypass = Math.max(0, ac - uncertainty(a, c)) * 3_600_000 / (dt1 + dt2);
     const precision = Math.min(a.accuracy ?? Infinity, b.accuracy ?? Infinity, c.accuracy ?? Infinity);
     const resolution = Math.max(.01, Number.isFinite(precision) ? precision / 1000 : 0);
+    // A fix from another source must also lie beyond its own stated accuracy from
+    // the position its neighbours imply at that time.
+    const share = dt1 / (dt1 + dt2), lon = c.lon - a.lon;
+    const implied = {lat: a.lat + (c.lat - a.lat) * share, lon: a.lon + (lon - 360 * Math.round(lon / 360)) * share};
+    const own = (b.stream?.source ?? 0) !== (a.stream?.source ?? 0) && b.accuracy != null ? Math.max(resolution, b.accuracy / 1000) : 0;
     // The bypass check has its own fixed noise allowance. Reusing the adjustable
     // limit here could make a looser setting accept a bypass and remove more fixes.
-    if (bypass <= typical + Math.max(DEFAULT_JUMP_TOLERANCE, spread) && ab + bc - ac > resolution) flags[i] = 1;
+    if (bypass <= typical + Math.max(DEFAULT_JUMP_TOLERANCE, spread) && ab + bc - ac > resolution && distance(b, implied) > own) flags[i] = 1;
   }
-  if (stationaryWindow > 0) markStationarySpikes(at, length, flags, stationaryWindow);
   return flags;
 }
 
@@ -497,29 +588,35 @@ export function createHistoryQuery(points) {
   const cell = p => Math.min(rows - 1, Math.floor((p.lat + 90) / 180 * rows)) * columns + Math.min(columns - 1, Math.floor((p.lon + 180) / 360 * columns));
   const offsets = new Uint32Array(cells + 1), order = new Uint32Array(points.length), projectedY = new Float64Array(points.length), intervalEnds = new Float64Array(Math.ceil(points.length / 256));
   const ranges = {accuracy: [0, 1000], altitude: [Infinity, -Infinity], speed: [0, 1000]};
-  let latestEnd = -Infinity;
+  const min = points[0]?.t ?? 0;
+  let max = points.at(-1)?.t ?? 0, latestEnd = -Infinity;
   for (let i = 0; i < points.length; i++) {
-    offsets[cell(points[i]) + 1]++; projectedY[i] = projectY(points[i].lat);
-    const p = points[i]; sourceCounts[(p.stream?.source ?? 0) + 1]++;
+    const p = points[i];
+    offsets[cell(p) + 1]++; projectedY[i] = projectY(p.lat);
+    sourceCounts[(p.stream?.source ?? 0) + 1]++;
     latestEnd = Math.max(latestEnd, p.t + p.duration); intervalEnds[i >>> 8] = latestEnd;
+    max = Math.max(max, p.t + Math.max(0, p.duration - 1));
     ranges.accuracy[1] = Math.max(ranges.accuracy[1], p.accuracy ?? 0);
     if (p.altitude != null) { ranges.altitude[0] = Math.min(ranges.altitude[0], p.altitude); ranges.altitude[1] = Math.max(ranges.altitude[1], p.altitude); }
   }
   for (let i = 1; i <= cells; i++) offsets[i] += offsets[i - 1];
   const cursors = offsets.slice();
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
-  const min = points[0]?.t ?? 0, max = points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1)?.t ?? 0);
   let histogramBudget, plan;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
-  let jumps = new Uint8Array(0), jumpTolerance, jumpWindow;
-  const speedAt = (i, options) => pointSpeed(points, i, options.excludeJumps ? jumps : null, devices);
-  const quality = (i, options) => {
+  let jumps = new Uint8Array(0), motionStates = new Uint8Array(0), jumpTolerance, jumpWindow;
+  const motionAt = (i, options) => options.trackMode === 'drift' ? motionStates[i >>> 2] >> ((i & 3) * 2) & 3 : 0;
+  const speedAt = (i, options) => {
+    const state = motionAt(i, options);
+    return state === 1 ? 0 : state === 2 ? null : pointSpeed(points, i, options.excludeJumps ? jumps : null, devices);
+  };
+  const quality = (i, options, ignoreJump = false, ignoreSpeed = false) => {
     const {accuracy = 0, accuracyMin = 0, accuracyUnknown = true, excludeJumps = false, altitudeMin = null, altitudeMax = null, altitudeUnknown = true, speedMin = null, speedMax = null, speedUnknown = true} = options;
     const p = points[i];
     if (options.device != null && devices.idAt(i) !== options.device || options.source != null && (p.stream?.source ?? 0) !== options.source) return false;
-    if (excludeJumps && jumps[i] || !accepts(p, accuracy, 0, 24, accuracyMin, accuracyUnknown)) return false;
+    if (!ignoreJump && excludeJumps && jumps[i] || !accepts(p, accuracy, 0, 24, accuracyMin, accuracyUnknown)) return false;
     if (p.altitude == null ? !altitudeUnknown : altitudeMin !== null && p.altitude < altitudeMin || altitudeMax !== null && p.altitude > altitudeMax) return false;
-    if (speedMin !== null || speedMax !== null || !speedUnknown) {
+    if (!ignoreSpeed && (speedMin !== null || speedMax !== null || !speedUnknown)) {
       const speed = speedAt(i, options);
       if (speed === null ? !speedUnknown : speedMin !== null && speed < speedMin || speedMax !== null && speed > speedMax) return false;
     }
@@ -534,30 +631,26 @@ export function createHistoryQuery(points) {
   function ensureFilter(options) {
     const {accuracy = 0, hourStart = 0, hourEnd = 24, excludeJumps = false} = options;
     const drift = options.trackMode === 'drift', window = drift ? options.driftWindow ?? 60 : 0;
-    const tolerance = Number.isFinite(options.jumpTolerance) ? Math.max(0, Math.min(200, options.jumpTolerance)) : DEFAULT_JUMP_TOLERANCE;
+    // GPS drift does not show the Outliers allowance, so it must not depend on it.
+    const tolerance = !drift && Number.isFinite(options.jumpTolerance) ? Math.max(0, Math.min(200, options.jumpTolerance)) : DEFAULT_JUMP_TOLERANCE;
     if (excludeJumps && (jumpTolerance !== tolerance || jumpWindow !== window)) {
-      jumps = jumpFlags(points, {tolerance, stationaryWindow: window}); jumpTolerance = tolerance; jumpWindow = window;
+      motionStates = window ? new Uint8Array(Math.ceil(points.length / 4)) : new Uint8Array(0);
+      const motionState = window ? (i, state) => { motionStates[i >>> 2] |= state << ((i & 3) * 2); } : undefined;
+      jumps = jumpFlags(points, {tolerance, stationaryWindow: window, motionState}, devices); jumpTolerance = tolerance; jumpWindow = window;
     }
     const nextFilterKey = JSON.stringify([options.device, options.source, options.trackMode, drift ? options.driftWindow : null, accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
     if (filterKey !== nextFilterKey) {
-      const bridge = accuracy || options.device != null || options.source != null || options.accuracyMin || options.altitudeMin != null || options.altitudeMax != null || options.speedMin != null || options.speedMax != null || options.accuracyUnknown === false || options.altitudeUnknown === false || options.speedUnknown === false;
-      const mask = new Uint8Array(points.length), totals = new Uint32Array(Math.ceil(points.length / 256) + 1), barriers = bridge ? new Uint32Array(points.length + 1) : null;
+      const mask = new Uint8Array(points.length), totals = new Uint32Array(Math.ceil(points.length / 256) + 1);
       let total = 0;
       for (let i = 0; i < points.length; i++) {
         if ((i & 255) === 0) totals[i >>> 8] = total;
-        const blocked = excludeJumps && jumps[i] || !accepts(points[i], 0, hourStart, hourEnd);
-        if (barriers && !devices.order) barriers[i + 1] = barriers[i] + (blocked ? 1 : 0);
-        if (!blocked && quality(i, options)) {
+        if (accepts(points[i], 0, hourStart, hourEnd) && quality(i, options)) {
           mask[i] = 1;
           total++;
         }
       }
       totals[totals.length - 1] = total;
-      if (barriers && devices.order) for (let at = 0; at < devices.order.length; at++) {
-        const i = devices.order[at], blocked = excludeJumps && jumps[i] || !accepts(points[i], 0, hourStart, hourEnd);
-        barriers[at + 1] = barriers[at] + (blocked ? 1 : 0);
-      }
-      filter = {mask, totals, barriers}; filterKey = nextFilterKey;
+      filter = {mask, totals}; filterKey = nextFilterKey;
     }
   }
   function ensureHistogram(width = 1024) {
@@ -619,7 +712,20 @@ export function createHistoryQuery(points) {
           const previous = points[indices[k - 1]], dt = p.t - previous.t;
           let value;
           if (colorBy === 'altitude') value = previous.altitude != null && p.altitude != null ? (previous.altitude + p.altitude) / 2 : null;
-          else value = intervalSpeed(previous, p);
+          else {
+            const a = motionAt(indices[k - 1], options), b = motionAt(indices[k], options);
+            if (dt > 15 * 60_000 || a === 2 || b === 2) value = null;
+            else if (a === 1 && b === 1) value = 0;
+            else {
+              value = intervalSpeed(previous, p);
+              // A device can alternate GPS/Wi-Fi while both endpoint speeds
+              // remain known from their own source. Reuse the point estimates.
+              if (value === null) {
+                const left = speedAt(indices[k - 1], options), right = speedAt(indices[k], options);
+                value = left !== null && right !== null ? (left + right) / 2 : null;
+              }
+            }
+          }
           if (value !== null) { weighted += value * dt; elapsed += dt; }
         }
         const value = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
@@ -838,26 +944,33 @@ export function createHistoryQuery(points) {
     if (selectionKey !== nextSelectionKey) {
       const from = lowerBound(points, start), to = lowerBound(points, end, true);
       const indices = new Uint32Array(Math.max(0, to - from)), runs = [];
-      let count = 0, km = 0, days = 0, lastDay, low = Infinity, high = -Infinity;
+      let count = 0, qualityExcluded = 0, motionClassified = 0, km = 0, days = 0, lastDay, low = Infinity, high = -Infinity;
       const recordedDays = devices.order ? new Set() : null;
+      const fullDay = (options.hourStart ?? 0) === 0 && hourEnd === 24;
       for (const [begin, finish] of devices.ranges(from, to, options.device ?? null)) {
         let previous = -1, anchor = -1, run = count, moved = false;
         for (let position = begin; position < finish; position++) {
           const i = devices.order ? devices.order[position] : position;
-          if (!filter.mask[i]) continue;
+          if (motionAt(i, options) && quality(i, options, false, true) && accepts(points[i], 0, options.hourStart ?? 0, hourEnd)) motionClassified++;
+          if (!filter.mask[i]) {
+            if (options.excludeJumps && jumps[i] && quality(i, options, true) && accepts(points[i], 0, options.hourStart ?? 0, hourEnd)) qualityExcluded++;
+            continue;
+          }
           const p = points[i];
           if (previous >= 0) {
             const dt = p.t - points[previous].t;
-            const before = devices.positions ? devices.positions[previous] : previous;
-            const adjacent = devices.neighbor(previous, 1) === i || filter.barriers && filter.barriers[position] === filter.barriers[before + 1];
-            let connected = adjacent && dt > 0 && dt <= 6 * 3_600_000 && Math.abs(p.lon - points[previous].lon) < 180;
+            // Connect retained fixes across quality/measurement exclusions.
+            // A partial daily hour window must not bridge its excluded hours.
+            let connected = dt > 0 && dt <= 6 * 3_600_000 && Math.abs(p.lon - points[previous].lon) < 180
+              && (fullDay || Math.floor(p.t / DAY) === Math.floor(points[previous].t / DAY));
             if (connected) {
               const d = distance(points[previous], p);
               connected = d / (dt / 3_600_000) <= 1000;
               if (connected) {
                 const a = points[previous];
                 moved ||= p.lon !== a.lon || p.lat !== a.lat;
-                if (dt <= 60_000 && a.recordedSpeed != null && p.recordedSpeed != null) {
+                if (motionAt(previous, options) === 1 && motionAt(i, options) === 1) anchor = i;
+                else if (dt <= 60_000 && a.recordedSpeed != null && p.recordedSpeed != null) {
                   km += (a.recordedSpeed + p.recordedSpeed) / 2 * dt / 3_600_000;
                   anchor = i;
                 } else {
@@ -878,7 +991,7 @@ export function createHistoryQuery(points) {
       }
       if (recordedDays) days = recordedDays.size;
       const selected = indices.subarray(0, count);
-      selection = {from, to, indices: selected, runs, routeCount: runs.reduce((n, [a, b]) => n + b - a, 0), count, days, km, bounds: undefined, routes: null, altitudeRange: low <= high ? [low, high] : null};
+      selection = {from, to, indices: selected, runs, routeCount: runs.reduce((n, [a, b]) => n + b - a, 0), count, qualityExcluded, motionClassified, days, km, bounds: undefined, routes: null, altitudeRange: low <= high ? [low, high] : null};
       selectionKey = nextSelectionKey;
     }
     const {from, to, indices} = selection;
@@ -964,7 +1077,7 @@ export function createHistoryQuery(points) {
     }
     const rawBounds = selection[boundsKey] ?? (mode !== 'route' && metric === 'time' && densityIndices?.length ? wrappedBounds(points, densityIndices) : null);
     const bounds = mode === 'route' && options.smooth === true && !selection.routeCurveFallback ? selection.curveFitBounds ?? rawBounds : rawBounds;
-    return {density, dots, routes, count: selection.count, visible: visibleCount, days: selection.days, km: selection.km, bounds, histogram: filter.histogram, histogramRanges: plan.ranges, histogramUnit: plan.unit, altitudeRange: selection.altitudeRange, peak, drawn};
+    return {density, dots, routes, count: selection.count, qualityExcluded: selection.qualityExcluded, motionClassified: selection.motionClassified, visible: visibleCount, days: selection.days, km: selection.km, bounds, histogram: filter.histogram, histogramRanges: plan.ranges, histogramUnit: plan.unit, altitudeRange: selection.altitudeRange, peak, drawn};
   };
   // Navigate the complete filtered window, independent of viewport and drawing stride.
   query.point = (index, options = {}) => {
@@ -1104,6 +1217,7 @@ export function createHistoryQuery(points) {
     return placeResult = {count, days: days.size, first: first ?? knownFirst, last: last ?? (knownLast === null ? null : knownLast - 1), minutes, visits: merged.length, stays: merged.reverse(), daily: [...days.values()].sort((a, b) => b.start - a.start), ...(hours ? {hours} : {})};
   };
   query.ranges = ranges;
+  query.min = min; query.max = max;
   query.devices = devices.groups.map(({id, label, count}) => ({id, label, count}));
   query.sources = Array.from(sourceCounts, (count, i) => ({id: i - 1, label: i ? SOURCE_NAMES[i - 1] : 'Timeline event', count})).filter(item => item.count);
   return query;

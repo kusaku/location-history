@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=52">
-    <script type="module" src="js/app.mjs?v=75">
+    <link rel="stylesheet" href="css/styles.css?v=53">
+    <script type="module" src="js/app.mjs?v=79">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -66,6 +66,9 @@
         <symbol id="i-fit" viewBox="0 0 24 24">
           <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>
           <circle cx="12" cy="12" r="3"/>
+        </symbol>
+        <symbol id="i-area" viewBox="0 0 24 24">
+          <path d="M4 4h16v16H4z" stroke-dasharray="3 3"/><path d="m8 16 1-4 7-7 3 3-7 7-4 1z"/>
         </symbol>
         <symbol id="i-lock" viewBox="0 0 24 24">
           <rect x="5" y="10" width="14" height="11" rx="3"/>
@@ -204,7 +207,7 @@
             <span>Path</span>
             <div id="route-shape" class="presets" role="group" aria-label="Journey path shape">
               <button type="button" data-smooth="false" aria-pressed="true">Straight</button>
-              <button type="button" data-smooth="true" aria-pressed="false" title="Continuous smooth curves. Uncertain locations may shift within their recorded accuracy. Dense tracks may use straight lines to keep the map responsive; measurements use original locations.">Smooth</button>
+              <button type="button" data-smooth="true" aria-pressed="false" title="Smooth the drawing; measurements use original locations.">Smooth</button>
             </div>
           </div>
           <div id="density-controls">
@@ -355,7 +358,7 @@
             </svg>
           </button>
           <button id="draw-area" type="button" class="map-action" hidden disabled aria-label="Draw place area" aria-pressed="false" title="Draw an area for place history">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" stroke-dasharray="3 3"/><path d="m8 16 1-4 7-7 3 3-7 7-4 1z"/></svg>
+            <svg class="icon" aria-hidden="true"><use href="#i-area"/></svg>
           </button>
         </div>
         <div id="empty-state" class="empty-state">
@@ -434,7 +437,7 @@
                   <span id="place-calendar-summary"></span>
                   <span id="place-calendar-scale" class="place-calendar-scale">Less <i data-level="0"></i><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i> More</span>
                 </div>
-                <p id="place-calendar-detail" class="hint">Select a square to filter the map to that UTC day. Arrow keys move between recorded days.</p>
+                <p id="place-calendar-detail" class="hint">Select a day or hour to filter the map.</p>
               </section>
               <section id="place-view-visits" class="place-view" role="tabpanel" aria-labelledby="place-visits-label" hidden>
                 <div id="place-visits-pagination" class="place-pagination" hidden>
@@ -581,157 +584,116 @@
           ✕
         </button>
       </div>
-      <h2 id="guide-title">
-        User guide
-      </h2>
-      <p>
-        Open one or more Google Takeout Records JSON files, monthly semantic history files, or an on-device Timeline JSON export. Phone exports combine semanticSegments with rawSignals.position, including raw accuracy, height and device speed. Their exact duplicates merge across sections and files. Empty exports are ignored in a combined import. Gzip, our delta-compressed sample, and timestamped GeoJSON points work too. A new import replaces the current history; files selected together are merged and exact duplicates removed.
-      </p>
-      <h3>
-        Export your history as JSON
-      </h3>
-      <p>
-        Current Timeline data is stored on individual devices. Export from the phone that holds the history you want to view. Menu names can vary by app version.
-      </p>
-      <details class="export-guide" name="export-method">
-        <summary>Android · system settings</summary>
-        <ol>
-          <li>Open your phone’s <b>Settings</b>, then <b>Location → Location services → Timeline</b>.</li>
-          <li>Tap <b>Export Timeline data</b>, then <b>Continue</b>.</li>
-          <li>Choose a folder and tap <b>Save</b>. Wait for the export-complete notification.</li>
-        </ol>
-        <p>
-          This route starts in the phone’s Settings app.
-          <a href="https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DAndroid&amp;hl=en" target="_blank" rel="noopener noreferrer">Google’s Android export instructions ↗</a>
-        </p>
-      </details>
-      <details class="export-guide" name="export-method">
-        <summary>iPhone / iPad · Google Maps settings</summary>
-        <ol>
-          <li>Open <b>Google Maps</b>, tap your profile picture, then <b>Settings → Location &amp; Privacy</b>. Some versions call this <b>Personal content</b>.</li>
-          <li>Tap <b>Export Timeline data</b>, then choose <b>Save to Files</b> in the share sheet.</li>
-          <li>Choose a folder and tap <b>Save</b>. The exported file is named <b>location-history.json</b>.</li>
-        </ol>
-        <p>
-          <a href="https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DiOS&amp;hl=en" target="_blank" rel="noopener noreferrer">Google’s iPhone / iPad export instructions ↗</a>
-        </p>
-      </details>
-      <details class="export-guide" name="export-method">
-        <summary>Legacy · Google Takeout (deprecated)</summary>
-        <p>
-          This is the old route for cloud-stored Location History. For Timeline that has moved to your phone, use the device export above. Previously downloaded Takeout archives still work here.
-        </p>
-        <ol>
-          <li>Open <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout ↗</a>, sign in to the relevant Google account, and choose <b>Deselect all</b>.</li>
-          <li>If available, select <b>Location History (Timeline)</b> and choose <b>JSON</b> as its format.</li>
-          <li>Choose <b>Next step → Export once</b>, select a <b>ZIP</b> archive, then <b>Create export</b>. Download the archive when Google says it is ready.</li>
-          <li>Extract the ZIP. In its Location History folder, find <b>Records.json</b>, <b>Location History.json</b>, or monthly JSON files under <b>Semantic Location History</b>.</li>
-        </ol>
-      </details>
-      <p>
-        Transfer the exported JSON to the device where you use this site, then choose <b>Open location history</b>. Extract ZIP archives first. Select all the JSON files you want to merge together in the same import.
-      </p>
-      <h3>Journeys</h3>
-      <p>Choose <b>Straight</b> or <b>Smooth</b> under Path. Smooth draws flowing curves with matching tangents at their joins. Uncertain locations may shift within their reported accuracy; the original locations, speed, distance and place-history calculations stay the same. Dense tracks may use straight geometry automatically to keep the map responsive. Device boundaries, recording gaps and excluded jumps remain disconnected.</p>
-      <h3>Place history</h3>
-      <p>Click a hexagon to inspect its original cell, or choose <b>Draw place area</b> on the map in any visualization mode. Click corners and choose <b>Finish area</b>; clicking the first corner or double-clicking also finishes. <b>Undo corner</b> removes the last corner, and Escape cancels or closes. For keyboard drawing, focus the map, pan with arrow keys, press Space to add its centre, and Enter to finish.</p>
-      <p>Choose the current window or <b>All dates</b>. Hour, accuracy, speed, altitude and jump filters still apply. Known visit intervals contribute time on every covered UTC day and hour, including days without a new GPS observation; no extra GPS points are invented. Browse <b>Year</b>, <b>Quarter</b>, <b>Month</b>, <b>Week</b> or <b>Day</b> with the calendar arrows and date/year field. Quarter shows three months; Week shows days as rows and hours as columns; Day shows hourly bars. Shade by locations or time in the area. Hover or focus an interval for its totals. Switching calendar views starts at the first day of Date window, including a day just selected in the calendar. Selecting a date updates Date window and resets hours to 00:00–24:00 without changing the calendar view or period; selecting an hour sets that hour instead. Switch to <b>Recorded stays</b> or <b>By day</b> for sortable tables, with Previous/Next for longer results. Every matching stay and day is available. Time includes movement between consecutive locations in the area less than 15 minutes apart. Short gaps merge stays without adding time.</p>
-      <h3>Filters and date windows</h3>
-      <p><b>Hours</b>, <b>Accuracy</b>, <b>Speed</b> and <b>Altitude</b> open compact range controls. Drag either thumb or enter exact bounds; Reset clears that filter. Accuracy and speed sliders give extra room to small values. Unknown measurements stay included unless you turn off <b>Include unknown</b>. The date range has two thumbs on one track, with one-day steps and YYYY-MM-DD date fields in UTC. Type a date directly, or use the calendar button (Alt+Down from the field). With Day, Week, Month, Quarter or Year selected, dragging either thumb moves the entire window without changing its day count and stops at the history edges. In All time, the thumbs resize the range independently; clicking All time restores the complete history.</p>
-      <p><b>Track quality</b>, after Accuracy, has three modes. <b>Off</b> keeps all observations. <b>Outliers</b> removes isolated spikes and short bursts of impossible travel relative to nearby movement; its +15 km/h default is an allowance above the local pattern, not a speed limit. <b>GPS drift</b> also removes brief distant excursions surrounded by a compact group of stationary recordings. Its 15–600 second context window controls how far to look for supporting neighbours, not how to average speed. With too little context, points stay included. Neither mode deletes original data or replaces speeds; each device and recording source is checked separately. Grey means speed is unavailable and does not prevent a journey from being drawn.</p>
-      <p><b>Devices</b> appears when an export identifies several devices. Select one or <b>All devices</b>; the map, distance, filters and Place history use that choice. Tracks never connect different devices. Labels are anonymous and the selection resets on import. Files without a device identifier are grouped as <b>Unknown device</b>; their devices cannot be reliably inferred from coordinates. <b>Source</b> appears when several recording sources are present, such as GPS, Wi-Fi or Cell. Select one or <b>All sources</b>; it applies to the map and Place history, and resets on import.</p>
-      <p><b>Day</b>, <b>Week</b>, <b>Month</b>, <b>Quarter</b> and <b>Year</b> resize the current date window from its start. Quarter spans three calendar months. Backward and forward move the window by the selected calendar unit; a custom window moves by its duration. Play repeats forward steps until the end of the history. Dates and hours use UTC.</p>
-      <p>Each histogram bar is a UTC day, week (Monday–Sunday), calendar month or quarter. The interval adapts to the full history and panel width; very long histories use years. First and last bars stop at the history’s dates. Hover for dates and counts, or select a bar to use its dates. Use arrow keys to move between bars, then Enter or Space to select.</p>
-      <h3>
-        Visualization modes
-      </h3>
-      <p>
-        <b>
-          Heatmap
-        </b>
-        blends nearby locations.
-        <b>
-          Hexagons
-        </b>
-        groups them into cells that adapt to zoom.
-        <b>
-          Points
-        </b>
-        shows up to 20,000 representative locations in view.
-        <b>
-          Journeys
-        </b>
-        connects consecutive observations, skipping inaccurate locations while preserving breaks at gaps over six hours, excluded jumps, hour filters, dateline crossings, or implausible speeds. In this mode, Fit includes only connected tracks; isolated fixes do not widen the view.
-      </p>
-      <p>In <b>Points</b> and <b>Journeys</b>, choose <b>Colour by Time</b>, <b>Speed</b> or <b>Altitude</b>. Time runs from Earlier to Later across Date window in UTC. Speed uses fixed stops of 0, 5, 20, 50, 130 and 1,000 km/h; grey means unavailable. The scales stay fixed when panning. Altitude uses the known height range in Date window, including zero and negative heights. It is the height recorded in the file; the export may use WGS84 rather than mean sea level. Click a point for its timestamp, accuracy, speed and altitude. In its popup, select the date to show that complete UTC day, or the time to show only that UTC hour on the same day. Heatmap and Hexagons use colour for density instead.</p>
-      <p>Distance uses accumulated displacement beyond GPS uncertainty rather than adding every small fluctuation. Short intervals with recorded device speed use its time integral. Small walks can still count, but movements below measurement uncertainty may be missed. Distance is an estimate.</p>
-      <p>Device speed is used when the export supplies it with known units. Otherwise speed is straight-line distance divided by elapsed time between neighbouring original recordings from the same device and source, averaged at a point over its incoming and outgoing intervals. Approximate Timeline event boundaries do not establish instantaneous speed. GPS accuracy does not suppress speed. Gaps over 15 minutes and travel over 1,000 km/h remain unavailable. For large date windows, speed and altitude colours average values over bounded sections; their geometry still follows the intermediate locations. A section is grey if less than half its duration has data. Only subpixel movement is reduced at the current zoom; zooming in restores detail.</p>
-      <h3>
-        Density metrics
-      </h3>
-      <p>
-        Measure density by records, distinct UTC days per cell, or estimated stationary time. Time uses recorded visit duration or stationary intervals of at most 30 minutes within 200 metres, intersected with every selected UTC day and hour, including intervals that started before Date window. It is an estimate, not a complete measure of time spent. Colour strength adapts to the 95th percentile of occupied cells in view; compare patterns, not absolute values between zoom levels. Spread changes the radius in screen pixels. Click a hexagon or point for details.
-      </p>
-      <h3>
-        Privacy
-        &amp;
-        performance
-      </h3>
-      <p>
-        The app processes imported files locally and keeps history in memory. Clear or reload to remove it. Display and filter settings are saved in this browser; imported locations and the map’s position and zoom are not. Google Analytics and Yandex Metrica measure visits and interactions, including Yandex Session Replay. The map and history controls are marked to hide their content from Yandex replay. The selected map provider receives map requests for the area you view; Google and Yandex satellite maps also load their provider’s SDK. jsDelivr serves MapLibre, and Google Fonts serves the typefaces. Large history files are read in chunks, with a limit of five million combined observations. Available device memory also affects import capacity.
-      </p>
-      <h3>
-        Base maps
-      </h3>
-      <p>
-        Choose a view tab and provider in Map settings. Google offers roads, terrain, satellite and hybrid; Yandex offers streets, satellite and hybrid. Microsoft Azure offers roads, dark roads, satellite, hybrid and world-scale shaded relief. OpenFreeMap, OpenStreetMap and Esri imagery are also available. Satellite shows imagery; hybrid adds street labels. Google and Yandex satellite maps use a flat, north-up view. Availability, usage limits and provider terms apply. Switching maps keeps your imported history and filters.
-      </p>
-      <dl class="guide-links" aria-label="Map provider links">
-        <div>
-          <dt>Google Maps</dt>
-          <dd>
-            <a href="https://www.google.com/help/terms_maps/" target="_blank" rel="noopener noreferrer" aria-label="Google Maps terms">Terms</a>
-            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" aria-label="Google privacy policy">Privacy</a>
-          </dd>
-        </div>
-        <div>
-          <dt>Yandex Maps</dt>
-          <dd>
-            <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noopener noreferrer" aria-label="Yandex Maps terms">Terms</a>
-            <a href="https://yandex.com/legal/confidential/" target="_blank" rel="noopener noreferrer" aria-label="Yandex privacy policy">Privacy</a>
-          </dd>
-        </div>
-        <div>
-          <dt>Azure Maps</dt>
-          <dd>
-            <a href="https://www.microsoft.com/licensing/terms/productoffering/MicrosoftAzure/all" target="_blank" rel="noopener noreferrer" aria-label="Microsoft Azure terms">Terms</a>
-            <a href="https://www.microsoft.com/en-us/privacy/privacystatement" target="_blank" rel="noopener noreferrer" aria-label="Microsoft privacy statement">Privacy</a>
-          </dd>
-        </div>
-        <div>
-          <dt>OpenStreetMap</dt>
-          <dd>
-            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" aria-label="OpenStreetMap attribution">Attribution</a>
-            <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer" aria-label="OpenStreetMap privacy policy">Privacy</a>
-          </dd>
-        </div>
-        <div>
-          <dt>Esri World Imagery</dt>
-          <dd>
-            <a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noopener noreferrer" aria-label="Esri World Imagery attribution and terms">Attribution</a>
-            <a href="https://www.esri.com/en-us/privacy/privacy-statements/privacy-statement" target="_blank" rel="noopener noreferrer" aria-label="Esri privacy statement">Privacy</a>
-          </dd>
-        </div>
-        <div>
-          <dt>OpenFreeMap</dt>
-          <dd>
-            <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer" aria-label="OpenFreeMap about and usage">About &amp; usage</a>
-          </dd>
-        </div>
-      </dl>
-      <p class="hint">
-        Dates and hours use UTC. Distance suppresses GPS jitter using accumulated displacement beyond measurement uncertainty. Short intervals with device speed use that measurement. It remains an estimate and can undercount small movements when accuracy is poor. Unknown accuracy stays included. No data is a valid filter result.
-      </p>
+      <div class="guide-content">
+        <h2 id="guide-title">
+          User guide
+        </h2>
+        <p>Open an export, choose a view, then narrow the dates. All dates and hours use <b>UTC</b>.</p>
+        <section class="guide-section" aria-labelledby="guide-import">
+          <h3 id="guide-import">Open your history</h3>
+          <p>Choose <span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Open location history</span> or drop files onto the map. Select several files together to merge them; exact duplicates are removed. A new import replaces the current history.</p>
+          <p>Google Takeout, phone Timeline exports and timestamped GeoJSON points are supported, including JSON.GZ. Extract ZIP archives first. Use <span class="guide-control">Load sample ↗</span> to try the public example.</p>
+          <details class="export-guide">
+            <summary>Export Google Timeline as JSON</summary>
+            <p>Export from the phone holding your history. Menu names may vary.</p>
+            <dl class="guide-exports">
+              <dt>Android</dt>
+              <dd>System <b>Settings → Location → Location services → Timeline → Export Timeline data → Continue</b>. Choose a folder and save. <a href="https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DAndroid&amp;hl=en" target="_blank" rel="noopener noreferrer">Google’s instructions ↗</a></dd>
+              <dt>iPhone / iPad</dt>
+              <dd><b>Google Maps → Profile → Settings → Location &amp; Privacy → Export Timeline data → Save to Files</b>. <a href="https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DiOS&amp;hl=en" target="_blank" rel="noopener noreferrer">Google’s instructions ↗</a></dd>
+              <dt>Legacy Takeout</dt>
+              <dd>For older cloud history, open <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout ↗</a>, deselect all, select <b>Location History (Timeline)</b> if available, and export JSON. Extract the ZIP and open <b>Records.json</b>, <b>Location History.json</b> or the monthly semantic-history files. Phone-stored Timeline uses the exports above.</dd>
+            </dl>
+          </details>
+        </section>
+        <section class="guide-section" aria-labelledby="guide-views">
+          <h3 id="guide-views">Choose a visualization</h3>
+          <dl class="guide-modes">
+            <div><dt><span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-heat"/></svg>Heatmap</span></dt><dd>Density of nearby locations. Adjust Spread, Intensity and Opacity.</dd></div>
+            <div><dt><span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-hex"/></svg>Hexagons</span></dt><dd>Density by cell. Adjust Cell size; click a cell for Place history.</dd></div>
+            <div><dt><span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-points"/></svg>Points</span></dt><dd>Individual locations. Click for details, an accuracy circle, and <span class="guide-control">←</span> <span class="guide-control">→</span> to browse points.</dd></div>
+            <div><dt><span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-route"/></svg>Journeys</span></dt><dd>Connected tracks. Choose <span class="guide-control">Straight</span> or <span class="guide-control">Smooth</span> and adjust line thickness. Long gaps and excluded hours break tracks.</dd></div>
+          </dl>
+          <p>Heatmap and Hexagons measure recorded locations, recorded days or estimated stationary time. Their colours show relative density in the current view.</p>
+          <p>Points and Journeys colour by <span class="guide-control">Time</span>, <span class="guide-control">Speed</span> or <span class="guide-control">Altitude</span> using the selected palette. Grey means unknown. Large views show representative points; zoom in for detail. Smooth curves only change the drawing.</p>
+        </section>
+        <section class="guide-section" aria-labelledby="guide-dates">
+          <h3 id="guide-dates">Date window &amp; filters</h3>
+          <ul>
+            <li><span class="guide-control">Day</span> <span class="guide-control">Week</span> <span class="guide-control">Month</span> <span class="guide-control">Quarter</span> <span class="guide-control">Year</span> resize the current window. Drag either date thumb to move it at a fixed width. <span class="guide-control">All time</span> restores all dates and lets the thumbs move independently.</li>
+            <li><span class="guide-control">▶ Play</span> <span class="guide-control">← Back</span> <span class="guide-control">→ Forward</span> step by the selected period. Click a histogram bar to select its dates.</li>
+            <li><span class="guide-control">Hours</span> <span class="guide-control">Accuracy</span> <span class="guide-control">Speed</span> <span class="guide-control">Altitude</span> open range sliders and exact values. <span class="guide-control">Reset</span> clears a filter. Unknown measurements stay included unless you disable <span class="guide-control">Include unknown</span>.</li>
+            <li><span class="guide-control">Devices</span> and <span class="guide-control">Source</span> appear when several choices exist.</li>
+          </ul>
+          <details class="export-guide">
+            <summary>Track quality</summary>
+            <p>Outliers are checked across sources within each device, before display filters. Journeys connects the remaining points when the movement is plausible.</p>
+            <dl class="guide-exports">
+              <dt><span class="guide-control">Off</span></dt><dd>Keep all observations.</dd>
+              <dt><span class="guide-control">Outliers</span></dt><dd>Remove speed spikes relative to nearby movement. A lower allowance is stricter.</dd>
+              <dt><span class="guide-control">GPS drift</span></dt><dd>Reduce stationary GPS noise and remove short outliers with the default allowance. Stationary estimates become 0; uncertain estimates stay unknown. Context window sets how far to look for nearby recordings.</dd>
+            </dl>
+          </details>
+        </section>
+        <section class="guide-section" aria-labelledby="guide-places">
+          <h3 id="guide-places">Place history</h3>
+          <p>Click a hexagon or choose <span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-area"/></svg>Draw place area</span>, click corners, then <span class="guide-control">Finish area</span>. <span class="guide-control">Undo corner</span> removes a corner; <kbd>Esc</kbd> cancels. For keyboard drawing, pan the map, press <kbd>Space</kbd> to add its centre and <kbd>Enter</kbd> to finish.</p>
+          <p>Switch between <span class="guide-control">Calendar</span>, <span class="guide-control">Recorded stays</span> and <span class="guide-control">By day</span>. The calendar has Year, Quarter, Month, Week and hourly Day views; tables sort by column. Choose <span class="guide-control">Current window</span> or <span class="guide-control">All dates</span>; the other filters still apply.</p>
+          <p>Select a date to update Date window and reset Hours to the full day; select an hour for that hour only. This also works with a point’s date and time links. Stays separated by less than 15 minutes merge. Time and distance are estimates; sparse or inaccurate recordings limit precision. Altitude is the height recorded in the file.</p>
+        </section>
+        <section class="guide-section" aria-labelledby="guide-maps">
+          <h3 id="guide-maps">Maps &amp; privacy</h3>
+          <p>Choose Roads, Terrain, Satellite, Hybrid or Dark, then a provider. <span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg>Fit</span> fits the filtered history; in Journeys it fits connected tracks. The compass resets rotation and tilt where supported.</p>
+          <p>Files stay in browser memory. <span class="guide-control">Clear</span> or reload removes them. Settings are saved; imported locations and the map camera are not. The selected map provider receives requests for the area you view.</p>
+          <p>Google Analytics and Yandex Metrica measure site usage. Yandex Session Replay hides the map and history controls. Map SDKs, jsDelivr and Google Fonts also make network requests. Imports are limited to five million locations and available device memory.</p>
+          <details class="export-guide">
+            <summary>Map providers: terms &amp; privacy</summary>
+            <dl class="guide-links" aria-label="Map provider links">
+              <div>
+                <dt>Google Maps</dt>
+                <dd>
+                  <a href="https://www.google.com/help/terms_maps/" target="_blank" rel="noopener noreferrer" aria-label="Google Maps terms">Terms</a>
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" aria-label="Google privacy policy">Privacy</a>
+                </dd>
+              </div>
+              <div>
+                <dt>Yandex Maps</dt>
+                <dd>
+                  <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noopener noreferrer" aria-label="Yandex Maps terms">Terms</a>
+                  <a href="https://yandex.com/legal/confidential/" target="_blank" rel="noopener noreferrer" aria-label="Yandex privacy policy">Privacy</a>
+                </dd>
+              </div>
+              <div>
+                <dt>Azure Maps</dt>
+                <dd>
+                  <a href="https://www.microsoft.com/licensing/terms/productoffering/MicrosoftAzure/all" target="_blank" rel="noopener noreferrer" aria-label="Microsoft Azure terms">Terms</a>
+                  <a href="https://www.microsoft.com/en-us/privacy/privacystatement" target="_blank" rel="noopener noreferrer" aria-label="Microsoft privacy statement">Privacy</a>
+                </dd>
+              </div>
+              <div>
+                <dt>OpenStreetMap</dt>
+                <dd>
+                  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" aria-label="OpenStreetMap attribution">Attribution</a>
+                  <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer" aria-label="OpenStreetMap privacy policy">Privacy</a>
+                </dd>
+              </div>
+              <div>
+                <dt>Esri World Imagery</dt>
+                <dd>
+                  <a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noopener noreferrer" aria-label="Esri World Imagery attribution and terms">Attribution</a>
+                  <a href="https://www.esri.com/en-us/privacy/privacy-statements/privacy-statement" target="_blank" rel="noopener noreferrer" aria-label="Esri privacy statement">Privacy</a>
+                </dd>
+              </div>
+              <div>
+                <dt>OpenFreeMap</dt>
+                <dd>
+                  <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer" aria-label="OpenFreeMap about and usage">About &amp; usage</a>
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </section>
+      </div>
     </dialog>
     <noscript>
       <div class="noscript">

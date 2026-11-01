@@ -1,5 +1,5 @@
-import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=36';
-import {readHistory} from './import.mjs?v=35';
+import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=40';
+import {readHistory} from './import.mjs?v=39';
 let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;
@@ -26,7 +26,7 @@ self.onmessage = async ({data}) => {
       const prepared = preparePoints(staged);
       const nextQuery = createHistoryQuery(prepared.points);
       points = prepared.points; query = nextQuery; geometry = {};
-      const report = {total: points.length, min: points[0].t, max: points.reduce((max, p) => Math.max(max, p.t + Math.max(0, p.duration - 1)), points.at(-1).t), skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name), ranges: nextQuery.ranges, devices: nextQuery.devices, sources: nextQuery.sources};
+      const report = {total: points.length, min: query.min, max: query.max, skipped, duplicates: prepared.duplicates, files: data.files.map(f => f.name), ranges: query.ranges, devices: query.devices, sources: query.sources};
       self.postMessage({type: 'imported', id, report});
     } else if (type === 'query') {
       const result = query(data.options), versions = {};

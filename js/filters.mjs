@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=36';
+import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=40';
 
 // ISO text remains editable independently of browser locale. The companion date
 // input supplies the native calendar without another calendar implementation.
@@ -51,12 +51,15 @@ export const rangePosition = (value, min, max, logarithmic = false) => max === m
 export const rangeValue = (position, min, max, logarithmic = false) => min + (logarithmic ? Math.expm1(position / 1000 * Math.log1p(max - min)) : position / 1000 * (max - min));
 
 function bindPopover(root, button, panel) {
-  panel.addEventListener('toggle', event => {
-    if (event.newState !== 'open') return;
+  const position = () => {
+    if (!panel.matches(':popover-open')) return;
     const rect = button.getBoundingClientRect(), width = panel.offsetWidth, height = panel.offsetHeight;
     panel.style.left = `${Math.max(8, Math.min(innerWidth - width - 8, rect.left))}px`;
-    panel.style.top = `${Math.max(8, rect.top >= height + 8 ? rect.top - height - 6 : Math.min(innerHeight - height - 8, rect.bottom + 6))}px`;
-  });
+    panel.style.top = `${Math.max(8, Math.min(innerHeight - height - 8, rect.top >= height + 8 ? rect.top - height - 6 : rect.bottom + 6))}px`;
+  };
+  panel.addEventListener('toggle', position);
+  window.addEventListener('resize', position);
+  new ResizeObserver(position).observe(panel);
   root.append(button, panel);
 }
 
@@ -74,6 +77,7 @@ export function createFilters(root, initial, changed, committed) {
   const number = new Intl.NumberFormat('en', {maximumFractionDigits: 1});
   const clock = value => `${String(value).padStart(2, '0')}:00`;
   const choiceControls = {};
+  let qualityControl;
   function choiceFilter(config) {
     const {id, name, key, all} = config;
     values[key] = null;
@@ -110,14 +114,15 @@ export function createFilters(root, initial, changed, committed) {
     values.driftWindow = initial.driftWindow ?? 60;
     const button = document.createElement('button'), panel = document.createElement('div');
     button.type = 'button'; button.className = 'filter-toggle'; button.id = 'filter-track'; button.setAttribute('popovertarget', 'filter-track-panel');
-    button.title = 'Remove isolated jumps and distant fixes among stationary neighbours';
+    button.title = 'Remove outliers and distinguish stationary GPS noise from movement';
     panel.id = 'filter-track-panel'; panel.className = 'filter-popover'; panel.setAttribute('popover', 'auto');
     panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Track quality');
     panel.innerHTML = `<div class="filter-title"><strong>Track quality</strong><button type="button" data-reset>Reset</button></div>
       <div class="quality-modes" role="group" aria-label="Track quality mode"><button class="filter-toggle" type="button" data-track-mode="off">Off</button><button class="filter-toggle" type="button" data-track-mode="outliers">Outliers</button><button class="filter-toggle" type="button" data-track-mode="drift">GPS drift</button></div>
       <div class="filter-values quality-values"><label><span data-label></span><input type="number" step="1"><span data-unit></span></label></div>
-      <input class="quality-slider" type="range" step="1"><p class="hint"></p>`;
+      <input class="quality-slider" type="range" step="1"><p class="hint"></p><p class="hint" data-quality-count hidden></p>`;
     const field = panel.querySelector('input[type=number]'), slider = panel.querySelector('input[type=range]');
+    const counter = panel.querySelector('[data-quality-count]'); let excluded = null, classified = 0;
     function paint() {
       const drift = values.trackMode === 'drift', value = drift ? values.driftWindow : values.jumpTolerance;
       button.textContent = `Track quality · ${values.trackMode === 'off' ? 'Off' : drift ? `GPS drift · ${value}s` : `+${number.format(value)} km/h`}`;
@@ -125,19 +130,29 @@ export function createFilters(root, initial, changed, committed) {
       for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.setAttribute('aria-pressed', String(choice.dataset.trackMode === values.trackMode));
       panel.querySelector('[data-label]').textContent = drift ? 'Context window' : 'Allowed speed spike';
       panel.querySelector('[data-unit]').textContent = drift ? 's' : 'km/h';
-      panel.querySelector('.hint').textContent = drift ? 'Removes isolated distant fixes surrounded by stationary recordings from the same device and source. Speed is not averaged. Valid points and paths stay visible.' : 'Allowance above nearby movement. Lower values filter more. Steady fast travel is retained.';
+      panel.querySelector('.hint').textContent = drift ? 'Reduces stationary GPS noise and removes short outliers. Stationary estimates become 0; uncertain estimates stay unknown.' : 'Filters speed spikes relative to nearby movement. Lower values are stricter.';
       for (const input of [field, slider]) { input.min = drift ? 15 : 0; input.max = drift ? 600 : 200; input.value = value; input.disabled = values.trackMode === 'off'; }
       field.setAttribute('aria-label', drift ? 'GPS drift context' : 'Allowed speed spike');
       slider.setAttribute('aria-label', drift ? 'GPS drift context slider' : 'Allowed speed spike slider');
       slider.setAttribute('aria-valuetext', drift ? `${value} seconds` : `${value} km/h above nearby movement`);
+      paintCount();
     }
-    const apply = () => { values.excludeJumps = values.trackMode !== 'off'; paint(); changed('track'); committed(); };
+    function paintCount() {
+      counter.hidden = excluded === null;
+      counter.textContent = excluded === null ? '' : `${number.format(excluded)} outliers excluded.${values.trackMode === 'drift' ? ` ${number.format(classified)} stationary or uncertain estimates before Speed filtering.` : ''}`;
+    }
+    const apply = () => { excluded = null; values.excludeJumps = values.trackMode !== 'off'; paint(); changed('track'); committed(); };
     for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.onclick = () => { values.trackMode = choice.dataset.trackMode; apply(); };
-    const set = value => { if (values.trackMode === 'drift') values.driftWindow = Math.max(15, Math.min(600, Math.round(value))); else values.jumpTolerance = Math.max(0, Math.min(200, value)); };
+    const set = value => { excluded = null; if (values.trackMode === 'drift') values.driftWindow = Math.max(15, Math.min(600, Math.round(value))); else values.jumpTolerance = Math.max(0, Math.min(200, value)); };
     slider.oninput = () => { set(Number(slider.value)); paint(); };
     slider.onchange = () => { changed('track'); committed(); };
     field.onchange = () => { if (!field.value.trim() || !Number.isFinite(Number(field.value))) { paint(); return; } set(Number(field.value)); apply(); };
     panel.querySelector('[data-reset]').onclick = () => { values.trackMode = 'off'; values.jumpTolerance = DEFAULT_JUMP_TOLERANCE; values.driftWindow = 60; apply(); };
+    qualityControl = {set(count, speeds = 0) {
+      count = Number.isInteger(count) && count >= 0 ? count : null;
+      if (excluded === count && classified === speeds) return;
+      excluded = count; classified = speeds; paintCount();
+    }};
     bindPopover(root, button, panel); paint();
     return {config, paint};
   }
@@ -180,7 +195,7 @@ export function createFilters(root, initial, changed, committed) {
       const caption = hours ? `${clock(low)}–${clock(high)}` : low === null && high === null ? 'All' : low === null ? `${id === 'accuracy' ? '<' : '≤'}${format(high)} ${config.unit}` : high === null ? `≥${format(low)} ${config.unit}` : `${format(low)}–${format(high)} ${config.unit}`;
       button.textContent = `${name} · ${active ? caption : 'All'}${!hours && values[unknown] === false ? ' · known' : ''}`;
       button.classList.toggle('active', active);
-      button.title = `${name} range${unknown ? '. Unknown values are included unless disabled in this filter.' : ''}`;
+      button.title = `${name} range`;
       toggle?.setAttribute('aria-pressed', String(values[unknown]));
     }
     function set(i, value, slider = false) {
@@ -206,6 +221,7 @@ export function createFilters(root, initial, changed, committed) {
   return {
     setDevices: items => choiceControls.devices.set(items),
     setSources: items => choiceControls.source.set(items),
+    setQualityEffect: (count, speeds) => qualityControl.set(count, speeds),
     values: () => ({...values, accuracy: values.accuracy ?? 0, accuracyMin: values.accuracyMin ?? 0}),
     setHours(start, end) { values.hourStart = start; values.hourEnd = end; controls[0].paint(); },
     setBounds(ranges = {}) { for (const {config, paint} of controls) { const range = ranges[config.id]; if (range?.every(Number.isFinite)) { config.bounds = [Math.floor(range[0]), Math.max(Math.floor(range[0]) + 1, Math.ceil(range[1]))]; paint(); } } },

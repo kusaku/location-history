@@ -1875,10 +1875,10 @@ dialog {
   color: var(--ink);
   border: 1px solid #43503c;
   border-radius: 16px;
-  max-width: 720px;
+  max-width: 780px;
   width: calc(100% - 32px);
   max-height: 85dvh;
-  padding: 28px;
+  padding: 0;
   box-shadow: 0 30px 100px #0007;
 }
 
@@ -1931,15 +1931,103 @@ dialog p {
   font-weight: 600;
 }
 
-.export-guide ol {
+#guide[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#guide .dialog-heading {
+  flex-shrink: 0;
+  padding: 12px 24px;
+}
+
+.guide-content {
+  overflow: auto;
+  padding: 0 24px 24px;
+}
+
+#guide h2 {
+  margin: 10px 0;
+}
+
+.guide-section {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.guide-section h3 {
+  margin: 0 0 10px;
+}
+
+.guide-section :is(li,dd) {
   color: #b4c1b0;
   font-size: 12px;
   line-height: 1.8;
+}
+
+.guide-section ul {
   padding-left: 20px;
 }
 
-.export-guide li+li {
+.guide-section li+li {
   margin-top: 8px;
+}
+
+.guide-control, #guide kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border: 1px solid #43513f;
+  border-radius: 5px;
+  background: #202b1d;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.guide-control .icon {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+
+.guide-modes {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.guide-modes>div {
+  display: grid;
+  grid-template-columns: 115px minmax(0,1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.guide-modes dd {
+  margin: 0;
+}
+
+.guide-exports dt {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.guide-exports dd {
+  margin: 4px 0 12px;
+}
+
+@media(max-width:480px) {
+  .guide-modes>div {
+    grid-template-columns: minmax(0,1fr);
+    gap: 4px;
+  }
 }
 
 .guide-links {
@@ -2068,6 +2156,7 @@ dialog p {
     min-height: 0;
   }
   .workspace {
+    --map-inset: 14px;
     order: -1;
     height: calc(100svh - 62px);
     min-height: 590px;
@@ -2094,9 +2183,6 @@ dialog p {
     text-decoration: none;
     min-height: 36px;
     align-content: center;
-  }
-  .workspace {
-    --map-inset: 14px;
   }
   .map-stats span {
     font-size: 8px;
@@ -2172,19 +2258,9 @@ dialog p {
   .source-row>span {
     max-width: none;
   }
-  dialog {
-    padding: 22px;
-  }
   .maplibregl-ctrl-attrib {
     font-size: 8px!important;
     line-height: 14px!important;
-  }
-}
-
-@media(max-width:700px) {
-  .window-filters {
-    flex-basis: 100%;
-    justify-content: flex-start;
   }
 }
 
@@ -2194,9 +2270,6 @@ dialog p {
   }
   .map-stats strong {
     font-size: 16px;
-  }
-  .timeline-inputs {
-    gap: 6px;
   }
   .window-filters,
   .timeline-controls>.presets {
@@ -2293,6 +2366,8 @@ dialog p {
   inset: auto;
   margin: 0;
   width: min(300px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
   padding: 14px;
   border: 1px solid #63725a;
   border-radius: 9px;
@@ -2360,6 +2435,10 @@ dialog p {
   margin-left: auto;
 }
 @media(max-width:700px) {
+  .window-filters {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
   .timeline-inputs {
     display: grid;
     grid-template-columns: 1fr 1fr;

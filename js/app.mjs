@@ -1,17 +1,18 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=31';
-import {createPlaceHistory} from './place-history.mjs?v=37';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=35';
+import {createPlaceHistory} from './place-history.mjs?v=41';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=36';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=36';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=38';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=19';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=40';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=40';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=42';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=23';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
+const distanceNumber = [new Intl.NumberFormat('en', {maximumFractionDigits: 3}), new Intl.NumberFormat('en', {maximumFractionDigits: 1})];
 const date = t => new Date(t).toISOString().slice(0, 10);
 const empty = () => ({type: 'FeatureCollection', features: []});
 let preferences = loadSettings(MAP_ORDER);
 const state = {...preferences, report: null, result: null, importing: false, start: 0, end: 0};
-const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into zoom-dependent hexagonal cells.', points: 'Observations coloured by time in Date window. Click a point for time, accuracy, speed and altitude.', route: 'Paths coloured by time in Date window. Accuracy filtering connects retained locations; gaps and excluded jumps still break paths.'};
+const descriptions = {heat: 'Density of nearby recorded locations.', hex: 'Locations grouped into cells. Click a cell for Place history.', points: 'Locations coloured by time. Click a point for details.', route: 'Tracks coloured by time. Long gaps and excluded hours break paths.'};
 let map, mapLibrary, nativeMaps, placeHistory, attributionControl, worker, queryTimer, querying = false, queryDirty = false, queryId = 0, styleRequest = 0, attributionRequest = 0, sampleRequest = 0, playback, popup, statusTimer;
 let dateFields = [];
 let currentAttribution = '', filters, selectedPoint, pointPending, pointRequest = 0;
@@ -192,7 +193,7 @@ function paint(changed) {
   $('intensity-value').textContent = `${view.intensity.toFixed(1)}×`;
   $('line-width-value').textContent = `${view.lineWidth ?? 1.5} px`;
   $('opacity-value').textContent = `${Math.round(view.opacity * 100)}%`;
-  $('mode-description').textContent = view.colorBy === 'speed' ? 'Recorded speed when available, otherwise estimated within each source and device. Grey means unavailable.' : view.colorBy === 'altitude' ? 'Recorded altitude in metres. Grey means unavailable.' : descriptions[state.mode];
+  $('mode-description').textContent = view.colorBy === 'speed' ? 'Recorded or estimated speed. Grey means unknown.' : view.colorBy === 'altitude' ? 'Recorded altitude in metres. Grey means unknown.' : descriptions[state.mode];
   $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[view.metric];
   paintLegend();
   paintHistory(map, {...state, ...view, altitudeRange: state.result?.altitudeRange}, changed === 'mode' ? undefined : changed);
@@ -283,11 +284,13 @@ function createHistogram(count) {
   }
 }
 function showResult(result) {
+  const previous = state.result;
+  const histogramChanged = !previous || previous.histogramUnit !== result.histogramUnit || previous.histogram.length !== result.histogram.length || result.histogram.some((count, i) => count !== previous.histogram[i] || result.histogramRanges[i].start !== previous.histogramRanges[i].start || result.histogramRanges[i].end !== previous.histogramRanges[i].end);
   state.result = {...state.result, ...result};
-  if (state.views[state.mode].colorBy === 'altitude') { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode], altitudeRange: result.altitudeRange}, 'altitude'); }
+  if (state.views[state.mode].colorBy === 'altitude' && (!previous || previous.altitudeRange?.[0] !== result.altitudeRange?.[0] || previous.altitudeRange?.[1] !== result.altitudeRange?.[1])) { paintLegend(); paintHistory(map, {...state, ...state.views[state.mode], altitudeRange: result.altitudeRange}, 'altitude'); }
   $('stat-records').textContent = number.format(result.count);
   $('stat-days').textContent = number.format(result.days);
-  $('stat-distance').textContent = new Intl.NumberFormat('en', {maximumFractionDigits: result.km < 1 ? 3 : 1}).format(result.km);
+  $('stat-distance').textContent = distanceNumber[result.km < 1 ? 0 : 1].format(result.km);
   $('range-summary').textContent = result.count || result.drawn ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
   const unit = {day: 'Day', week: 'Week', month: 'Month', quarter: 'Quarter', year: 'Year'}[result.histogramUnit] ?? result.histogramUnit;
   $('render-note').textContent = `${unit} / bar · ${!result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`}`;
@@ -296,12 +299,14 @@ function showResult(result) {
   const max = Math.max(1, ...result.histogram);
   [...$('histogram').children].forEach((bar, i) => {
     const range = result.histogramRanges[i];
-    bar.style.setProperty('--bar-height', `${Math.max(3, Math.sqrt(result.histogram[i] / max) * 100)}%`);
+    if (histogramChanged) {
+      bar.style.setProperty('--bar-height', `${Math.max(3, Math.sqrt(result.histogram[i] / max) * 100)}%`);
+      const dates = `${formatDate(range.start)}${Math.floor(range.start / DAY) === Math.floor(range.end / DAY) ? '' : ` — ${formatDate(range.end)}`}`;
+      bar.title = `${unit} · ${dates} · ${number.format(result.histogram[i])} ${result.histogram[i] === 1 ? 'location' : 'locations'}`;
+      bar.setAttribute('aria-label', bar.title);
+    }
     bar.disabled = false;
     bar.className = range.end >= state.start && range.start <= state.end ? 'selected' : 'outside';
-    const dates = `${formatDate(range.start)}${Math.floor(range.start / DAY) === Math.floor(range.end / DAY) ? '' : ` — ${formatDate(range.end)}`}`;
-    bar.title = `${unit} · ${dates} · ${number.format(result.histogram[i])} ${result.histogram[i] === 1 ? 'location' : 'locations'}`;
-    bar.setAttribute('aria-label', bar.title);
     bar.setAttribute('aria-pressed', String(state.start === range.start && state.end === range.end));
   });
   if (!$('histogram').querySelector('button:not(:disabled)[tabindex="0"]')) $('histogram').querySelector('button:not(:disabled)')?.setAttribute('tabindex', '0');
@@ -380,7 +385,7 @@ async function loadSample() {
 function clearHistory() {
   sampleRequest++; stopPlayback(); closePoint(); placeHistory?.clear();
   clearTimeout(queryTimer); worker.terminate(); createWorker(); querying = false; queryDirty = false; setBusy(false);
-  state.report = null; state.result = null; state.period = 'all'; filters.setDevices([]); filters.setSources([]); setEnabled(false); paintSources();
+  state.report = null; state.result = null; state.period = 'all'; filters.setDevices([]); filters.setSources([]); filters.setQualityEffect(null); setEnabled(false); paintSources();
   $('empty-state').hidden = false; $('source-label').textContent = 'No history loaded'; $('dataset-tag').textContent = 'No history loaded';
   $('import-detail').textContent = ''; $('range-summary').textContent = 'Load history to filter by date'; $('render-note').textContent = '';
   for (const id of ['stat-records', 'stat-days', 'stat-distance']) $(id).textContent = '—';
@@ -390,7 +395,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=36', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=40', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {
@@ -410,7 +415,7 @@ function createWorker() {
       placeHistory?.clear();
       $('histogram').replaceChildren();
       state.report = data.report; setBusy(false); setEnabled(true); state.result = null;
-      filters.setDevices(data.report.devices); filters.setSources(data.report.sources); filters.setBounds(data.report.ranges);
+      filters.setDevices(data.report.devices); filters.setSources(data.report.sources); filters.setQualityEffect(null); filters.setBounds(data.report.ranges);
       $('empty-state').hidden = true;
       $('source-label').textContent = state.nextSample ? 'Bundled sample' : data.report.files.length === 1 ? data.report.files[0] : `${data.report.files.length} files merged`;
       $('source-label').title = data.report.files.join(', ');
@@ -423,6 +428,7 @@ function createWorker() {
     } else if (data.type === 'result') {
       querying = false;
       if (queryDirty) { queryDirty = false; requestQuery(); return; }
+      filters.setQualityEffect(data.result.qualityExcluded, data.result.motionClassified);
       showResult(data.result);
       if (state.fitNext) { state.fitNext = false; fitHistory(); }
     }

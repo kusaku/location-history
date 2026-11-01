@@ -34,6 +34,11 @@ test('accuracy filtering connects retained locations and panning reuses selectio
 });
 
 const fix = (t, metres, accuracy = 5) => ({t, lon: metres / 111195, lat: 0, accuracy, duration: 0});
+test('an impossible burst keeps its return anchor when another conflict follows', () => {
+  const points = [fix(0, 0), fix(100000, 0), fix(120000, 100000), fix(121000, 100000), fix(130000, 0), fix(140000, 1000000)];
+  assert.deepEqual([...jumpFlags(points)], [0, 0, 1, 1, 0, 1]);
+});
+
 test('short repeated impossible excursions are excluded without discarding their valid neighbours', () => {
   for (const count of [2, 3, 7]) {
     const fixes = [fix(0, 0), fix(60000, 0), ...Array.from({length: count}, (_, i) => fix(300000 + i * 60000, 4700000)), fix(310000 + count * 60000, 0), fix(370000 + count * 60000, 0)];

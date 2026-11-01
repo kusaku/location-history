@@ -54,13 +54,111 @@ test('speed ignores semantic event boundaries and estimates each provider and de
   for (let i = 0; i < mixed.length; i++) assert.ok(Math.abs(pointSpeed(mixed, i, null, devices) - 6) < .001);
 });
 
-test('device index stays allocation-free for a single device and outlier detection never compares devices or providers', () => {
+test('journey speed stays known when one device alternates recording sources', () => {
+  const points = Array.from({length: 8}, (_, i) => point(i * 10000, i * 10, 'a', i % 2 ? 2 : 1));
+  const query = createHistoryQuery(points);
+  for (const options of [{}, {trackMode: 'drift', driftWindow: 60}, {accuracy: 10}, {source: 1}]) {
+    const dots = query({...options, mode: 'points'}).dots.features;
+    const routes = query({...options, mode: 'route', colorBy: 'speed'}).routes.features;
+    assert.ok(dots.every(f => Math.abs(f.properties.speed - 3.6) < .001));
+    assert.ok(routes.length > 0 && routes.every(f => Math.abs(f.properties.speed - 3.6) < .001));
+  }
+});
+
+test('journey speed uses recorded endpoints across source changes but does not fill unknowns or long gaps', () => {
+  const points = [point(0, 0, 'a', 1), point(10000, 10, 'a', 2)];
+  const speeds = input => createHistoryQuery(input)({mode: 'route', colorBy: 'speed'}).routes.features.map(f => f.properties.speed);
+  assert.deepEqual(speeds(points), [null]);
+  assert.deepEqual(speeds(points.map((p, i) => ({...p, recordedSpeed: i ? 15 : 5}))), [10]);
+  assert.deepEqual(speeds(points.map((p, i) => ({...p, ...(i ? {recordedSpeed: 15} : {})}))), [null]);
+  assert.deepEqual(speeds(points.map((p, i) => ({...p, t: i * 3600000, recordedSpeed: 5}))), [null]);
+  const stops = createHistoryQuery([0, 3000, 6000, 3600000, 3603000, 3606000].map(t => point(t, t < 3600000 ? 0 : 1, 'a', 1)));
+  const options = {trackMode: 'drift', driftWindow: 60};
+  assert.ok(stops({...options, mode: 'points'}).dots.features.every(f => f.properties.speed === 0));
+  assert.deepEqual(stops({...options, mode: 'route', colorBy: 'speed'}).routes.features.map(f => f.properties.speed), [null]);
+});
+
+test('device index stays allocation-free for a single device and outlier detection keeps devices separate across sources', () => {
   assert.equal(createDeviceIndex([point(0), point(1)]).order, null);
-  const mixed = Array.from({length: 50}, (_, i) => [point(i * 10000, i, 'a', 1), point(i * 10000 + 10, 13000 + i, 'b', 1), point(i * 10000 + 20, 30000 + i, 'a', 3)]).flat();
+  const mixed = Array.from({length: 50}, (_, i) => [point(i * 10000, i, 'a', 1), point(i * 10000 + 10, 13000 + i, 'b', 1), point(i * 10000 + 20, 1 + i, 'a', 3)]).flat();
   assert.ok(jumpFlags(mixed).every(v => !v));
   const index = createDeviceIndex(mixed);
   assert.equal(index.order.byteLength + index.positions.byteLength, 8 * mixed.length);
   assert.equal(index.neighbor(0, 1), 2); assert.equal(index.neighbor(1, 1), 4);
+});
+
+test('precise moving GPS context excludes a lateral Network outlier before source and date filters', () => {
+  const points = Array.from({length: 15}, (_, i) => point(i * 5000, i * 125, 'a', i === 7 ? 4 : 1, i === 7 ? 300 : 12));
+  points[7].lat = 700 / 111195;
+  points.push(point(355000, 4080, 'a', 4, 300));
+  const original = structuredClone(points), query = createHistoryQuery(points);
+  const area = {geometry: {coordinates: [[[-.1, -.1], [.1, -.1], [.1, .1], [-.1, .1], [-.1, -.1]]]}};
+  assert.ok(query.point(7).feature.properties.speed > 36 && query.point(7).feature.properties.speed < 38);
+  assert.deepEqual([...jumpFlags(points)], points.map((_, i) => i === 7 ? 1 : 0));
+  for (const trackMode of ['outliers', 'drift']) {
+    assert.equal(query({trackMode}).count, points.length - 1);
+    assert.equal(query.point(7, {trackMode, source: 4}), null);
+    assert.equal(query({trackMode, source: 4}).count, 1);
+    assert.equal(query({trackMode, start: points[7].t, end: points[7].t}).count, 0);
+    assert.equal(query.place(area, {trackMode}).count, points.length - 1);
+    assert.ok(query.point(6, {trackMode})); assert.ok(query.point(8, {trackMode}));
+  }
+  assert.equal(query({trackMode: 'off'}).count, points.length);
+  assert.deepEqual(points, original);
+  const differentDevice = points.map((p, i) => i === 7 ? {...p, stream: {...p.stream, device: 'b'}} : p);
+  assert.equal(jumpFlags(differentDevice)[7], 0);
+});
+
+test('a coarse-source majority cannot discard a much more precise GPS fix', () => {
+  const points = Array.from({length: 21}, (_, i) => point(i * 1000, i === 10 ? 700 : 0, 'a', i === 10 ? 1 : 4, i === 10 ? 5 : 300));
+  const flags = jumpFlags(points);
+  assert.equal(flags[10], 0);
+  // Claimed precision cannot excuse a physically impossible excursion.
+  const impossible = points.map((p, i) => i === 10 ? {...p, lon: 30000 / 111195} : p);
+  assert.equal(jumpFlags(impossible)[10], 1);
+  // A persistent source handover is movement, not an isolated excursion.
+  const handover = Array.from({length: 30}, (_, i) => point(i * 5000, i * 125, 'a', i < 15 ? 4 : 1, i < 15 ? 300 : 5));
+  assert.ok(jumpFlags(handover).every(flag => !flag));
+  const staleHandover = [...Array.from({length: 10}, (_, i) => point(i * 5000, i * 125, 'a', 1, 10)), ...Array.from({length: 10}, (_, i) => point(52000 + i * 5000, 500, 'a', 5, 15))];
+  assert.equal(jumpFlags(staleHandover)[9], 0);
+  // A stale second source must not erase either endpoint of a coherent GPS path.
+  const precise = Array.from({length: 15}, (_, i) => point(i * 15000, i * 30, 'a', 1, 10));
+  precise.splice(8, 0, point(105500, 462, 'a', 2, 20));
+  const retained = jumpFlags(precise);
+  assert.equal(retained[7], 0); assert.equal(retained[9], 0);
+});
+
+test('a coarse fix between GPS fixes is an outlier only beyond its own stated accuracy', () => {
+  const flagged = (accuracy, offset, longitude = 0) => {
+    const points = Array.from({length: 21}, (_, i) => point(i * 5000, i * 70, 'a', 1, 10));
+    points.splice(11, 0, {...point(52500, 735, 'a', 2, accuracy), lat: offset / 111195});
+    for (const p of points) p.lon = ((p.lon + longitude + 180) % 360 + 360) % 360 - 180;
+    return jumpFlags(points)[11];
+  };
+  for (const longitude of [0, 179.9934]) {
+    // No cliff at a fixed precision ratio, including a track across the dateline.
+    assert.equal(flagged(30, 500, longitude), 1); assert.equal(flagged(31, 500, longitude), 1);
+    // Consistent with its own stated accuracy, so it is not an outlier.
+    assert.equal(flagged(300, 200, longitude), 0); assert.equal(flagged(40, 30, longitude), 0);
+  }
+});
+
+test('GPS drift uses its whole context window for dense recordings', () => {
+  const jitter = i => [Math.cos(i * 1.3) * 7, Math.sin(i * 2.1) * 7];
+  const track = kmh => Array.from({length: 181}, (_, i) => { const [x, y] = jitter(i); return {...point(i * 1000, i * kmh / 3.6 + x, '', 1, 10), lat: y / 111195}; });
+  const speeds = (points, driftWindow) => createHistoryQuery(points)({mode: 'points', trackMode: 'drift', driftWindow}).dots.features.slice(30, -30).map(f => f.properties.speed);
+  // Walking is not stationary once the window spans more than the GPS noise.
+  assert.ok(speeds(track(4.5), 15).some(speed => speed === 0));
+  assert.ok(speeds(track(4.5), 60).every(speed => speed > 0));
+  assert.ok(speeds(track(0), 60).every(speed => speed === 0));
+});
+
+test('GPS drift does not depend on the hidden Outliers allowance', () => {
+  const points = Array.from({length: 15}, (_, i) => point(i * 60_000, i === 7 ? 1000 : 0));
+  const query = createHistoryQuery(points), spike = {start: points[7].t, end: points[7].t, trackMode: 'drift', driftWindow: 60};
+  assert.equal(query({...spike, jumpTolerance: 100}).count, 0);
+  assert.equal(query({...spike, jumpTolerance: 100}).count, query({...spike, jumpTolerance: 0}).count);
+  assert.equal(query({...spike, trackMode: 'outliers', jumpTolerance: 100}).count, 1);
 });
 
 test('map statistics, routes, point navigation and place filters share the selected device', () => {
@@ -115,7 +213,7 @@ test('source choices count imported observations and consistently filter maps, n
 
 test('GPS drift keeps real walking, driving and flights without averaging their speeds', () => {
   for (const kmh of [1, 5, 60, 900]) {
-    const points = Array.from({length: 100}, (_, i) => [point(i * 5000, i * 5 * kmh / 3.6, '', 1), point(i * 5000 + 10, i * 5 * kmh / 3.6 + 500, '', 4)]).flat();
+    const points = Array.from({length: 100}, (_, i) => [point(i * 5000, i * 5 * kmh / 3.6, '', 1), point(i * 5000 + 10, (i * 5 + .01) * kmh / 3.6, '', 4)]).flat();
     const query = createHistoryQuery(points), off = query({mode: 'points'});
     for (const driftWindow of [15, 60, 600]) {
       const result = query({mode: 'points', trackMode: 'drift', driftWindow});
@@ -131,8 +229,9 @@ test('stationary jitter and sparse night records remain visible, with journeys i
   for (const driftWindow of [15, 60, 120, 300, 600]) {
     const options = {trackMode: 'drift', driftWindow};
     const route = query({...options, mode: 'route', colorBy: 'speed'});
-    assert.equal(route.count, points.length); assert.deepEqual(route.routes, original.routes);
-    assert.equal(query({...options, speedUnknown: false}).count, points.length);
+    assert.equal(route.count, points.length); assert.deepEqual(route.routes.features.map(f => f.geometry), original.routes.features.map(f => f.geometry));
+    assert.ok(route.routes.features.every(f => f.properties.speed === null || f.properties.speed < 6));
+    assert.ok(query({...options, speedUnknown: false}).count >= points.length - 2);
     assert.equal(query.place(box, options).count, points.length);
   }
   const unknown = createHistoryQuery(points.map(p => ({...p, stream: {device: '', source: -1}})));
@@ -150,11 +249,51 @@ test('GPS drift excludes a brief distant burst among stationary neighbours witho
   const query = createHistoryQuery(points), options = {trackMode: 'drift', driftWindow: 120};
   const result = query({...options, mode: 'points'});
   assert.equal(result.count, 98); assert.equal(query.place(box, options).count, 98);
+  assert.equal(result.qualityExcluded, 2);
   assert.ok(result.dots.features.every(f => f.properties.index !== 50 && f.properties.index !== 51));
   assert.ok(result.dots.features.every(f => f.properties.speed < 2));
   assert.equal(query({...options, driftWindow: 15}).count, 100);
   assert.equal(query(options).count, 98);
   assert.deepEqual(points, snapshot);
+});
+
+test('GPS drift distinguishes compact chaotic noise, insufficient evidence and resolvable local movement', () => {
+  const points = Array.from({length: 41}, (_, i) => point(i * 1000, Math.sin(i * 2) * 8, '', 1, 20));
+  const original = structuredClone(points), query = createHistoryQuery(points), options = {trackMode: 'drift', driftWindow: 167};
+  const result = query({...options, mode: 'points'});
+  assert.equal(result.count, points.length); assert.equal(result.qualityExcluded, 0);
+  assert.ok(result.motionClassified > 30); assert.ok(result.dots.features.some(f => f.properties.speed === 0));
+  assert.ok(result.dots.features.every(f => f.properties.speed === null || f.properties.speed === 0));
+  const fast = query({...options, speedMin: 13.8, speedUnknown: false});
+  assert.equal(fast.count, 0); assert.equal(fast.motionClassified, result.motionClassified);
+  assert.equal(query({...options, mode: 'route', colorBy: 'speed'}).routes.features.every(f => f.properties.speed === null || f.properties.speed === 0), true);
+  assert.equal(query({...options, mode: 'route'}).km, 0);
+  const pair = createHistoryQuery([point(0, 0, '', 1, 20), point(800, 10, '', 1, 20)]);
+  assert.equal(pair.point(0, options).feature.properties.speed, null);
+  assert.ok(pair.point(0, {trackMode: 'off'}).feature.properties.speed > 40);
+  // Fix acquisition can converge in one direction without sustained travel.
+  const convergence = createHistoryQuery([[0, 0], [754, 11.7], [3535, 12.3], [8653, 12.4]].map(([t, x]) => point(t, x, '', 2, 20)));
+  assert.ok(convergence({mode: 'points', ...options}).dots.features.every(f => f.properties.speed === 0));
+  assert.deepEqual(points, original);
+});
+
+test('GPS drift is independent of time of day, hour filtering, location and other display filters', () => {
+  const points = Array.from({length: 41}, (_, i) => point(i * 1000, Math.sin(i * 2) * 8, '', 2, 20));
+  const options = {trackMode: 'drift', driftWindow: 167, mode: 'points'};
+  const query = createHistoryQuery(points), base = query(options).dots.features.map(f => f.properties.speed);
+  assert.deepEqual(query({...options, hourStart: 0, hourEnd: 1, accuracy: 50, source: 2}).dots.features.map(f => f.properties.speed), base);
+  const shifted = points.map(p => ({...p, t: p.t + 7 * DAY + 13 * 3600000, lon: p.lon + 30}));
+  assert.deepEqual(createHistoryQuery(shifted)(options).dots.features.map(f => f.properties.speed), base);
+  assert.ok(base.some(speed => speed === 0));
+});
+
+test('sparse asymmetric stationary context catches short excursions without removing a sustained move', () => {
+  const points = [-70000, -45000, -22000, 0, 22000].map(t => point(t, t === 0 ? 355 : 0, '', 3, 1900));
+  assert.ok(jumpFlags(points).every(v => !v));
+  const flags = jumpFlags(points, {stationaryWindow: 60});
+  assert.deepEqual([...flags], [0, 0, 0, 1, 0]);
+  const sustained = Array.from({length: 20}, (_, i) => point(i * 10000, i < 5 ? 0 : 300, '', 3, 1900));
+  assert.ok(jumpFlags(sustained, {stationaryWindow: 600}).every(v => !v));
 });
 
 test('curved cycling paths and device speed do not change with the GPS drift context window', () => {
@@ -166,6 +305,12 @@ test('curved cycling paths and device speed do not change with the GPS drift con
   }
   const recorded = createHistoryQuery(points.map(p => ({...p, recordedSpeed: 25})))({mode: 'points', trackMode: 'drift', driftWindow: 600});
   assert.ok(recorded.dots.features.every(f => f.properties.speed === 25 && f.properties.speedRecorded));
+  // Dense, directed travel can fit entirely inside its reported GPS uncertainty.
+  for (const speed of [1, 5, 10, 20, 60]) {
+    const path = Array.from({length: 41}, (_, i) => point(i * 1000, i * speed / 3.6, '', 1, 50));
+    const q = createHistoryQuery(path), normal = q({mode: 'points'});
+    assert.deepEqual(q({mode: 'points', trackMode: 'drift', driftWindow: 167}).dots, normal.dots);
+  }
 });
 
 test('stationary drift needs two-sided context and does not erase slow real excursions or a second device', () => {

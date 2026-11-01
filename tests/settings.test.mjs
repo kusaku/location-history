@@ -17,13 +17,13 @@ test('new visitors default to OpenFreeMap Midnight, with an available-provider f
 
 test('track quality migrates the old toggle, persists its allowance and rejects invalid thresholds', () => {
   const storage = memoryStorage();
-  for (const jumpTolerance of [0, 5, 15, 35.5, 200]) {
-    saveSettings({excludeJumps: true, jumpTolerance}, maps, storage);
+  for (const outlierTolerance of [0, 5, 15, 35.5, 200]) {
+    saveSettings({excludeOutliers: true, outlierTolerance}, maps, storage);
     const result = loadSettings(maps, storage);
-    assert.equal(result.excludeJumps, true); assert.equal(result.jumpTolerance, jumpTolerance);
+    assert.equal(result.excludeOutliers, true); assert.equal(result.outlierTolerance, outlierTolerance);
   }
-  for (const jumpTolerance of [-1, 201, '15', null, Infinity, NaN]) assert.equal(saveSettings({jumpTolerance}, maps, storage).jumpTolerance, 15);
-  assert.equal(saveSettings({excludeJumps: true}, maps, storage).jumpTolerance, 15);
+  for (const outlierTolerance of [-1, 201, '15', null, Infinity, NaN]) assert.equal(saveSettings({outlierTolerance}, maps, storage).outlierTolerance, 15);
+  assert.equal(saveSettings({excludeOutliers: true}, maps, storage).outlierTolerance, 15);
 });
 
 test('display, map and filter preferences survive a storage round trip', () => {
@@ -150,17 +150,20 @@ test('calendar navigation retains its preferred day across reloads and validates
   assert.equal(saveSettings({...settings, period: 'all'}, maps, storage).periodDay, null);
 });
 
-test('jump preference migrates old masks without retaining removed exclusions', () => {
+test('outlier preference migrates old jump settings and masks without retaining removed exclusions', () => {
   const storage = memoryStorage();
   for (let exclude = 0; exclude < 16; exclude++) {
     const saved = saveSettings({exclude, area: {coordinates: [[13, 52]]}, place: {first: 123}}, maps, storage);
-    assert.equal(loadSettings(maps, storage).excludeJumps, Boolean(exclude & 2));
+    assert.equal(loadSettings(maps, storage).excludeOutliers, Boolean(exclude & 2));
     assert.equal('exclude' in saved, false);
     assert.equal('area' in saved, false); assert.equal('place' in saved, false);
   }
-  for (const exclude of [-1, 16, 1.5, '3', null]) assert.equal(saveSettings({exclude}, maps, storage).excludeJumps, false);
-  for (const excludeJumps of [true, false]) assert.equal(saveSettings({exclude: 15, excludeJumps}, maps, storage).excludeJumps, excludeJumps);
-  for (const excludeJumps of ['true', 1, null]) assert.equal(saveSettings({excludeJumps}, maps, storage).excludeJumps, false);
+  for (const exclude of [-1, 16, 1.5, '3', null]) assert.equal(saveSettings({exclude}, maps, storage).excludeOutliers, false);
+  for (const excludeOutliers of [true, false]) assert.equal(saveSettings({exclude: 15, excludeOutliers}, maps, storage).excludeOutliers, excludeOutliers);
+  for (const excludeOutliers of ['true', 1, null]) assert.equal(saveSettings({excludeOutliers}, maps, storage).excludeOutliers, false);
+  const legacy = saveSettings({excludeJumps: true, jumpTolerance: 40}, maps, storage);
+  assert.equal(legacy.trackMode, 'outliers'); assert.equal(legacy.outlierTolerance, 40);
+  assert.equal('excludeJumps' in legacy, false); assert.equal('jumpTolerance' in legacy, false);
 });
 
 test('journey thickness is independent, bounded and persisted with quarter windows', () => {
@@ -168,7 +171,7 @@ test('journey thickness is independent, bounded and persisted with quarter windo
   const settings = loadSettings(maps, storage);
   settings.views.route.lineWidth = 4.5;
   settings.views.heat.intensity = 2;
-  Object.assign(settings, {period: '90', periodDay: 31, excludeJumps: true, trackMode: 'outliers'});
+  Object.assign(settings, {period: '90', periodDay: 31, excludeOutliers: true, trackMode: 'outliers'});
   saveSettings(settings, maps, storage);
   assert.deepEqual(loadSettings(maps, storage), settings);
   assert.equal(settings.views.hex.intensity, 1);

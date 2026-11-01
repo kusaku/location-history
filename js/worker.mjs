@@ -1,5 +1,5 @@
-import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=40';
-import {readHistory} from './import.mjs?v=39';
+import {preparePoints, createHistoryQuery, MAX_POINTS} from './data.mjs?v=42';
+import {readHistory} from './import.mjs?v=41';
 let points = [], query = createHistoryQuery(points), geometry = {}, version = 0;
 self.onmessage = async ({data}) => {
   const {id, type} = data;
@@ -12,7 +12,7 @@ self.onmessage = async ({data}) => {
         self.postMessage({type: 'progress', id, message: `Reading ${file.name} (${i + 1}/${data.files.length})…`});
         let lastProgress = 0;
         const parsed = await readHistory(file, batch => {
-          if (staged.length + batch.length > MAX_POINTS) throw new Error('The combined import exceeds five million points. Import a smaller date range.');
+          if (staged.length + batch.length > MAX_POINTS) throw new Error('The combined import exceeds five million locations. Open fewer files or export a shorter date range.');
           for (const p of batch) staged.push(p);
         }, ({bytes, size}) => {
           if (Date.now() - lastProgress < 200) return;

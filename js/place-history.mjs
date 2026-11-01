@@ -1,9 +1,12 @@
-import {DAY, placePolygon} from './data.mjs?v=40';
-import {parseDay, formatDay, formatDateTime} from './timeline.mjs?v=40';
+import {DAY, placePolygon} from './data.mjs?v=42';
+import {parseDay, formatDay, formatDateTime} from './timeline.mjs?v=42';
 
 const $ = id => document.getElementById(id);
 const empty = () => ({type: 'FeatureCollection', features: []});
 const number = new Intl.NumberFormat('en');
+const decimal = new Intl.NumberFormat('en', {maximumFractionDigits: 1});
+const speed = value => value == null ? 'Unknown' : `${decimal.format(value)} km/h`;
+const distance = km => km == null ? '—' : km < 1 ? `${number.format(Math.round(km * 1000))} m` : `${decimal.format(km)} km`;
 const time = value => value === null ? '—' : formatDateTime(value);
 const utcDate = value => new Date(value).toISOString().slice(0, 10);
 const duration = minutes => {
@@ -325,7 +328,7 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     const history = report();
     if (!area || !history || drawing) return;
     const current = options();
-    const filters = Object.fromEntries(['device', 'source', 'trackMode', 'driftWindow', 'hourStart', 'hourEnd', 'accuracy', 'accuracyMin', 'accuracyUnknown', 'speedMin', 'speedMax', 'speedUnknown', 'altitudeMin', 'altitudeMax', 'altitudeUnknown', 'excludeJumps', 'jumpTolerance'].map(key => [key, current[key]]));
+    const filters = Object.fromEntries(['device', 'source', 'trackMode', 'driftWindow', 'hourStart', 'hourEnd', 'accuracy', 'accuracyMin', 'accuracyUnknown', 'speedMin', 'speedMax', 'speedUnknown', 'altitudeMin', 'altitudeMax', 'altitudeUnknown', 'excludeOutliers', 'outlierTolerance'].map(key => [key, current[key]]));
     filters.start = allDates ? Math.floor(history.min / DAY) * DAY : current.start;
     filters.end = allDates ? Math.floor(history.max / DAY) * DAY + DAY - 1 : current.end;
     const key = JSON.stringify([area, filters]);
@@ -371,10 +374,10 @@ export function createPlaceHistory({map, report, options, send, selectDates, sta
     panel.setAttribute('aria-busy', 'false');
     if (message.type === 'error') { $('place-message').textContent = message.message; return; }
     const result = message.result;
-    $('place-message').textContent = result.count || result.minutes ? '' : 'No locations in this area match the current filters.';
+    $('place-message').textContent = result.count || result.minutes ? '' : result.km > 0 ? 'A track crosses this area without a location recorded inside.' : 'No locations in this area match the current filters.';
     $('place-results').hidden = false;
-    for (const [id, value] of Object.entries({'place-records': number.format(result.count), 'place-days': number.format(result.days), 'place-total-visits': number.format(result.visits), 'place-time': duration(result.minutes), 'place-first': time(result.first), 'place-last': time(result.last)})) $(id).textContent = value;
-    $('place-visits-label').textContent = `Recorded stays · ${number.format(result.visits)}`;
+    for (const [id, value] of Object.entries({'place-distance': distance(result.km), 'place-average-speed': speed(result.averageSpeed), 'place-median-speed': speed(result.medianSpeed), 'place-records': number.format(result.count), 'place-days': number.format(result.days), 'place-total-visits': number.format(result.visits), 'place-time': duration(result.minutes), 'place-first': time(result.first), 'place-last': time(result.last)})) $(id).textContent = value;
+    $('place-visits-label').textContent = `Stays · ${number.format(result.visits)}`;
     $('place-daily-label').textContent = `By day · ${number.format(result.days)}`;
     const history = report(), current = options();
     calendar.setRows(result.daily, {start: allDates ? history.min : current.start, end: allDates ? history.max : current.end, historyStart: history.min, historyEnd: history.max});

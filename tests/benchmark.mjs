@@ -14,11 +14,11 @@ const git = args => execFileSync('git', args, {cwd: projectRoot, encoding: 'utf8
 const commit = revision ? git(['rev-parse', '--verify', `${revision}^{commit}`]) : null;
 const dataPath = commit ? git(['ls-tree', '-r', '--name-only', commit, '--', 'js/data.mjs', 'assets/js/data.mjs', 'data.mjs']).split('\n')[0] : null;
 let source = commit ? git(['show', `${commit}:${dataPath}`]) : readFileSync(new URL('../js/data.mjs', import.meta.url), 'utf8');
-// A historical data module may depend on its matching motion kernel.
-if (commit && source.includes('./motion.mjs')) {
-  const motionPath = dataPath.replace(/data\.mjs$/, 'motion.mjs');
-  const motion = git(['show', `${commit}:${motionPath}`]);
-  source = source.replace(/'\.\/motion\.mjs[^']*'/, `'data:text/javascript;base64,${Buffer.from(motion).toString('base64')}'`);
+// A historical data module may depend on its matching device index module.
+const dependency = commit && source.match(/'\.\/((?:motion|devices)\.mjs)[^']*'/);
+if (dependency) {
+  const module = git(['show', `${commit}:${dataPath.replace(/data\.mjs$/, dependency[1])}`]);
+  source = source.replace(dependency[0], `'data:text/javascript;base64,${Buffer.from(module).toString('base64')}'`);
 }
 const data = await import(commit ? `data:text/javascript;base64,${Buffer.from(source).toString('base64')}` : new URL('../js/data.mjs', import.meta.url));
 const synthetic = args[0] === '--synthetic' ? Number(args.splice(0, 2)[1]) : 0;
@@ -53,7 +53,8 @@ const cases = [
   ['journeys_speed_city_detail', {mode: 'route', colorBy: 'speed', zoom: 16, viewport: [13.34, 52.44, 13.35, 52.45]}],
 ];
 if (data.createHistoryQuery) cases.push(['gps_drift', {mode: 'points', colorBy: 'speed', trackMode: 'drift', viewport: [-10, 40, 35, 65]}]);
-if (data.jumpFlags) cases.push(['exclude_jumps', {mode: 'heat', excludeJumps: true, zoom: 5, viewport: [-10, 40, 35, 65]}]);
+// Older revisions name outlier exclusion excludeJumps.
+if (data.outlierFlags || data.jumpFlags) cases.push(['exclude_outliers', {mode: 'heat', excludeOutliers: true, excludeJumps: true, zoom: 5, viewport: [-10, 40, 35, 65]}]);
 for (const [name, options] of cases) {
   const times = []; let result;
   for (let i = 0; i < 4; i++) {

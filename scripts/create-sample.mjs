@@ -60,7 +60,7 @@ export async function createSample(input, output, endDate) {
   const {skipped} = await readHistory(await openAsBlob(source), batch => {
     read += batch.length;
     for (const p of batch) if (p.t < end) {
-      if (points.length >= MAX_POINTS) throw new Error('The sample exceeds five million points. Choose an earlier --end date.');
+      if (points.length >= MAX_POINTS) throw new Error('The sample exceeds five million locations. Choose an earlier --end date.');
       p.duration = Math.min(p.duration, end - p.t); points.push(p);
     }
   });

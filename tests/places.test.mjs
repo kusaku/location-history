@@ -24,7 +24,7 @@ test('area time never bridges an exit, an excluded observation, or a 15-minute r
   assert.equal(query.place(box).minutes, 3);
   const jumps = createHistoryQuery([point(0), point(minute, 13.9), point(2 * minute, 13.9)]);
   assert.equal(jumps.place(box).minutes, 2);
-  assert.equal(jumps.place(box, {excludeJumps: true}).minutes, 1); // Keep the supported pair after the bad starting fix.
+  assert.equal(jumps.place(box, {excludeOutliers: true}).minutes, 1); // Keep the supported pair after the bad starting fix.
 });
 test('moving time splits across midnight and clips to selected hours', () => {
   const query = createHistoryQuery([point(DAY - 5 * minute, 12.8), point(DAY + 5 * minute, 13), point(DAY + 10 * minute, 13.2)]);
@@ -82,13 +82,13 @@ test('place time clips to exits, hours, date windows and the union of overlappin
   const exit = createHistoryQuery([point(0, 13, 52, 60 * minute), point(10 * minute, 15)]);
   assert.equal(exit.place(box).minutes, 10);
 });
-test('place queries share accuracy and jump filters, retaining empty results', () => {
+test('place queries share accuracy and outlier filters, retaining empty results', () => {
   const query = createHistoryQuery([point(0, 13, 52, 0, 500), point(DAY), point(DAY + 1000, 30)]);
   assert.equal(query.place(box, {accuracy: 100}).count, 1);
-  assert.equal(query.place(box, {excludeJumps: true}).count, 1);
-  assert.equal(query.place(box, {excludeJumps: true, accuracy: 100}).count, 0);
+  assert.equal(query.place(box, {excludeOutliers: true}).count, 1);
+  assert.equal(query.place(box, {excludeOutliers: true, accuracy: 100}).count, 0);
   const empty = query.place(box, {start: DAY * 2});
-  assert.deepEqual(empty, {count: 0, days: 0, first: null, last: null, minutes: 0, visits: 0, stays: [], daily: []});
+  assert.deepEqual(empty, {count: 0, days: 0, first: null, last: null, minutes: 0, km: 0, averageSpeed: null, medianSpeed: null, visits: 0, stays: [], daily: []});
 });
 test('indexed place membership agrees with a chronological scan, including dateline wrapping', () => {
   const points = Array.from({length: 1000}, (_, i) => point(i, i % 2 ? 0 : 13, i % 2 ? 0 : 52));

@@ -1584,6 +1584,10 @@ select {
   font-size: 9px;
 }
 
+.place-stats.place-track-stats {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+}
+
 .place-stats dd {
   margin: 3px 0 0;
   font-size: 15px;

@@ -92,7 +92,7 @@ test('raw and compressed observations produce identical map and place results wi
   const compressed = parseHistory(encode(raw.map(p => ({...p})))).points;
   const a = createHistoryQuery(preparePoints(raw).points), b = createHistoryQuery(preparePoints(compressed).points);
   const area = {geometry: {type: 'Polygon', coordinates: [[[13.3, 52.4], [13.5, 52.4], [13.5, 52.6], [13.3, 52.6], [13.3, 52.4]]]}};
-  for (const filters of [{}, {accuracy: 10}, {accuracy: 50, hourStart: 1, hourEnd: 3}, {excludeJumps: true, start: DAY, end: 3 * DAY}]) {
+  for (const filters of [{}, {accuracy: 10}, {accuracy: 50, hourStart: 1, hourEnd: 3}, {excludeOutliers: true, start: DAY, end: 3 * DAY}]) {
     for (const mode of ['heat', 'hex', 'points', 'route']) for (const metric of ['records', 'days', 'time']) assert.deepEqual(a({...filters, mode, metric}), b({...filters, mode, metric}));
     assert.deepEqual(a.place(area, filters), b.place(area, filters));
   }

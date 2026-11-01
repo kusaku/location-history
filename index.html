@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="css/styles.css?v=53">
-    <script type="module" src="js/app.mjs?v=79">
+    <link rel="stylesheet" href="css/styles.css?v=54">
+    <script type="module" src="js/app.mjs?v=81">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -135,7 +135,7 @@
             <span>
               Open location history
               <small>
-                JSON or JSON.GZ · multiple files
+                JSON, GeoJSON or .gz · multiple files
               </small>
             </span>
             <span aria-hidden="true">
@@ -392,8 +392,13 @@
             </div>
             <p id="place-message" class="hint" role="status"></p>
             <div id="place-results" hidden>
+              <dl class="place-stats place-track-stats" aria-label="Track inside selected area">
+                <div><dt title="Estimated track length inside the outline, before display smoothing.">Track length</dt><dd id="place-distance"></dd></div>
+                <div><dt title="Weighted by time inside the outline; unknown speeds are excluded.">Average speed</dt><dd id="place-average-speed"></dd></div>
+                <div><dt title="Weighted by time inside the outline; unknown speeds are excluded.">Median speed</dt><dd id="place-median-speed"></dd></div>
+              </dl>
               <dl class="place-stats">
-                <div><dt>Recorded visits</dt><dd id="place-total-visits"></dd></div>
+                <div><dt>Stays</dt><dd id="place-total-visits"></dd></div>
                 <div><dt>Locations</dt><dd id="place-records"></dd></div>
                 <div><dt>Recorded days</dt><dd id="place-days"></dd></div>
                 <div><dt>Estimated time in area</dt><dd id="place-time"></dd></div>
@@ -402,7 +407,7 @@
               </dl>
               <div id="place-views" class="place-views" role="tablist" aria-label="Place history view">
                 <button id="place-tab-calendar" type="button" role="tab" data-view="calendar" aria-controls="place-view-calendar" aria-selected="true">Calendar</button>
-                <button id="place-visits-label" type="button" role="tab" data-view="visits" aria-controls="place-view-visits" aria-selected="false" tabindex="-1">Recorded stays</button>
+                <button id="place-visits-label" type="button" role="tab" data-view="visits" aria-controls="place-view-visits" aria-selected="false" tabindex="-1">Stays</button>
                 <button id="place-daily-label" type="button" role="tab" data-view="daily" aria-controls="place-view-daily" aria-selected="false" tabindex="-1">By day</button>
               </div>
               <section id="place-view-calendar" class="place-view" role="tabpanel" aria-labelledby="place-tab-calendar">
@@ -445,7 +450,7 @@
                   <span id="place-visits-page" role="status"></span>
                   <button id="place-visits-next" type="button" aria-label="Next stays">Next</button>
                 </div>
-                <table class="place-table" aria-label="Recorded stays in UTC">
+                <table class="place-table" aria-label="Stays in UTC">
                   <thead><tr id="place-visits-head"></tr></thead>
                   <tbody id="place-visits"></tbody>
                 </table>
@@ -629,16 +634,17 @@
             <summary>Track quality</summary>
             <p>Outliers are checked across sources within each device, before display filters. Journeys connects the remaining points when the movement is plausible.</p>
             <dl class="guide-exports">
-              <dt><span class="guide-control">Off</span></dt><dd>Keep all observations.</dd>
+              <dt><span class="guide-control">Off</span></dt><dd>Keep all locations.</dd>
               <dt><span class="guide-control">Outliers</span></dt><dd>Remove speed spikes relative to nearby movement. A lower allowance is stricter.</dd>
-              <dt><span class="guide-control">GPS drift</span></dt><dd>Reduce stationary GPS noise and remove short outliers with the default allowance. Stationary estimates become 0; uncertain estimates stay unknown. Context window sets how far to look for nearby recordings.</dd>
+              <dt><span class="guide-control">GPS drift</span></dt><dd>Reduce stationary GPS noise and remove short outliers with the default allowance. Stationary speeds become 0; uncertain speeds become unknown. Context window sets how far to look for nearby recordings.</dd>
             </dl>
           </details>
         </section>
         <section class="guide-section" aria-labelledby="guide-places">
           <h3 id="guide-places">Place history</h3>
           <p>Click a hexagon or choose <span class="guide-control"><svg class="icon" aria-hidden="true"><use href="#i-area"/></svg>Draw place area</span>, click corners, then <span class="guide-control">Finish area</span>. <span class="guide-control">Undo corner</span> removes a corner; <kbd>Esc</kbd> cancels. For keyboard drawing, pan the map, press <kbd>Space</kbd> to add its centre and <kbd>Enter</kbd> to finish.</p>
-          <p>Switch between <span class="guide-control">Calendar</span>, <span class="guide-control">Recorded stays</span> and <span class="guide-control">By day</span>. The calendar has Year, Quarter, Month, Week and hourly Day views; tables sort by column. Choose <span class="guide-control">Current window</span> or <span class="guide-control">All dates</span>; the other filters still apply.</p>
+          <p>Switch between <span class="guide-control">Calendar</span>, <span class="guide-control">Stays</span> and <span class="guide-control">By day</span>. The calendar has Year, Quarter, Month, Week and hourly Day views; tables sort by column. Choose <span class="guide-control">Current window</span> or <span class="guide-control">All dates</span>; the other filters still apply.</p>
+          <p>Track length counts only the parts inside the outline. Average and median speeds are weighted by time there, including known stops; unknown speeds are excluded.</p>
           <p>Select a date to update Date window and reset Hours to the full day; select an hour for that hour only. This also works with a point’s date and time links. Stays separated by less than 15 minutes merge. Time and distance are estimates; sparse or inaccurate recordings limit precision. Altitude is the height recorded in the file.</p>
         </section>
         <section class="guide-section" aria-labelledby="guide-maps">

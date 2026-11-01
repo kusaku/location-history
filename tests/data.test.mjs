@@ -191,9 +191,9 @@ test('bundled sample preserves every trimmed observation and its accuracy metada
   const query = createHistoryQuery(prepared.points);
   assert.equal(query().count, 910311); assert.equal(query({accuracy: 10}).count, 23671);
   assert.ok(prepared.points.at(-1).t < Date.parse('2020-04-02T00:00:00Z'));
-  const cleaned = query({mode: 'points', excludeJumps: true});
+  const cleaned = query({mode: 'points', excludeOutliers: true});
   assert.ok(cleaned.bounds[1][0] < 40);
-  for (let i = 0; i < prepared.points.length; i++) if (prepared.points[i].lon > 40) assert.equal(query.point(i, {excludeJumps: true}), null);
+  for (let i = 0; i < prepared.points.length; i++) if (prepared.points[i].lon > 40) assert.equal(query.point(i, {excludeOutliers: true}), null);
   const journeys = query({mode: 'route', viewport: [120, -10, 130, 10]});
   assert.equal(journeys.routes.features.length, 0);
   assert.ok(journeys.bounds[0][1] > 39 && journeys.bounds[1][0] < 40);
@@ -362,7 +362,7 @@ test('accuracy and outlier exclusions connect retained paths', () => {
   const points = [point(-60000, 0, 0), point(0, .001, 0), point(60000, 80, 0), point(120000, .002, 0), point(180000, .003, 0), point(240000, .004, 0)];
   const query = createHistoryQuery(points);
   for (const colorBy of ['time', 'speed', 'altitude']) {
-    const result = query({mode: 'route', colorBy, accuracy: 50, excludeJumps: true});
+    const result = query({mode: 'route', colorBy, accuracy: 50, excludeOutliers: true});
     assert.equal(result.count, 5); // Only the isolated spike is removed.
     for (let i = 1; i < result.routes.features.length; i++) {
       const end = result.routes.features[i - 1].geometry.coordinates.at(-1), start = result.routes.features[i].geometry.coordinates[0];

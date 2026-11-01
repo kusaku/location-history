@@ -1,9 +1,9 @@
 // Pure import and geospatial functions shared by the worker and Node tests.
-import {createDeviceIndex, deviceKey, SOURCE_NAMES} from './motion.mjs?v=2';
+import {createDeviceIndex, deviceKey, SOURCE_NAMES} from './devices.mjs?v=1';
 export const DAY = 86_400_000;
 export const SPEED_STOPS = Object.freeze([0, 5, 20, 50, 130, 1000]);
 export const SPEED_UNKNOWN = '#8b929a';
-export const DEFAULT_JUMP_TOLERANCE = 15;
+export const DEFAULT_OUTLIER_TOLERANCE = 15;
 // Date windows have inclusive endpoints. Keep their width when reaching a data boundary.
 export function shiftPeriod(start, end, min, max, direction) {
   const shift = Math.max(min - start, Math.min(max - end, direction * (end - start + 1)));
@@ -12,7 +12,7 @@ export function shiftPeriod(start, end, min, max, direction) {
 export const MAX_POINTS = 5_000_000;
 const rad = Math.PI / 180;
 const SOURCE_CODES = Object.freeze({GPS: 1, WIFI: 2, CELL: 3, NETWORK: 4, FUSED: 5});
-const qualityOptions = options => options.trackMode ? {...options, excludeJumps: options.trackMode !== 'off', driftWindow: Number.isFinite(options.driftWindow) ? Math.max(15, Math.min(600, Math.round(options.driftWindow))) : 60} : options;
+const qualityOptions = options => options.trackMode ? {...options, excludeOutliers: options.trackMode !== 'off', driftWindow: Number.isFinite(options.driftWindow) ? Math.max(15, Math.min(600, Math.round(options.driftWindow))) : 60} : options;
 const streamRank = p => p.stream?.source === -1 ? 0 : p.stream?.source === 6 ? 1 : p.stream?.source ? 3 : 2;
 const number = value => (typeof value === 'number' || (typeof value === 'string' && value.trim())) ? Number(value) : NaN;
 export function timestamp(value) {
@@ -44,7 +44,7 @@ export function parseHistory(data, {allowEmpty = false, streams = new Map()} = {
   const add = (coords, time, accuracy, duration = 0, altitude, recordedSpeed, origin) => {
     const [lon, lat, z] = Array.isArray(coords) ? coords : [NaN, NaN], t = timestamp(time), a = number(accuracy), h = number(altitude ?? z), speed = number(recordedSpeed);
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !Number.isFinite(t) || Math.abs(t) > 8.64e15) { skipped++; return; }
-    if (points.length >= MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} points. Choose a smaller date range.`);
+    if (points.length >= MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} locations. Export a shorter date range.`);
     points.push({lon, lat, t, accuracy: Number.isFinite(a) && a >= 0 ? a : null, duration: Math.max(0, Math.min(duration, 8.64e15 - t)) || 0, ...(Number.isFinite(h) ? {altitude: h} : {}), ...(Number.isFinite(speed) && speed >= 0 && speed <= 1000 ? {recordedSpeed: speed} : {}), ...(origin ? {stream: origin} : {})});
   };
   const segment = entry => {
@@ -75,7 +75,7 @@ export function parseHistory(data, {allowEmpty = false, streams = new Map()} = {
     const invalid = () => { throw new Error('Invalid delta-compressed history.'); };
     if ((data.version !== undefined && data.version !== 2) || !Array.isArray(data.base) || data.base.length !== 3 || !Array.isArray(data.data) || data.data.length !== 3 || !data.data.every(Array.isArray) || !data.data.every(a => a.length === data.data[0].length)) invalid();
     const count = data.data[0].length + 1;
-    if (count > MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} points. Choose a smaller date range.`);
+    if (count > MAX_POINTS) throw new Error(`The import exceeds ${MAX_POINTS.toLocaleString('en')} locations. Export a shorter date range.`);
     for (const key of ['accuracy', 'duration', 'altitude', 'recordedSpeed']) {
       const values = data[key];
       if (values !== undefined && (!Array.isArray(values) || values.length !== count || values.some(v => !(key !== 'duration' && v === null) && (typeof v !== 'number' || !Number.isFinite(v) || key !== 'altitude' && v < 0 || key === 'recordedSpeed' && v > 1000)))) invalid();
@@ -160,7 +160,7 @@ export function distance(a, b) {
   const h = Math.sin(lat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(lon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
 }
-// Accuracy filters visibility, not speed. Keep interval and jump safeguards;
+// Accuracy filters visibility, not speed. Keep interval and implausible-speed safeguards;
 // device speed, when present, is already normalized to km/h during import.
 export function intervalSpeed(a, b) {
   if (deviceKey(a) !== deviceKey(b) || (a.stream?.source ?? 0) !== (b.stream?.source ?? 0) || a.stream?.source === -1) return null;
@@ -197,6 +197,16 @@ function projectY(lat) {
 }
 export function project(lon, lat) { return [(lon + 180) / 360, projectY(lat)]; }
 function unproject(x, y) { return [x * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) / rad]; }
+function inRing(x, y, ring) {
+  let inside = false;
+  for (let j = 0; j < ring.length - 1; j++) {
+    const [ax, ay] = ring[j], [bx, by] = ring[j + 1];
+    const cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax);
+    if (Math.abs(cross) < 1e-12 * (Math.abs(bx - ax) + Math.abs(by - ay)) && x >= Math.min(ax, bx) && x <= Math.max(ax, bx) && y >= Math.min(ay, by) && y <= Math.max(ay, by)) return true;
+    if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) inside = !inside;
+  }
+  return inside;
+}
 export function wrappedBounds(points, indices = null, runs = null) {
   const length = runs ? runs.reduce((n, [a, b]) => n + b - a, 0) : indices?.length ?? points.length;
   if (!length) return null;
@@ -310,8 +320,8 @@ function comparable(a, b, c) {
     && a.accuracy != null && c.accuracy != null && (b.accuracy == null || b.accuracy > Math.max(a.accuracy, c.accuracy));
 }
 // One byte per observation. First identify isolated spikes, preserving their
-// neighbours. Unresolvable two-point conflicts are conservatively excluded.
-export function jumpFlags(points, options = {}, devices) {
+// neighbours. Unresolvable same-source conflicts are conservatively excluded.
+export function outlierFlags(points, options = {}, devices) {
   const firstDevice = points.length ? deviceKey(points[0]) : '', firstSource = points[0]?.stream?.source ?? 0;
   const stationary = (at, length, flags, record) => {
     if (!(options.stationaryWindow > 0)) return;
@@ -319,7 +329,7 @@ export function jumpFlags(points, options = {}, devices) {
     if (record) classifyMotion(at, length, flags, options.stationaryWindow, record);
   };
   if (points.every(p => deviceKey(p) === firstDevice && (p.stream?.source ?? 0) === firstSource)) {
-    const flags = firstSource === -1 ? new Uint8Array(points.length) : detectJumps(points, options);
+    const flags = firstSource === -1 ? new Uint8Array(points.length) : detectOutliers(points, options);
     if (firstSource !== -1) stationary(i => points[i], points.length, flags, options.motionState);
     return flags;
   }
@@ -328,7 +338,7 @@ export function jumpFlags(points, options = {}, devices) {
   devices ??= createDeviceIndex(points);
   const semantic = points.some(p => p.stream?.source === -1), globalAt = i => devices.order ? devices.order[i] : i;
   let flags;
-  if (devices.groups.length === 1 && !semantic) flags = detectJumps(points, options);
+  if (devices.groups.length === 1 && !semantic) flags = detectOutliers(points, options);
   else {
     flags = new Uint8Array(points.length);
     for (const [from, to] of devices.ranges(0, points.length)) {
@@ -339,7 +349,7 @@ export function jumpFlags(points, options = {}, devices) {
         for (let at = from; at < to; at++) { const i = globalAt(at); if (points[i].stream?.source !== -1) positions[length++] = i; }
       }
       const index = i => positions ? positions[i] : globalAt(from + i);
-      const local = detectJumps(points, options, i => points[index(i)], length);
+      const local = detectOutliers(points, options, i => points[index(i)], length);
       for (let i = 0; i < length; i++) flags[index(i)] = local[i];
     }
   }
@@ -412,7 +422,7 @@ function classifyMotion(at, length, excluded, seconds, record) {
     if (alignment > .8 && extent > 1 && (maxSpeed <= 6 || steps >= 3 && maxSpeed <= 2 * travelled * 3600 / (lastTime - firstTime))) continue;
     errors.fill(Infinity, count); errors.sort();
     const accuracy = (errors[(count - 1) >>> 1] + errors[count >>> 1]) / 2, noise = Math.max(3, Math.SQRT2 * accuracy);
-    if (extent <= Math.min(100, noise) || weight && alignment < .15 && extent <= Math.max(15, Math.min(50, 3 * noise))) {
+    if (extent <= noise || weight && alignment < .15 && extent <= Math.max(15, Math.min(50, 3 * noise))) {
       record(i, extent < .001 || count >= 3 && lastTime - firstTime >= 5000 ? 1 : 2);
     }
   }
@@ -439,7 +449,7 @@ function markStationarySpikes(at, length, flags, seconds) {
         const quietBefore = before && !flags[i - 2] && anchor.t > before.t && anchor.t - before.t <= windowMs && distance(before, anchor) <= radius;
         const quietAfter = after && !flags[end + 1] && after.t > back.t && after.t - back.t <= windowMs && distance(back, after) <= radius;
         const last = at(end - 1), exit = back.t - last.t;
-        if ((quietBefore || quietAfter) && exit > 0 && Math.min(outward * 3600000 / entry, distance(last, back) * 3600000 / exit) > DEFAULT_JUMP_TOLERANCE) {
+        if ((quietBefore || quietAfter) && exit > 0 && Math.min(outward * 3600000 / entry, distance(last, back) * 3600000 / exit) > DEFAULT_OUTLIER_TOLERANCE) {
           flags.fill(1, i, end); i = end - 1;
         }
         break;
@@ -449,8 +459,8 @@ function markStationarySpikes(at, length, flags, seconds) {
   }
 }
 
-function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE} = {}, at = i => points[i], length = points.length) {
-  tolerance = Number.isFinite(tolerance) ? Math.max(0, Math.min(200, tolerance)) : DEFAULT_JUMP_TOLERANCE;
+function detectOutliers(points, {tolerance = DEFAULT_OUTLIER_TOLERANCE} = {}, at = i => points[i], length = points.length) {
+  tolerance = Number.isFinite(tolerance) ? Math.max(0, Math.min(200, tolerance)) : DEFAULT_OUTLIER_TOLERANCE;
   const flags = new Uint8Array(length);
   for (let i = 1; i < length - 1; i++) {
     if (flags[i - 1]) continue;
@@ -545,7 +555,7 @@ function detectJumps(points, {tolerance = DEFAULT_JUMP_TOLERANCE} = {}, at = i =
     const own = (b.stream?.source ?? 0) !== (a.stream?.source ?? 0) && b.accuracy != null ? Math.max(resolution, b.accuracy / 1000) : 0;
     // The bypass check has its own fixed noise allowance. Reusing the adjustable
     // limit here could make a looser setting accept a bypass and remove more fixes.
-    if (bypass <= typical + Math.max(DEFAULT_JUMP_TOLERANCE, spread) && ab + bc - ac > resolution && distance(b, implied) > own) flags[i] = 1;
+    if (bypass <= typical + Math.max(DEFAULT_OUTLIER_TOLERANCE, spread) && ab + bc - ac > resolution && distance(b, implied) > own) flags[i] = 1;
   }
   return flags;
 }
@@ -604,17 +614,27 @@ export function createHistoryQuery(points) {
   for (let i = 0; i < points.length; i++) order[cursors[cell(points[i])]++] = i;
   let histogramBudget, plan;
   let filterKey, filter, selectionKey, selection, placeKey, placeResult;
-  let jumps = new Uint8Array(0), motionStates = new Uint8Array(0), jumpTolerance, jumpWindow;
+  let outliers = new Uint8Array(0), motionStates = new Uint8Array(0), outlierTolerance, outlierWindow;
   const motionAt = (i, options) => options.trackMode === 'drift' ? motionStates[i >>> 2] >> ((i & 3) * 2) & 3 : 0;
   const speedAt = (i, options) => {
     const state = motionAt(i, options);
-    return state === 1 ? 0 : state === 2 ? null : pointSpeed(points, i, options.excludeJumps ? jumps : null, devices);
+    return state === 1 ? 0 : state === 2 ? null : pointSpeed(points, i, options.excludeOutliers ? outliers : null, devices);
   };
-  const quality = (i, options, ignoreJump = false, ignoreSpeed = false) => {
-    const {accuracy = 0, accuracyMin = 0, accuracyUnknown = true, excludeJumps = false, altitudeMin = null, altitudeMax = null, altitudeUnknown = true, speedMin = null, speedMax = null, speedUnknown = true} = options;
+  const trackSpeed = (left, right, options) => {
+    const a = motionAt(left, options), b = motionAt(right, options);
+    if (points[right].t - points[left].t > 15 * 60_000 || a === 2 || b === 2) return null;
+    if (a === 1 && b === 1) return 0;
+    const speed = intervalSpeed(points[left], points[right]);
+    if (speed !== null) return speed;
+    // Alternating recording sources can still have known point speeds.
+    const first = speedAt(left, options), last = speedAt(right, options);
+    return first !== null && last !== null ? (first + last) / 2 : null;
+  };
+  const quality = (i, options, ignoreOutlier = false, ignoreSpeed = false) => {
+    const {accuracy = 0, accuracyMin = 0, accuracyUnknown = true, excludeOutliers = false, altitudeMin = null, altitudeMax = null, altitudeUnknown = true, speedMin = null, speedMax = null, speedUnknown = true} = options;
     const p = points[i];
     if (options.device != null && devices.idAt(i) !== options.device || options.source != null && (p.stream?.source ?? 0) !== options.source) return false;
-    if (!ignoreJump && excludeJumps && jumps[i] || !accepts(p, accuracy, 0, 24, accuracyMin, accuracyUnknown)) return false;
+    if (!ignoreOutlier && excludeOutliers && outliers[i] || !accepts(p, accuracy, 0, 24, accuracyMin, accuracyUnknown)) return false;
     if (p.altitude == null ? !altitudeUnknown : altitudeMin !== null && p.altitude < altitudeMin || altitudeMax !== null && p.altitude > altitudeMax) return false;
     if (!ignoreSpeed && (speedMin !== null || speedMax !== null || !speedUnknown)) {
       const speed = speedAt(i, options);
@@ -629,16 +649,16 @@ export function createHistoryQuery(points) {
   }
 
   function ensureFilter(options) {
-    const {accuracy = 0, hourStart = 0, hourEnd = 24, excludeJumps = false} = options;
+    const {accuracy = 0, hourStart = 0, hourEnd = 24, excludeOutliers = false} = options;
     const drift = options.trackMode === 'drift', window = drift ? options.driftWindow ?? 60 : 0;
     // GPS drift does not show the Outliers allowance, so it must not depend on it.
-    const tolerance = !drift && Number.isFinite(options.jumpTolerance) ? Math.max(0, Math.min(200, options.jumpTolerance)) : DEFAULT_JUMP_TOLERANCE;
-    if (excludeJumps && (jumpTolerance !== tolerance || jumpWindow !== window)) {
+    const tolerance = !drift && Number.isFinite(options.outlierTolerance) ? Math.max(0, Math.min(200, options.outlierTolerance)) : DEFAULT_OUTLIER_TOLERANCE;
+    if (excludeOutliers && (outlierTolerance !== tolerance || outlierWindow !== window)) {
       motionStates = window ? new Uint8Array(Math.ceil(points.length / 4)) : new Uint8Array(0);
       const motionState = window ? (i, state) => { motionStates[i >>> 2] |= state << ((i & 3) * 2); } : undefined;
-      jumps = jumpFlags(points, {tolerance, stationaryWindow: window, motionState}, devices); jumpTolerance = tolerance; jumpWindow = window;
+      outliers = outlierFlags(points, {tolerance, stationaryWindow: window, motionState}, devices); outlierTolerance = tolerance; outlierWindow = window;
     }
-    const nextFilterKey = JSON.stringify([options.device, options.source, options.trackMode, drift ? options.driftWindow : null, accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeJumps, excludeJumps ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
+    const nextFilterKey = JSON.stringify([options.device, options.source, options.trackMode, drift ? options.driftWindow : null, accuracy, options.accuracyMin, options.accuracyUnknown, hourStart, hourEnd, excludeOutliers, excludeOutliers ? tolerance : null, options.altitudeMin, options.altitudeMax, options.altitudeUnknown, options.speedMin, options.speedMax, options.speedUnknown]);
     if (filterKey !== nextFilterKey) {
       const mask = new Uint8Array(points.length), totals = new Uint32Array(Math.ceil(points.length / 256) + 1);
       let total = 0;
@@ -712,20 +732,7 @@ export function createHistoryQuery(points) {
           const previous = points[indices[k - 1]], dt = p.t - previous.t;
           let value;
           if (colorBy === 'altitude') value = previous.altitude != null && p.altitude != null ? (previous.altitude + p.altitude) / 2 : null;
-          else {
-            const a = motionAt(indices[k - 1], options), b = motionAt(indices[k], options);
-            if (dt > 15 * 60_000 || a === 2 || b === 2) value = null;
-            else if (a === 1 && b === 1) value = 0;
-            else {
-              value = intervalSpeed(previous, p);
-              // A device can alternate GPS/Wi-Fi while both endpoint speeds
-              // remain known from their own source. Reuse the point estimates.
-              if (value === null) {
-                const left = speedAt(indices[k - 1], options), right = speedAt(indices[k], options);
-                value = left !== null && right !== null ? (left + right) / 2 : null;
-              }
-            }
-          }
+          else value = trackSpeed(indices[k - 1], indices[k], options);
           if (value !== null) { weighted += value * dt; elapsed += dt; }
         }
         const value = elapsed && elapsed >= (last.t - first.t) / 2 ? weighted / elapsed : null;
@@ -953,7 +960,7 @@ export function createHistoryQuery(points) {
           const i = devices.order ? devices.order[position] : position;
           if (motionAt(i, options) && quality(i, options, false, true) && accepts(points[i], 0, options.hourStart ?? 0, hourEnd)) motionClassified++;
           if (!filter.mask[i]) {
-            if (options.excludeJumps && jumps[i] && quality(i, options, true) && accepts(points[i], 0, options.hourStart ?? 0, hourEnd)) qualityExcluded++;
+            if (options.excludeOutliers && outliers[i] && quality(i, options, true) && accepts(points[i], 0, options.hourStart ?? 0, hourEnd)) qualityExcluded++;
             continue;
           }
           const p = points[i];
@@ -1137,15 +1144,86 @@ export function createHistoryQuery(points) {
       const sourceLon = hex ? p.lon + 360 * Math.round((hex[3] - p.lon) / 360) : lon;
       const x = (sourceLon + 180) / 360, y = projectedY[i];
       if (hex) { const [q, r] = hexRound((Math.sqrt(3) / 3 * x - y / 3) / hex[2], 2 / 3 * y / hex[2]); return q === hex[0] && r === hex[1]; }
-      let inside = false;
-      for (let j = 0; j < xy.length - 1; j++) {
-        const [ax, ay] = xy[j], [bx, by] = xy[j + 1];
-        const cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax);
-        if (Math.abs(cross) < 1e-12 * (Math.abs(bx - ax) + Math.abs(by - ay)) && x >= Math.min(ax, bx) && x <= Math.max(ax, bx) && y >= Math.min(ay, by) && y <= Math.max(ay, by)) return true;
-        if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) inside = !inside;
-      }
-      return inside;
+      return inRing(x, y, xy);
     };
+    // Split a straight track at polygon edges, including concave outlines and
+    // crossings with both endpoints outside. Scratch space is bounded by corners.
+    const cuts = new Float64Array(xy.length + 2);
+    const fractionInside = (first, last) => {
+      const a = points[first], b = points[last];
+      const lonA = a.lon + 360 * Math.round((center - a.lon) / 360), lonB = b.lon + 360 * Math.round((center - b.lon) / 360);
+      if (Math.max(lonA, lonB) < viewport[0] || Math.min(lonA, lonB) > viewport[2] || Math.max(a.lat, b.lat) < viewport[1] || Math.min(a.lat, b.lat) > viewport[3]) return 0;
+      const x = (lonA + 180) / 360, y = projectedY[first], dx = (lonB - lonA) / 360, dy = projectedY[last] - y;
+      if (!dx && !dy) return inRing(x, y, xy) ? 1 : 0;
+      cuts[0] = 0; cuts[1] = 1; let count = 2;
+      for (let j = 0; j < xy.length - 1; j++) {
+        const [ax, ay] = xy[j], [bx, by] = xy[j + 1], ex = bx - ax, ey = by - ay, cross = dx * ey - dy * ex;
+        if (!cross) continue;
+        const t = ((ax - x) * ey - (ay - y) * ex) / cross, u = ((ax - x) * dy - (ay - y) * dx) / cross;
+        if (t > 0 && t < 1 && u >= 0 && u <= 1) cuts[count++] = t;
+      }
+      cuts.subarray(0, count).sort();
+      let fraction = 0;
+      for (let j = 1; j < count; j++) {
+        const from = cuts[j - 1], until = cuts[j], middle = (from + until) / 2;
+        if (until > from && inRing(x + dx * middle, y + dy * middle, xy)) fraction += until - from;
+      }
+      return Math.min(1, fraction);
+    };
+    // Stream the same retained tracks as Journeys, without replacing its cache
+    // or adding per-location fields. Only intersecting legs need speed estimates.
+    let km = 0, speedTime = 0, weightedSpeed = 0, speedBins = null;
+    const fullDay = (options.hourStart ?? 0) === 0 && hourEnd === 24;
+    const trackFrom = lowerBound(points, start), trackTo = lowerBound(points, end, true);
+    for (const [begin, finish] of devices.ranges(trackFrom, trackTo, options.device ?? null)) {
+      let previous = -1, anchor = -1;
+      for (let at = begin; at < finish; at++) {
+        const i = devices.order ? devices.order[at] : at;
+        if (!filter.mask[i]) continue;
+        const p = points[i], a = points[previous], dt = a ? p.t - a.t : 0;
+        if (!a || dt <= 0 || dt > 6 * 3_600_000 || Math.abs(p.lon - a.lon) >= 180 || !fullDay && Math.floor(p.t / DAY) !== Math.floor(a.t / DAY)) anchor = i;
+        else {
+          const d = distance(a, p);
+          if (d / (dt / 3_600_000) > 1000) anchor = i;
+          else {
+            const fraction = fractionInside(previous, i);
+            if (fraction) {
+              const speed = trackSpeed(previous, i, options);
+              if (speed !== null) {
+                const time = dt * fraction;
+                speedTime += time; weightedSpeed += speed * time;
+                // Median resolution matches the displayed tenth of a km/h.
+                speedBins ??= new Float64Array(10001);
+                speedBins[Math.round(speed * 10)] += time;
+              }
+            }
+            if (motionAt(previous, options) === 1 && motionAt(i, options) === 1) anchor = i;
+            else if (dt <= 60_000 && a.recordedSpeed != null && p.recordedSpeed != null) {
+              km += (a.recordedSpeed + p.recordedSpeed) / 2 * dt / 3_600_000 * fraction; anchor = i;
+            } else {
+              const origin = points[anchor], movement = anchor === previous ? d : distance(origin, p);
+              if (movement >= Math.max(.003, Math.hypot(origin.accuracy ?? 0, p.accuracy ?? 0) / 1000)) {
+                km += movement * (anchor === previous ? fraction : fractionInside(anchor, i)); anchor = i;
+              }
+            }
+          }
+        }
+        previous = i;
+      }
+    }
+    let medianSpeed = null;
+    if (speedTime) {
+      let cumulative = 0;
+      for (let i = 0; i < speedBins.length; i++) {
+        cumulative += speedBins[i];
+        if (cumulative < speedTime / 2) continue;
+        medianSpeed = i / 10;
+        if (Math.abs(cumulative - speedTime / 2) < speedTime * 1e-12) {
+          for (let j = i + 1; j < speedBins.length; j++) if (speedBins[j]) { medianSpeed = (i + j) / 20; break; }
+        }
+        break;
+      }
+    }
     const from = intervalFrom(start), to = lowerBound(points, end, true), {ranges, candidates} = candidateRanges(viewport);
     let count = 0, first = null, last = null, minutes = 0, coveredUntil = -Infinity, knownFirst = null, knownLast = null;
     const contexts = devices.groups.map(() => ({scanned: null, nextExit: -1, visit: null}));
@@ -1214,7 +1292,7 @@ export function createHistoryQuery(points) {
       else merged.push(stay);
     }
     placeKey = nextKey;
-    return placeResult = {count, days: days.size, first: first ?? knownFirst, last: last ?? (knownLast === null ? null : knownLast - 1), minutes, visits: merged.length, stays: merged.reverse(), daily: [...days.values()].sort((a, b) => b.start - a.start), ...(hours ? {hours} : {})};
+    return placeResult = {count, days: days.size, first: first ?? knownFirst, last: last ?? (knownLast === null ? null : knownLast - 1), minutes, km, averageSpeed: speedTime ? weightedSpeed / speedTime : null, medianSpeed, visits: merged.length, stays: merged.reverse(), daily: [...days.values()].sort((a, b) => b.start - a.start), ...(hours ? {hours} : {})};
   };
   query.ranges = ranges;
   query.min = min; query.max = max;

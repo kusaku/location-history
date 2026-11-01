@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHistoryQuery, jumpFlags, distance, DAY} from '../js/data.mjs';
+import {createHistoryQuery, outlierFlags, distance, DAY} from '../js/data.mjs';
 import {accuracyCircle} from '../js/maps.mjs';
 import {rangePosition, rangeValue} from '../js/filters.mjs';
 import {loadSettings, saveSettings} from '../js/settings.mjs';
@@ -23,15 +23,15 @@ test('short device-speed intervals retain a small walk and stationary fixes cont
   assert.equal(createHistoryQuery([point(0), point(DAY, 1000)])().km, 0);
 });
 test('jump detection preserves neighbours around speed and acceleration spikes', () => {
-  assert.deepEqual([...jumpFlags([point(0), point(5000, 5000), point(10000, 10)])], [0, 1, 0]);
-  assert.deepEqual([...jumpFlags([point(0), point(5000, 400), point(10000, 10)])], [0, 1, 0]);
-  assert.deepEqual([...jumpFlags([point(0), point(600000, 1e6), point(1200000, 10)])], [0, 1, 0]);
-  assert.deepEqual([...jumpFlags([point(0), point(0, 1e6), point(60000, 10)])], [0, 1, 0]);
+  assert.deepEqual([...outlierFlags([point(0), point(5000, 5000), point(10000, 10)])], [0, 1, 0]);
+  assert.deepEqual([...outlierFlags([point(0), point(5000, 400), point(10000, 10)])], [0, 1, 0]);
+  assert.deepEqual([...outlierFlags([point(0), point(600000, 1e6), point(1200000, 10)])], [0, 1, 0]);
+  assert.deepEqual([...outlierFlags([point(0), point(0, 1e6), point(60000, 10)])], [0, 1, 0]);
   const normal = Array.from({length: 100}, (_, i) => point(i * 5000, i * 7));
-  assert.ok(jumpFlags(normal).every(value => value === 0));
+  assert.ok(outlierFlags(normal).every(value => value === 0));
   const flight = Array.from({length: 20}, (_, i) => point(i * 60000, i * 15000));
-  assert.ok(jumpFlags(flight).every(value => value === 0));
-  assert.deepEqual([...jumpFlags([point(0, 0, 100), point(1000, 50, 100), point(2000, 0, 100)])], [0, 0, 0]);
+  assert.ok(outlierFlags(flight).every(value => value === 0));
+  assert.deepEqual([...outlierFlags([point(0, 0, 100), point(1000, 50, 100), point(2000, 0, 100)])], [0, 0, 0]);
 });
 test('known visits stop at the first later accepted exit, not an intervening inside fix', () => {
   const points = [point(0, 0, 5, {duration: 3600000}), point(60000, 10), point(120000, 5000), point(180000, 0)];

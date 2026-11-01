@@ -1,4 +1,4 @@
-import {DEFAULT_JUMP_TOLERANCE} from './data.mjs?v=40';
+import {DEFAULT_OUTLIER_TOLERANCE} from './data.mjs?v=42';
 
 // ISO text remains editable independently of browser locale. The companion date
 // input supplies the native calendar without another calendar implementation.
@@ -108,9 +108,9 @@ export function createFilters(root, initial, changed, committed) {
     return {config, paint};
   }
   function trackQuality(config) {
-    values.trackMode = initial.trackMode ?? (initial.excludeJumps ? 'outliers' : 'off');
-    values.excludeJumps = values.trackMode !== 'off';
-    values.jumpTolerance = initial.jumpTolerance ?? DEFAULT_JUMP_TOLERANCE;
+    values.trackMode = initial.trackMode ?? (initial.excludeOutliers ? 'outliers' : 'off');
+    values.excludeOutliers = values.trackMode !== 'off';
+    values.outlierTolerance = initial.outlierTolerance ?? DEFAULT_OUTLIER_TOLERANCE;
     values.driftWindow = initial.driftWindow ?? 60;
     const button = document.createElement('button'), panel = document.createElement('div');
     button.type = 'button'; button.className = 'filter-toggle'; button.id = 'filter-track'; button.setAttribute('popovertarget', 'filter-track-panel');
@@ -124,13 +124,13 @@ export function createFilters(root, initial, changed, committed) {
     const field = panel.querySelector('input[type=number]'), slider = panel.querySelector('input[type=range]');
     const counter = panel.querySelector('[data-quality-count]'); let excluded = null, classified = 0;
     function paint() {
-      const drift = values.trackMode === 'drift', value = drift ? values.driftWindow : values.jumpTolerance;
+      const drift = values.trackMode === 'drift', value = drift ? values.driftWindow : values.outlierTolerance;
       button.textContent = `Track quality · ${values.trackMode === 'off' ? 'Off' : drift ? `GPS drift · ${value}s` : `+${number.format(value)} km/h`}`;
-      button.classList.toggle('active', values.excludeJumps);
+      button.classList.toggle('active', values.excludeOutliers);
       for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.setAttribute('aria-pressed', String(choice.dataset.trackMode === values.trackMode));
       panel.querySelector('[data-label]').textContent = drift ? 'Context window' : 'Allowed speed spike';
       panel.querySelector('[data-unit]').textContent = drift ? 's' : 'km/h';
-      panel.querySelector('.hint').textContent = drift ? 'Reduces stationary GPS noise and removes short outliers. Stationary estimates become 0; uncertain estimates stay unknown.' : 'Filters speed spikes relative to nearby movement. Lower values are stricter.';
+      panel.querySelector('.hint').textContent = drift ? 'Reduces stationary GPS noise and removes short outliers with the default allowance. Stationary speeds become 0; uncertain speeds become unknown.' : 'Filters speed spikes relative to nearby movement. Lower values are stricter.';
       for (const input of [field, slider]) { input.min = drift ? 15 : 0; input.max = drift ? 600 : 200; input.value = value; input.disabled = values.trackMode === 'off'; }
       field.setAttribute('aria-label', drift ? 'GPS drift context' : 'Allowed speed spike');
       slider.setAttribute('aria-label', drift ? 'GPS drift context slider' : 'Allowed speed spike slider');
@@ -139,15 +139,15 @@ export function createFilters(root, initial, changed, committed) {
     }
     function paintCount() {
       counter.hidden = excluded === null;
-      counter.textContent = excluded === null ? '' : `${number.format(excluded)} outliers excluded.${values.trackMode === 'drift' ? ` ${number.format(classified)} stationary or uncertain estimates before Speed filtering.` : ''}`;
+      counter.textContent = excluded === null ? '' : `${number.format(excluded)} outliers excluded.${values.trackMode === 'drift' ? ` ${number.format(classified)} speeds set to 0 or unknown, before the Speed filter.` : ''}`;
     }
-    const apply = () => { excluded = null; values.excludeJumps = values.trackMode !== 'off'; paint(); changed('track'); committed(); };
+    const apply = () => { excluded = null; values.excludeOutliers = values.trackMode !== 'off'; paint(); changed('track'); committed(); };
     for (const choice of panel.querySelectorAll('[data-track-mode]')) choice.onclick = () => { values.trackMode = choice.dataset.trackMode; apply(); };
-    const set = value => { excluded = null; if (values.trackMode === 'drift') values.driftWindow = Math.max(15, Math.min(600, Math.round(value))); else values.jumpTolerance = Math.max(0, Math.min(200, value)); };
+    const set = value => { excluded = null; if (values.trackMode === 'drift') values.driftWindow = Math.max(15, Math.min(600, Math.round(value))); else values.outlierTolerance = Math.max(0, Math.min(200, value)); };
     slider.oninput = () => { set(Number(slider.value)); paint(); };
     slider.onchange = () => { changed('track'); committed(); };
     field.onchange = () => { if (!field.value.trim() || !Number.isFinite(Number(field.value))) { paint(); return; } set(Number(field.value)); apply(); };
-    panel.querySelector('[data-reset]').onclick = () => { values.trackMode = 'off'; values.jumpTolerance = DEFAULT_JUMP_TOLERANCE; values.driftWindow = 60; apply(); };
+    panel.querySelector('[data-reset]').onclick = () => { values.trackMode = 'off'; values.outlierTolerance = DEFAULT_OUTLIER_TOLERANCE; values.driftWindow = 60; apply(); };
     qualityControl = {set(count, speeds = 0) {
       count = Number.isInteger(count) && count >= 0 ? count : null;
       if (excluded === count && classified === speeds) return;

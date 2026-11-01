@@ -25,7 +25,7 @@ function fixture(history = {min: 0, max: 100000}) {
     getCanvas: () => canvas, doubleClickZoom: {isEnabled: () => zoom, enable: () => { zoom = true; }, disable: () => { zoom = false; }},
     on: (name, fn) => handlers.set(name, fn), project: coordinates => ({x: coordinates[0] * 100, y: coordinates[1] * 100}), getCenter: () => ({lng: 1, lat: 1})
   };
-  const options = {start: 0, end: 1000, hourStart: 0, hourEnd: 24, accuracy: 0, excludeJumps: true};
+  const options = {start: 0, end: 1000, hourStart: 0, hourEnd: 24, accuracy: 0, excludeOutliers: true};
   const controller = createPlaceHistory({map, report: () => history, options: () => options, send: message => sent.push(message), status: (...args) => statuses.push(args), selectDates: (start, end, hour) => { dates.push([start, end]); Object.assign(options, {start, end}, hour === undefined ? {} : {hourStart: hour, hourEnd: hour + 1}); }});
   controller.install();
   return {controller, sent, get, options, canvas, handlers, sources, dates, zoom: () => zoom, statuses, cleanup: () => { globalThis.document = original; }};
@@ -35,7 +35,7 @@ test('place requests ignore viewport changes, coalesce filter changes and discar
   try {
     f.options.source = 1;
     f.controller.select(area, 'Drawn area');
-    assert.equal(f.sent.length, 1); assert.equal(f.sent[0].options.excludeJumps, true);
+    assert.equal(f.sent.length, 1); assert.equal(f.sent[0].options.excludeOutliers, true);
     assert.equal(f.sent[0].options.source, 1);
     f.options.viewport = [0, 0, 10, 10]; f.controller.refresh(); assert.equal(f.sent.length, 1);
     f.options.end = 2000; f.options.source = 2; f.controller.refresh(); assert.equal(f.sent.length, 1);
@@ -81,12 +81,15 @@ test('place tables show stay dates, daily durations and select the corresponding
   const f = fixture(), day = 86_400_000;
   try {
     f.controller.select(area, 'Hexagon');
-    const result = {count: 3, days: 2, visits: 1, minutes: 40, first: day - 600000, last: day + 600000,
+    const result = {count: 3, days: 2, visits: 1, minutes: 40, km: .425, averageSpeed: 12.34, medianSpeed: 10.5, first: day - 600000, last: day + 600000,
       stays: [{start: day - 600000, end: day + 1800000, count: 3, minutes: 40}],
       daily: [{start: day, count: 2, minutes: 30}, {start: 0, count: 1, minutes: 10}]};
     f.controller.receive({type: 'place', id: f.sent[0].id, result});
-    assert.equal(f.get('place-visits-label').textContent, 'Recorded stays · 1');
+    assert.equal(f.get('place-visits-label').textContent, 'Stays · 1');
     assert.equal(f.get('place-daily-label').textContent, 'By day · 2');
+    assert.equal(f.get('place-distance').textContent, '425 m');
+    assert.equal(f.get('place-average-speed').textContent, '12.3 km/h');
+    assert.equal(f.get('place-median-speed').textContent, '10.5 km/h');
     assert.equal(f.get('place-first').textContent, 'Thu, 1970-01-01, 23:50');
     assert.equal(f.get('place-last').textContent, 'Fri, 1970-01-02, 00:10');
     const stays = f.get('place-visits').children, daily = f.get('place-daily').children;
@@ -98,6 +101,20 @@ test('place tables show stay dates, daily durations and select the corresponding
     assert.deepEqual(f.dates, [[0, 2 * day - 1], [day, 2 * day - 1]]);
     f.controller.clear();
     assert.equal(f.get('place-visits').children.length, 0); assert.equal(f.get('place-daily').children.length, 0);
+  } finally { f.cleanup(); }
+});
+
+test('place metrics format crossings, kilometres and unknown speeds without claiming there is no track', () => {
+  const f = fixture();
+  try {
+    f.controller.select(area, 'Drawn area');
+    const result = {count: 0, days: 0, visits: 0, minutes: 0, km: 1.25, averageSpeed: null, medianSpeed: null, first: null, last: null, stays: [], daily: []};
+    f.controller.receive({type: 'place', id: f.sent[0].id, result});
+    assert.equal(f.get('place-distance').textContent, '1.3 km');
+    assert.equal(f.get('place-average-speed').textContent, 'Unknown');
+    assert.equal(f.get('place-median-speed').textContent, 'Unknown');
+    assert.match(f.get('place-message').textContent, /track crosses/);
+    assert.equal(f.get('place-results').hidden, false);
   } finally { f.cleanup(); }
 });
 

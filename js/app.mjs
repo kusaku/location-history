@@ -1,10 +1,10 @@
-import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=35';
-import {createPlaceHistory} from './place-history.mjs?v=41';
+import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=37';
+import {createPlaceHistory} from './place-history.mjs?v=43';
 import {createNativeMaps} from './native-maps.mjs?v=2';
-import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=40';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=40';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=42';
-import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=23';
+import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=42';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=42';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=44';
+import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=25';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
 const distanceNumber = [new Intl.NumberFormat('en', {maximumFractionDigits: 3}), new Intl.NumberFormat('en', {maximumFractionDigits: 1})];
@@ -43,9 +43,9 @@ function showPoint({feature, previous, next}, longitude, focus) {
   }
   const zone = document.createElement('span'); zone.className = 'point-zone'; zone.textContent = 'UTC'; when.append(zone);
   const formatSpeed = value => `${new Intl.NumberFormat('en', {maximumFractionDigits: value < 10 ? 1 : 0}).format(value)} km/h`;
-  const speed = Number.isFinite(p.speed) ? formatSpeed(p.speed) : 'Unavailable';
+  const speed = Number.isFinite(p.speed) ? formatSpeed(p.speed) : 'Unknown';
   const measurements = document.createElement('dl'); measurements.className = 'point-measurements';
-  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unavailable' : `${number.format(p.altitude)} m`], ['Coordinates', [lat.toFixed(6), lon.toFixed(6)]], ...(p.device ? [['Device', p.device]] : []), ...(p.source ? [['Source', p.source]] : [])]) {
+  for (const [label, value] of [['Accuracy', p.accuracy == null ? 'Unknown' : `±${number.format(p.accuracy)} m`], [p.speedRecorded ? 'Recorded speed' : 'Est. speed', speed], ['Altitude', p.altitude == null ? 'Unknown' : `${number.format(p.altitude)} m`], ['Coordinates', [lat.toFixed(6), lon.toFixed(6)]], ...(p.device ? [['Device', p.device]] : []), ...(p.source ? [['Source', p.source]] : [])]) {
     const term = document.createElement('dt'), detail = document.createElement('dd');
     term.textContent = label;
     if (Array.isArray(value)) {
@@ -194,7 +194,7 @@ function paint(changed) {
   $('line-width-value').textContent = `${view.lineWidth ?? 1.5} px`;
   $('opacity-value').textContent = `${Math.round(view.opacity * 100)}%`;
   $('mode-description').textContent = view.colorBy === 'speed' ? 'Recorded or estimated speed. Grey means unknown.' : view.colorBy === 'altitude' ? 'Recorded altitude in metres. Grey means unknown.' : descriptions[state.mode];
-  $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits and short stationary intervals; an estimate. See Guide.'}[view.metric];
+  $('metric-note').textContent = {records: 'Every recorded location contributes equally.', days: 'One contribution per UTC day in each cell.', time: 'Recorded visits plus short intervals between nearby locations; an estimate.'}[view.metric];
   paintLegend();
   paintHistory(map, {...state, ...view, altitudeRange: state.result?.altitudeRange}, changed === 'mode' ? undefined : changed);
 }
@@ -208,7 +208,7 @@ function paintLegend() {
   $('legend-unit').hidden = speed || altitude;
   $('legend-unknown-label').textContent = 'Unknown';
   $('legend-unknown').hidden = !speed && !altitude; $('legend-unknown-swatch').style.background = SPEED_UNKNOWN;
-  document.querySelector('.legend').title = altitude ? 'Altitude as recorded in the file; reference datum depends on the export. Range follows Date window, not the viewport.' : speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: unavailable.` : temporal ? `${formatDate(state.start)}, ${new Date(state.start).toISOString().slice(11)} → ${formatDate(state.end)}, ${new Date(state.end).toISOString().slice(11)} · UTC` : '';
+  document.querySelector('.legend').title = altitude ? 'Altitude as recorded in the file; reference datum depends on the export. Range follows Date window, not the viewport.' : speed ? `Speed scale: ${SPEED_STOPS.join(' → ')} km/h. Grey: unknown.` : temporal ? `${formatDate(state.start)}, ${new Date(state.start).toISOString().slice(11)} → ${formatDate(state.end)}, ${new Date(state.end).toISOString().slice(11)} · UTC` : '';
 }
 function installLayers() {
   // A base-map change replaces its style. Reattach local overlays without reimporting.
@@ -293,7 +293,7 @@ function showResult(result) {
   $('stat-distance').textContent = distanceNumber[result.km < 1 ? 0 : 1].format(result.km);
   $('range-summary').textContent = result.count || result.drawn ? `${formatDate(state.start)} — ${formatDate(state.end)}` : 'No locations match these filters';
   const unit = {day: 'Day', week: 'Week', month: 'Month', quarter: 'Quarter', year: 'Year'}[result.histogramUnit] ?? result.histogramUnit;
-  $('render-note').textContent = `${unit} / bar · ${!result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} nearby points drawn` : `${number.format(result.visible)} locations in area`}`;
+  $('render-note').textContent = `${unit} / bar · ${!result.count && result.drawn ? 'Known stay · no new location recordings' : state.mode === 'points' && result.visible > result.drawn ? `${number.format(result.drawn)} of ${number.format(result.visible)} points in view drawn` : `${number.format(result.visible)} locations in view`}`;
   $('fit').disabled = !result.bounds;
   if ($('histogram').children.length !== result.histogram.length) createHistogram(result.histogram.length);
   const max = Math.max(1, ...result.histogram);
@@ -395,7 +395,7 @@ function clearHistory() {
   status('History cleared from memory.');
 }
 function createWorker() {
-  worker = new Worker(new URL('./worker.mjs?v=40', import.meta.url), {type: 'module'});
+  worker = new Worker(new URL('./worker.mjs?v=42', import.meta.url), {type: 'module'});
   worker.onmessage = ({data}) => {
     if (data.type === 'progress') status(data.message, false, true);
     else if (data.type === 'error') {

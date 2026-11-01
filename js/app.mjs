@@ -1,9 +1,9 @@
 import {MAPS, MAP_GROUPS, MAP_ORDER, PALETTES, createYandexTileLoader, raiseBasemapLabels, paintHistory, fitHistoryBounds, accuracyCircle} from './maps.mjs?v=37';
-import {createPlaceHistory} from './place-history.mjs?v=43';
+import {createPlaceHistory} from './place-history.mjs?v=44';
 import {createNativeMaps} from './native-maps.mjs?v=2';
 import {DAY, SPEED_STOPS, SPEED_UNKNOWN} from './data.mjs?v=42';
-import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=42';
-import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=44';
+import {resizeWindow, shiftWindow, dragWindow, parseDay, formatDay as formatDate} from './timeline.mjs?v=43';
+import {loadSettings, saveSettings, dateSelection, RADIUS_MIN} from './settings.mjs?v=45';
 import {createFilters, bindRange, paintRange, bindDateField} from './filters.mjs?v=25';
 const $ = id => document.getElementById(id);
 const number = new Intl.NumberFormat('en');
@@ -325,7 +325,7 @@ function syncDates() {
   paintRange($('date-range'));
   $('range-start').setAttribute('aria-valuetext', formatDate(state.start));
   $('range-end').setAttribute('aria-valuetext', formatDate(state.end));
-  $('date-range').title = state.period === 'all' ? 'Drag either thumb to resize the range independently.' : 'Drag either thumb to move the fixed window.';
+  $('date-range').title = state.period && state.period !== 'all' ? 'Drag either thumb to move the fixed window.' : 'Drag either thumb to resize the range independently.';
   $('period-back').disabled = state.start <= min;
   $('period-forward').disabled = state.end >= max + DAY - 1;
   $('play').disabled = !playback && $('period-forward').disabled;
@@ -340,7 +340,7 @@ function stopPlayback() {
 function setDates(start, end, period = null, periodDay = null) {
   closePoint();
   state.start = start; state.end = end;
-  state.period = period ?? (start <= state.report.min && end >= state.report.max ? 'all' : null);
+  state.period = period && period !== 'all' ? period : start <= state.report.min && end >= state.report.max ? 'all' : null;
   state.periodDay = periodDay;
   syncDates(); refresh();
 }
@@ -517,9 +517,11 @@ function bindControls() {
     stopPlayback();
     const min = Math.floor(state.report.min / DAY) * DAY, max = Math.floor(state.report.max / DAY) * DAY + DAY - 1;
     const period = button.dataset.period;
-    const day = period === state.period ? state.periodDay ?? undefined : undefined;
-    const next = resizeWindow(state.start, period, min, max, day);
-    setDates(next.start, next.end, period, ['30', '90', '365'].includes(period) ? day ?? new Date(next.start).getUTCDate() : null); rememberSettings();
+    if (period !== 'all' && period === state.period) {
+      setDates(state.start, state.end); rememberSettings(); return;
+    }
+    const next = resizeWindow(state.start, period, min, max);
+    setDates(next.start, next.end, period, ['30', '90', '365'].includes(period) ? new Date(next.start).getUTCDate() : null); rememberSettings();
   }; });
   for (const [id, direction] of [['period-back', -1], ['period-forward', 1]]) $(id).onclick = () => {
     stopPlayback(); moveWindow(direction);

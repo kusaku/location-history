@@ -136,7 +136,8 @@ test('date filters restore after import, bounded to the newly opened history', (
   assert.deepEqual(dateSelection(settings, 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 26 * DAY - 1, period: 'all', periodDay: null});
   assert.deepEqual(dateSelection(saveSettings({period: '1', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 21 * DAY - 1, period: '1', periodDay: null});
   assert.deepEqual(dateSelection(saveSettings({period: '30'}, maps, storage), 20 * DAY, 25 * DAY), {start: 20 * DAY, end: 26 * DAY - 1, period: '30', periodDay: null});
-  assert.deepEqual(dateSelection(saveSettings({period: 'all', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 2 * DAY, 12 * DAY), {start: 4 * DAY, end: 5 * DAY - 1, period: 'all', periodDay: null});
+  assert.deepEqual(dateSelection(saveSettings({period: 'all', dateRange: [4 * DAY, 5 * DAY - 1]}, maps, storage), 2 * DAY, 12 * DAY), {start: 4 * DAY, end: 5 * DAY - 1, period: null, periodDay: null});
+  assert.deepEqual(dateSelection(settings, 5 * DAY, 7 * DAY), {start: 5 * DAY, end: 8 * DAY - 1, period: 'all', periodDay: null});
   assert.deepEqual(dateSelection(saveSettings({period: 'all', dateRange: null}, maps, storage), 2 * DAY, 12 * DAY), {start: 2 * DAY, end: 13 * DAY - 1, period: 'all', periodDay: null});
 });
 

@@ -41,10 +41,10 @@ export function shiftWindow(start, end, min, max, direction, period, day) {
 }
 
 // Dragging a fixed window translates its existing duration, including across
-// short months/leap years. Only All time lets either endpoint resize it.
+// short months/leap years. With no fixed preset, either endpoint resizes it.
 export function dragWindow(start, end, min, max, target, edge, period) {
   const day = Math.floor(target / DAY) * DAY;
-  if (period === 'all') {
+  if (!period || period === 'all') {
     return edge === 'start'
       ? {start: Math.max(min, Math.min(Math.floor(end / DAY) * DAY, day)), end}
       : {start, end: Math.min(max, Math.max(start + DAY - 1, day + DAY - 1))};

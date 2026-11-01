@@ -7,7 +7,7 @@ Explore your Google Timeline location history in the browser: heatmaps, hexagon 
 ## Features
 
 - **Four views:** Heatmap, Hexagons, Points and Journeys. Points and Journeys are coloured by time, speed or altitude; journeys can be drawn straight or smoothed.
-- **Date window:** a histogram of your history, day to year windows, playback, and a UTC hour filter.
+- **Date window:** a histogram, playback and UTC hours. Day to Year buttons lock the window length; click the active period again to unlock it. All time restores the full history.
 - **Filters:** accuracy, speed, altitude, device and recording source.
 - **Track quality:** remove outliers, or also suppress stationary GPS drift.
 - **Place history:** click a hexagon or draw an area for stays, recorded days, time spent, track length, and average/median speed. Explore activity as a calendar or table.

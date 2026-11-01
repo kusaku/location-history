@@ -1,5 +1,5 @@
 import {DAY, DEFAULT_OUTLIER_TOLERANCE} from './data.mjs?v=42';
-import {resizeWindow} from './timeline.mjs?v=42';
+import {resizeWindow} from './timeline.mjs?v=43';
 
 const STORAGE_KEY = 'location-history.settings.v1';
 export const RADIUS_MIN = Object.freeze({heat: 8, hex: 2, points: 8, route: 8});
@@ -74,7 +74,10 @@ export function dateSelection(settings, min, max) {
   max = Math.floor(max / DAY) * DAY + DAY - 1;
   if (settings.dateRange) {
     const start = Math.max(min, settings.dateRange[0]), end = Math.min(max, settings.dateRange[1]);
-    if (start <= end) return {start, end, period: settings.period, periodDay: start === settings.dateRange[0] ? settings.periodDay : null};
+    if (start <= end) {
+      const period = settings.period && settings.period !== 'all' ? settings.period : start === min && end === max ? 'all' : null;
+      return {start, end, period, periodDay: start === settings.dateRange[0] ? settings.periodDay : null};
+    }
   }
   const period = settings.period ?? 'all';
   return {...resizeWindow(min, period, min, max), period, periodDay: null};

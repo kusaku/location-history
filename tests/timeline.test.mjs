@@ -186,8 +186,8 @@ test('Week resizes the current window to seven UTC days and steps by the whole w
 });
 
 test('both thumbs translate every fixed preset by whole UTC days without changing its duration', () => {
-  for (const period of ['1', '7', '30', '90', '365', null]) {
-    const window = period === null ? range('2024-02-10', '2024-02-21') : resizeWindow(time('2024-02-10'), period, min, max);
+  for (const period of ['1', '7', '30', '90', '365']) {
+    const window = resizeWindow(time('2024-02-10'), period, min, max);
     const shifted = {start: window.start + 45 * DAY, end: window.end + 45 * DAY};
     assert.deepEqual(dragWindow(window.start, window.end, min, max, shifted.start, 'start', period), shifted);
     assert.deepEqual(dragWindow(window.start, window.end, min, max, shifted.end, 'end', period), shifted);
@@ -215,14 +215,16 @@ test('calendar-preset dragging preserves actual day count through February and l
   assert.deepEqual(shiftWindow(dragged.start, dragged.end, min, max, 1, '30', new Date(dragged.start).getUTCDate()), range('2024-04-10', '2024-05-09'));
 });
 
-test('All time thumbs resize independently, stay ordered and can expand again after meeting', () => {
+test('unlocked thumbs resize independently, stay ordered and can expand again after meeting', () => {
   const window = range('2024-04-10', '2024-04-20');
-  assert.deepEqual(dragWindow(window.start, window.end, min, max, time('2024-04-15'), 'start', 'all'), range('2024-04-15', '2024-04-20'));
-  assert.deepEqual(dragWindow(window.start, window.end, min, max, time('2024-04-15'), 'end', 'all'), range('2024-04-10', '2024-04-15'));
-  assert.deepEqual(dragWindow(window.start, window.end, min, max, max, 'start', 'all'), range('2024-04-20', '2024-04-20'));
-  assert.deepEqual(dragWindow(window.start, window.end, min, max, min, 'end', 'all'), range('2024-04-10', '2024-04-10'));
   const day = range('2024-04-10', '2024-04-10');
-  assert.deepEqual(dragWindow(day.start, day.end, min, max, time('2024-04-20'), 'end', 'all'), window);
+  for (const period of ['all', null, undefined]) {
+    assert.deepEqual(dragWindow(window.start, window.end, min, max, time('2024-04-15'), 'start', period), range('2024-04-15', '2024-04-20'));
+    assert.deepEqual(dragWindow(window.start, window.end, min, max, time('2024-04-15'), 'end', period), range('2024-04-10', '2024-04-15'));
+    assert.deepEqual(dragWindow(window.start, window.end, min, max, max, 'start', period), range('2024-04-20', '2024-04-20'));
+    assert.deepEqual(dragWindow(window.start, window.end, min, max, min, 'end', period), range('2024-04-10', '2024-04-10'));
+    assert.deepEqual(dragWindow(day.start, day.end, min, max, time('2024-04-20'), 'end', period), window);
+  }
 });
 
 test('a fixed preset larger than the history stays fixed at that complete history', () => {

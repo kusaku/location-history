@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&amp;family=Space+Grotesk:wght@400..700&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="css/styles.css?v=55">
-    <script type="module" src="js/app.mjs?v=81">
+    <script type="module" src="js/app.mjs?v=82">
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8N1Q1GVVB"></script>
     <script>
@@ -482,22 +482,22 @@
               <div class="timeline-controls">
                 <div class="window-filters" id="window-filters" role="group" aria-label="Location filters"></div>
                 <div class="presets" role="group" aria-label="Window size">
-                  <button type="button" data-period="1" aria-pressed="false" title="Resize the current window to one day" disabled>
+                  <button type="button" data-period="1" aria-pressed="false" title="Lock window length to one day. Click again to unlock." disabled>
                     Day
                   </button>
-                  <button type="button" data-period="7" aria-pressed="false" title="Resize the current window to one week" disabled>
+                  <button type="button" data-period="7" aria-pressed="false" title="Lock window length to one week. Click again to unlock." disabled>
                     Week
                   </button>
-                  <button type="button" data-period="30" aria-pressed="false" title="Resize the current window to one calendar month" disabled>
+                  <button type="button" data-period="30" aria-pressed="false" title="Lock window length to one calendar month. Click again to unlock." disabled>
                     Month
                   </button>
-                  <button type="button" data-period="90" aria-pressed="false" title="Resize the current window to three calendar months" disabled>
+                  <button type="button" data-period="90" aria-pressed="false" title="Lock window length to three calendar months. Click again to unlock." disabled>
                     Quarter
                   </button>
-                  <button type="button" data-period="365" aria-pressed="false" title="Resize the current window to one calendar year" disabled>
+                  <button type="button" data-period="365" aria-pressed="false" title="Lock window length to one calendar year. Click again to unlock." disabled>
                     Year
                   </button>
-                  <button type="button" data-period="all" aria-pressed="true" disabled>
+                  <button type="button" data-period="all" aria-pressed="true" title="Show the full history and unlock the window" disabled>
                     All time
                   </button>
                 </div>
@@ -625,7 +625,7 @@
         <section class="guide-section" aria-labelledby="guide-dates">
           <h3 id="guide-dates">Date window &amp; filters</h3>
           <ul>
-            <li><span class="guide-control">Day</span> <span class="guide-control">Week</span> <span class="guide-control">Month</span> <span class="guide-control">Quarter</span> <span class="guide-control">Year</span> resize the current window. Drag either date thumb to move it at a fixed width. <span class="guide-control">All time</span> restores all dates and lets the thumbs move independently.</li>
+            <li><span class="guide-control">Day</span> <span class="guide-control">Week</span> <span class="guide-control">Month</span> <span class="guide-control">Quarter</span> <span class="guide-control">Year</span> resize and lock the window length. Drag either thumb to move the fixed window. Click the active period again to unlock it without changing dates; the thumbs then resize independently. <span class="guide-control">All time</span> restores the full history and turns off when the range is narrowed.</li>
             <li><span class="guide-control">▶ Play</span> <span class="guide-control">← Back</span> <span class="guide-control">→ Forward</span> step by the selected period. Click a histogram bar to select its dates.</li>
             <li><span class="guide-control">Hours</span> <span class="guide-control">Accuracy</span> <span class="guide-control">Speed</span> <span class="guide-control">Altitude</span> open range sliders and exact values. <span class="guide-control">Reset</span> clears a filter. Unknown measurements stay included unless you disable <span class="guide-control">Include unknown</span>.</li>
             <li><span class="guide-control">Devices</span> and <span class="guide-control">Source</span> appear when several choices exist.</li>

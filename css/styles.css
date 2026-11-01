@@ -1071,6 +1071,7 @@ select {
 }
 
 .period-navigation button {
+  font: 10px 'DM Sans',system-ui,sans-serif;
   border: 1px solid #3c4935;
   color: var(--accent);
   min-width: 30px;
